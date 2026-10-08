@@ -89,20 +89,19 @@ Sekcje w kolejności w pliku:
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 3. **DMG zamiast ZIP** (uzgodnione, czeka na sygnał właściciela): `Generator-kart.dmg` z oknem „przeciągnij do Programów” (electron-builder `dmg`, podpis ad hoc aplikacji przed spakowaniem). Zaktualizować link w README i `docs/aplikacja.md` (`releases/latest/download/Generator-kart.dmg`).
-5. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
-6. **Edytor szablonów – etap 1** (zaplanowane, czeka na sygnał właściciela): panel edytora w aplikacji obok podglądu.
+4. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
+5. **Edytor szablonów – etap 1** (zaplanowane, czeka na sygnał właściciela): panel edytora w aplikacji obok podglądu.
    - kolorowanie składni szablonu (komendy, [Kolumny], {ikony}, opcje, komentarze),
    - podświetlenie linii z błędami (te same komunikaty co w Uwagach),
    - zapis ⌘S i podgląd kart na żywo podczas pisania,
    - ochrona przed utratą pracy: pytanie o niezapisane zmiany przy zamykaniu i zmianie projektu, wykrywanie zmiany pliku na dysku.
    - Etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu.
-7. **Podgląd: rewers nie rozjeżdża siatki** (zaplanowane, czeka na sygnał właściciela). Dziś `.rewers-podglad` (przerywana ramka z odstępem i podpis „Rewers” pod kartą) jest wyższy i przesunięty względem kart, więc pierwszy wiersz siatki się rozjeżdża. Rewers ma zajmować dokładnie miejsce zwykłej karty: podpis jako etykieta na karcie albo pozycjonowana absolutnie, wyróżnienie bez wpływu na układ.
-8. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
-9. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
-10. **Kolumny specjalne bez względu na pisownię** (zaplanowane): `Ilość`, `ID`, `Nazwa` rozpoznawane bez wielkości liter i polskich znaków (`ilosc`, `Id`…).
-11. **Nowy projekt…** (zaplanowane): menu tworzy folder gry z szablonem startowym, przykładowym CSV, `ikony.csv`, `Ikony/`, `Art/` i go otwiera.
-12. **Dependabot** (zaplanowane): `.github/dependabot.yml` dla `app/` (npm), PR-y z nową wersją Electrona budowane i testowane przez workflow.
-
+6. **Podgląd: rewers nie rozjeżdża siatki** (zaplanowane, czeka na sygnał właściciela). Dziś `.rewers-podglad` (przerywana ramka z odstępem i podpis „Rewers” pod kartą) jest wyższy i przesunięty względem kart, więc pierwszy wiersz siatki się rozjeżdża. Rewers ma zajmować dokładnie miejsce zwykłej karty: podpis jako etykieta na karcie albo pozycjonowana absolutnie, wyróżnienie bez wpływu na układ.
+7. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
+8. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
+9. **Kolumny specjalne bez względu na pisownię** (zaplanowane): `Ilość`, `ID`, `Nazwa` rozpoznawane bez wielkości liter i polskich znaków (`ilosc`, `Id`…).
+10. **Nowy projekt…** (zaplanowane): menu tworzy folder gry z szablonem startowym, przykładowym CSV, `ikony.csv`, `Ikony/`, `Art/` i go otwiera.
+11. **Dependabot** (zaplanowane): `.github/dependabot.yml` dla `app/` (npm), PR-y z nową wersją Electrona budowane i testowane przez workflow.
 
 ### Roadmapa (niski priorytet)
 
