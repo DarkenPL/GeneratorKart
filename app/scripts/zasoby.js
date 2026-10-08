@@ -14,6 +14,7 @@ const kopiuj = (z, d) => { fs.mkdirSync(path.dirname(d), { recursive: true }); f
 fs.rmSync(CEL, { recursive: true, force: true });
 kopiuj(path.join(APP, 'generator/karty.html'), path.join(CEL, 'karty.html'));
 kopiuj(path.join(REPO, 'przyklady'), path.join(CEL, 'przyklady'));
+kopiuj(path.join(APP, 'szablon-startowy'), path.join(CEL, 'szablon-startowy'));
 
 // Biblioteki – te same wersje, które karty.html wczytuje z jsDelivr.
 kopiuj(path.join(NM, 'html-to-image/dist/html-to-image.js'), path.join(CEL, 'vendor/html-to-image.js'));

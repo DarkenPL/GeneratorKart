@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('generatorApp', {
   info: () => ipcRenderer.invoke('projekt:info'),
   otworzSzablon: () => ipcRenderer.invoke('projekt:otworz'),
+  nowyProjekt: () => ipcRenderer.invoke('projekt:nowy'),
   przyklady: () => ipcRenderer.invoke('projekt:przyklady'),
   otworzPrzyklad: (nazwa) => ipcRenderer.invoke('projekt:przyklad', nazwa),
   pokazFolder: () => ipcRenderer.invoke('projekt:pokaz'),

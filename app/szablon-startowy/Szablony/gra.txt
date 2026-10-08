@@ -1,0 +1,50 @@
+; ═══════════════════════════════════════════════════════════════════
+;  {{NAZWA}} – szablon kart
+;
+;  Ten plik opisuje wygląd kart. Zmieniaj go w edytorze tekstu i zapisuj –
+;  Generator kart od razu pokaże zmiany.
+;
+;  • Wymiary w mm, (0, 0) = lewy górny róg karty.
+;  • [Kolumna]   – wartość z pliku karty.csv (np. [Nazwa]).
+;  • {znacznik}  – ikona z pliku ikony.csv (np. {moneta}).
+;  • ; komentarz – wszystko po średniku jest pomijane.
+;
+;  Wszystkie komendy: https://github.com/DarkenPL/GeneratorKart/blob/main/docs/komendy.md
+; ═══════════════════════════════════════════════════════════════════
+
+; ── Wspólne dla wszystkich talii ─────────────────────────────────
+PROJEKT  = "{{NAZWA_W_CUDZYSLOWIE}}"     ; nazwa gry w plikach JPG i PDF
+KARTA    = 63, 88                          ; rozmiar karty w mm (standard pokerowy)
+CZCIONKA = "EB Garamond, Georgia, serif", 10, kolor=#222222
+
+; Nazwy kolorów – można ich używać w kolumnie Kolor w karty.csv
+KOLOR = czerwony,  #C0504D
+KOLOR = niebieski, #4F81BD
+KOLOR = zielony,   #6E9F5A
+KOLOR = szary,     #A6A6A6
+
+
+; ═══════════════════════════════════════════════════════════════════
+[TALIA Karty]
+DANE = karty.csv
+
+; ── Awers ─────────────────────────────────────────────────────────
+TŁO       = [Kolor] | szary                ; kolor z kolumny Kolor, a gdy pusta – szary
+PROSTOKĄT = 3.5, 3.5, 56, 81, kolor=#ffffff, zaokrąglenie=4
+
+; Koszt (z lewej) i punkty (z prawej) w jednym wierszu – grupa „góra”
+; sprawia, że ikony mają ten sam rozmiar na wszystkich kartach.
+TEKST = 6, 5.5, 51, 9, [Koszt],  rozmiar=11, ikony=1.8, jedna_linia, grupa=góra, min=0.4
+TEKST = 6, 5.5, 51, 9, [Punkty], rozmiar=11, ikony=1.8, jedna_linia, grupa=góra, min=0.4, wyrównanie=prawo
+
+OBRAZEK = 10, 16, 43, 33, [Obrazek], pion=dół
+
+TEKST = 6, 51, 51, 12, "**Efekt:** [Efekt]"           ; znika, gdy kolumna Efekt jest pusta
+TEKST = 6, 64, 51, 9,  [Nazwa], czcionka="Patrick Hand, cursive", rozmiar=14, wyrównanie=środek, pion=środek
+TEKST = 6, 74, 51, 8,  [Opis], rozmiar=8, kursywa, wyrównanie=środek
+
+; ── Rewers (jeden dla całej talii) ────────────────────────────────
+[REWERS]
+TŁO       = #3d3a36
+PROSTOKĄT = 3.5, 3.5, 56, 81, kolor=brak, obwódka=0.6, kolor_obwódki=#ffffff80, zaokrąglenie=4
+TEKST     = 0, 0, 63, 88, "{{NAZWA_W_CUDZYSLOWIE}}", czcionka="Patrick Hand, cursive", rozmiar=24, kolor=#ffffff, wyrównanie=środek, pion=środek, interlinia=1

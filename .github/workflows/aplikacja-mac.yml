@@ -66,6 +66,9 @@ jobs:
             grep -q '"ok":true' "$RUNNER_TEMP/test/$n.json"
           done
           "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf - "$RUNNER_TEMP/test/start.pdf"
+          # Nowy projekt z szablonu startowego (nazwa z polskimi znakami, przecinkiem i cudzysłowem)
+          "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-nowy "$RUNNER_TEMP/Złota Wyprawa, \"edycja\"" --test-pdf - "$RUNNER_TEMP/test/nowy.pdf" | tee "$RUNNER_TEMP/test/nowy.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/test/nowy.json"
 
       - name: DMG (okno „przeciągnij do Programów”)
         env:

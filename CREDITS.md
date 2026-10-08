@@ -60,9 +60,9 @@ Ikony autorstwa:
 | `Ikony/konewka.svg` | [watering-can](https://game-icons.net/1x1/delapouite/watering-can.html) | Delapouite |
 | `Ikony/koniczyna.svg` | [clover](https://game-icons.net/1x1/lorc/clover.html) | Lorc |
 
-## Ikona aplikacji
+## Ikona aplikacji i szablon startowy
 
-Narysowana na potrzeby projektu (`app/build/icon.svg`).
+Ikona aplikacji (`app/build/icon.svg`) oraz ikony i obrazek w szablonie nowego projektu (`app/szablon-startowy/`) są narysowane na potrzeby projektu.
 
 ## Czcionki
 

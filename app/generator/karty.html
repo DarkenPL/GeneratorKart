@@ -1113,10 +1113,11 @@ async function startAplikacji() {
   $('start').innerHTML = '<h2>Generator kart</h2>' +
     '<p>Otwórz <b>plik szablonu</b> (.txt) swojej gry. Szablon wskazuje plik z kartami (CSV/XLSX), ' +
     'obrazki i czcionki – generator wczyta je sam.</p>' +
-    '<p><button class="glowny" id="startOtworz">Otwórz szablon…</button></p>' +
+    '<p><button class="glowny" id="startOtworz">Otwórz szablon…</button> <button id="startNowy">Nowy projekt…</button></p>' +
     (przyklady.length ? '<h3>Albo zobacz przykład</h3><ul>' +
       przyklady.map((n) => `<li><a href="#" data-przyklad="${esc(n)}">${esc(n)}</a></li>`).join('') + '</ul>' : '');
   $('startOtworz').onclick = () => APP.otworzSzablon();
+  $('startNowy').onclick = () => APP.nowyProjekt();
   for (const a of $('start').querySelectorAll('[data-przyklad]'))
     a.onclick = (e) => { e.preventDefault(); APP.otworzPrzyklad(a.dataset.przyklad); };
   status('');
