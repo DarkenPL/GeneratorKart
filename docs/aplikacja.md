@@ -30,13 +30,25 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    - Ścieżki liczą się od folderu projektu: tego, w którym leży szablon, albo folderu nad `Szablony`, gdy szablon leży w takim podfolderze.
    - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → Generator kart**.
 2. Karty odświeżają się same po każdym zapisie szablonu, pliku z kartami albo obrazka.
-3. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
+3. **Edytor szablonu** (przycisk **Edytor** albo ⌥⌘E) otwiera szablon w panelu obok kart:
+   - kolorowanie składni: komendy, `[Kolumny]`, `{ikony}`, opcje, liczby, kolory (podkreślone swoim kolorem), komentarze;
+   - podgląd na żywo: karty zmieniają się w trakcie pisania, jeszcze przed zapisem;
+   - błędy: wiersz z błędem jest podświetlony, a lista pod edytorem i Uwagi nad kartami prowadzą kliknięciem do właściwego wiersza;
+   - **⌘S** zapisuje szablon, a ⌘Z cofa zmiany;
+   - aplikacja pyta o zapis niezapisanych zmian przy zamykaniu okna, wyjściu i otwieraniu innego projektu. Kropka w czerwonym przycisku okna oznacza niezapisane zmiany;
+   - gdy plik zmieni się na dysku, np. w innym edytorze, a w panelu są niezapisane zmiany, aplikacja pyta, którą wersję zostawić;
+   - przykłady są w edytorze tylko do odczytu.
+
+   Szablon nadal możesz edytować w dowolnym innym edytorze tekstu.
+4. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
 |---|---|
 | ⌘N | Nowy projekt |
 | ⌘O | Otwórz szablon |
-| ⌘S | Zapisz PDF (A4 ze znacznikami albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
+| ⌘S | Zapisz szablon (z edytora) |
+| ⇧⌘S | Zapisz PDF (A4 ze znacznikami albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
+| ⌥⌘E | Pokaż/ukryj edytor szablonu |
 | ⌘P | Drukuj (systemowe okno drukowania) |
 | ⌘E | Eksport JPG do folderu `Export` projektu |
 | ⌘R | Odśwież karty |
@@ -62,7 +74,7 @@ npm run dist       # budowanie .app (na macOS)
 - `app/main.js`: okno, menu, ostatnie projekty, zapis PDF, eksport do `Export/`, podmiana adresów CDN na zasoby lokalne.
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
-- Tryb testowy: `Generator kart [--test-nowy <nowy folder>] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- Tryb testowy: `Generator kart [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
 - `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` aktualizuje wydanie „Najnowsza wersja”.
 
 ### Wydanie z numerem wersji
