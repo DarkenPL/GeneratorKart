@@ -88,6 +88,7 @@ Sekcje w kolejności w pliku:
    - wersja na Windows,
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
-3. Lista talii (`cardDeck`) z pliku `.pcio` w interfejsie, żeby nie trzeba było szukać `PCIO = id` w `widgets.json`.
-4. Wersja przeglądarkowa offline: biblioteki i czcionki obok `karty.html` zamiast z CDN (aplikacja już to ma).
+3. **DMG zamiast ZIP** (uzgodnione, czeka na sygnał właściciela): `Generator-kart.dmg` z oknem „przeciągnij do Programów” (electron-builder `dmg`, podpis ad hoc aplikacji przed spakowaniem). Zaktualizować link w README i `docs/aplikacja.md` (`releases/latest/download/Generator-kart.dmg`).
+4. Lista talii (`cardDeck`) z pliku `.pcio` w interfejsie, żeby nie trzeba było szukać `PCIO = id` w `widgets.json`.
 5. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
+6. Edytor szablonów w aplikacji – etapami: najpierw panel z kolorowaniem składni, błędami, ⌘S i podglądem na żywo; przesuwanie pól myszką później (omówione, bez decyzji).
