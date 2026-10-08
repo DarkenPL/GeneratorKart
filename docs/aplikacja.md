@@ -23,7 +23,9 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 
 ## Praca
 
-1. **Plik → Otwórz szablon… (⌘O)** i wskaż plik szablonu (`.txt`) swojej gry.
+1. **Plik → Nowy projekt… (⌘N)** tworzy folder gry o podanej nazwie, z gotowym szablonem (`Szablony/gra.txt`), plikiem kart (`karty.csv`), ikonami, przykładowym obrazkiem i krótką instrukcją (`CZYTAJ.txt`), i od razu go otwiera. Wystarczy zmieniać pliki.
+
+   **Plik → Otwórz szablon… (⌘O)** otwiera istniejący projekt: wskaż plik szablonu (`.txt`) swojej gry.
    - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki, pokój playingcards.io.
    - Ścieżki liczą się od folderu projektu: tego, w którym leży szablon, albo folderu nad `Szablony`, gdy szablon leży w takim podfolderze.
    - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → Generator kart**.
@@ -32,6 +34,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 
 | Skrót | Działanie |
 |---|---|
+| ⌘N | Nowy projekt |
 | ⌘O | Otwórz szablon |
 | ⌘S | Zapisz PDF (A4 ze znacznikami albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
 | ⌘P | Drukuj (systemowe okno drukowania) |
@@ -59,7 +62,7 @@ npm run dist       # budowanie .app (na macOS)
 - `app/main.js`: okno, menu, ostatnie projekty, zapis PDF, eksport do `Export/`, podmiana adresów CDN na zasoby lokalne.
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
-- Tryb testowy: `Generator kart --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- Tryb testowy: `Generator kart [--test-nowy <nowy folder>] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
 - `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` aktualizuje wydanie „Najnowsza wersja”.
 
 ### Wydanie z numerem wersji

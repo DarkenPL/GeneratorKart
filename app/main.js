@@ -80,6 +80,35 @@ async function wybierzSzablon() {
   return !r.canceled;
 }
 
+// ── Nowy projekt ────────────────────────────────────────────────────────────
+// Folder gry z szablonem startowym (zasoby/szablon-startowy): szablon, karty.csv, ikony, obrazek.
+const STARTOWY = path.join(ZASOBY, 'szablon-startowy');
+function utworzProjekt(folder) {
+  if (fs.existsSync(folder) && fs.readdirSync(folder).some((n) => !n.startsWith('.')))
+    throw new Error(`Folder „${path.basename(folder)}” już istnieje i nie jest pusty – wybierz inną nazwę.`);
+  const nazwa = path.basename(folder);
+  const wCudzyslowie = nazwa.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const wstaw = (t) => t.replace(/\{\{NAZWA_W_CUDZYSLOWIE\}\}/g, () => wCudzyslowie).replace(/\{\{NAZWA\}\}/g, () => nazwa);
+  fs.cpSync(STARTOWY, folder, { recursive: true });
+  for (const plik of ['Szablony/gra.txt', 'CZYTAJ.txt']) {
+    const p = path.join(folder, plik);
+    fs.writeFileSync(p, wstaw(fs.readFileSync(p, 'utf8')));
+  }
+  return path.join(folder, 'Szablony', 'gra.txt');
+}
+
+async function nowyProjekt() {
+  const r = await dialog.showSaveDialog(okno, {
+    title: 'Nowy projekt', buttonLabel: 'Utwórz', nameFieldLabel: 'Nazwa gry:',
+    message: 'Powstanie folder gry z przykładowym szablonem, plikiem kart i ikonami.',
+    defaultPath: path.join(app.getPath('documents'), 'Nowa gra'),
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  });
+  if (r.canceled || !r.filePath) return false;
+  try { otworzSzablon(utworzProjekt(r.filePath)); return true; }
+  catch (e) { dialog.showErrorBox('Nie można utworzyć projektu', e.message); return false; }
+}
+
 const listaPrzykladow = () => {
   try { return fs.readdirSync(PRZYKLADY).filter((n) => !n.startsWith('.') && jestFolderem(path.join(PRZYKLADY, n))).sort(); }
   catch (e) { return []; }
@@ -97,6 +126,7 @@ ipcMain.handle('projekt:info', () => ({
   szablon, sciezka: projekt, nazwa: nazwaProjektu(), przyklad: jestPrzykladem(szablon),
 }));
 ipcMain.handle('projekt:otworz', () => wybierzSzablon());
+ipcMain.handle('projekt:nowy', () => nowyProjekt());
 ipcMain.handle('projekt:przyklady', () => listaPrzykladow());
 ipcMain.handle('projekt:przyklad', (e, nazwa) => {
   const p = path.join(PRZYKLADY, path.basename(String(nazwa)));
@@ -147,6 +177,7 @@ function zbudujMenu() {
     {
       label: 'Plik',
       submenu: [
+        { label: 'Nowy projekt…', accelerator: 'CmdOrCtrl+N', click: () => nowyProjekt() },
         { label: 'Otwórz szablon…', accelerator: 'CmdOrCtrl+O', click: () => wybierzSzablon() },
         {
           label: 'Ostatnie projekty',
@@ -289,10 +320,12 @@ app.whenReady().then(async () => {
 
   const argi = process.argv;
   const t = argi.indexOf('--test-pdf');
+  const tn = argi.indexOf('--test-nowy');                 // --test-nowy <nowy folder gry> --test-pdf - <wynik.pdf>
   if (t >= 0) {
     testowy = true;
-    otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]));
-    okno.webContents.once('did-finish-load', () => trybTestowy(argi[t + 1], path.resolve(argi[t + 2])));
+    if (tn >= 0) otworzSzablon(utworzProjekt(path.resolve(argi[tn + 1])));
+    else otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]));
+    okno.webContents.once('did-finish-load', () => trybTestowy(tn >= 0 ? argi[tn + 1] : argi[t + 1], path.resolve(argi[t + 2])));
     return;
   }
   otworzSzablon(doOtwarcia || ostatnie()[0] || null);
