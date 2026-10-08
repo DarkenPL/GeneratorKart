@@ -28,6 +28,8 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 | Komenda | Opis |
 |---|---|
 | `PROJEKT = Złota Wyprawa` | Nazwa projektu (gry): w nazwach plików JPG i PDF. Bez tej komendy – nazwa pliku szablonu. Zwykle w części wspólnej szablonu. |
+| `WERSJA = v0.3` | Wersja projektu, do wstawienia na kartę polem `[_wersja]` (patrz [Pola wbudowane](#pola-wbudowane)). |
+| `STAŁA = margines, 4` | Stała: `[=margines]` w dowolnej komendzie zostaje zamienione na `4`. Wygodne dla powtarzanych liczb i kolorów (`STAŁA = złoty, #C9A227` → `kolor=[=złoty]`). Stała działa w całym pliku szablonu, także w taliach i rewersach. |
 | `NAZWA = Przedmioty` | Nazwa talii (podgląd, pliki JPG, eksport). Domyślnie nazwa z `[TALIA …]` albo z nazwy pliku. |
 | `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. |
 | `KARTA = 63, 88, zaokrąglenie=3, obwódka=0.7, kolor_obwódki=#222222` | Szerokość i wysokość karty w mm. Opcjonalnie zaokrąglone rogi i obwódka całej karty (rysowana na wierzchu). W sekcji `[REWERS]` ustawia tylko rogi i obwódkę rewersu; rozmiar jest zawsze jak awersu. |
@@ -45,7 +47,11 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 - Nazwy tych trzech kolumn można pisać dowolnie: bez polskich znaków i bez względu na wielkość liter (`ilosc`, `Id`, `NAZWA`).
 - Nowa linia w komórce to nowa linia na karcie.
 
-### Ikony – `ikony.csv`
+### Ikony – folder `Ikony` i `ikony.csv`
+
+Najprościej: wrzuć obrazek do folderu **`Ikony`** projektu (albo `Icons`). Plik `Ikony/drewno.svg` od razu działa jako `{drewno}`. Obsługiwane są SVG, PNG, JPG, GIF i WEBP. Nazwę można pisać bez polskich znaków i bez względu na wielkość liter (plik `Złoto.svg` → `{złoto}` albo `{zloto}`).
+
+Plik `ikony.csv` jest potrzebny tylko wtedy, gdy chcesz nadać ikonie inną nazwę, emoji zastępcze albo wyłączyć odstęp. Wpis w `ikony.csv` ma pierwszeństwo przed plikiem z folderu.
 
 ```
 Znacznik;Znak;Odstęp;Plik;Opis
@@ -59,6 +65,24 @@ Znacznik;Znak;Odstęp;Plik;Opis
 | Odstęp | `tak` = mały odstęp, gdy zaraz po ikonie stoi kolejna. |
 | Plik | Ścieżka do obrazka (PNG, JPG, SVG). |
 | Opis | Dowolny, dla Ciebie. |
+
+### Pola wbudowane
+
+Wstawiasz je jak kolumny, ale z podkreślnikiem. Nie muszą istnieć w pliku danych.
+
+| Pole | Wartość |
+|---|---|
+| `[_numer]` | Numer kopii w talii: 1, 2, 3… (liczy każdą kopię z kolumny `Ilość`). |
+| `[_liczba]` | Liczba wszystkich kart (kopii) w talii. |
+| `[_kopia]` | Numer kopii tej samej karty: 1, 2… |
+| `[_id]` | Kolumna `ID` (albo numer wiersza). |
+| `[_wersja]` | Wartość komendy `WERSJA`. |
+| `[_talia]`, `[_projekt]` | Nazwa talii i projektu. |
+| `[_data]` | Dzisiejsza data, np. 9.10.2026. |
+
+Przykład stopki do testów: `TEKST = 6, 82, 51, 3, "[_wersja] · [_numer]/[_liczba]", rozmiar=5, kolor=#999999, wyrównanie=prawo`.
+
+Numery liczą się w kolejności wierszy pliku danych. Data to dzień wygenerowania kart.
 
 ## Sekcje
 

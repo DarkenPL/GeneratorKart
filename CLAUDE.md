@@ -57,13 +57,15 @@ Sekcje w kolejności w pliku:
 2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, jakość JPG, rozmiar obrazków pcio). Nic, co dotyczy konkretnej gry. Paleta kolorów i plik pokoju pcio są w szablonach (`KOLOR`, `STÓŁ`).
 3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
-5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
+5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. Obrazki z folderu `Ikony/`/`Icons/` (listing JSON z serwera, `znajdzIkony`) rejestrują się same jako `{nazwa}`; `ikony.csv` je nadpisuje. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
 6. **Szablony**:
    - `parseTemplate(text, plik)` zwraca `{talie[], pliki, dane, czcionki, google, kolory, stol, bledy}`. Obsługuje sekcje `[TALIA X]`, `[REWERS]`, `[AWERS]`, część wspólną przed pierwszą `[TALIA]`, stan `CZCIONKA` oraz komentarze `;` i `#`.
    - `renderCard(tpl, cmds, row, ctx)` buduje HTML karty: elementy `.el` z pozycją absolutną w mm.
    - Kolumny specjalne `Ilość`, `ID`, `Nazwa` czyta `pole(r, nazwa)` – bez wielkości liter i polskich znaków.
    - Wartości `[Kolumna]`: gwiazdki z danych są maskowane (`\u0001`), żeby nie włączały markdownu.
    - Element znika, gdy wszystkie pola w treści są puste.
+   - Stałe: `STAŁA = nazwa, wartość` zbierane przed parsowaniem; `[=nazwa]` podmieniane w argumentach (`wstawStale`) przed `splitArgs`.
+   - Pola wbudowane `[_x]` czyta `cell()` z `ctx.wbudowane`; gdy szablon używa `[_numer]`/`[_kopia]`, każda kopia jest renderowana osobno.
    - `jeśli=` porównuje wartości bez względu na wielkość liter, a liczby liczbowo (001 = 1).
 7. **Dopasowanie tekstu** (`fitAll`): pole zmniejsza się co 0,04 do `min`. Pola z `grupa=` skalują się razem: wspólna minimalna skala dla całej talii, krok 0,02, a kolizja to odstęp poniżej 2 mm. Pole, które się nie mieści, dostaje klasę `.za-dlugi` (czerwona ramka i uwaga).
 8. **Druk** (`buildPrint`):
@@ -97,12 +99,12 @@ Sekcje w kolejności w pliku:
 4. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
 5. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
 
-6. **Numer i wersja na karcie** (zaplanowane): wbudowane pola `[_numer]`, `[_kopia]`, `[_wersja]` (np. „v3 · 12/34” w rogu); wersja z komendy w szablonie.
+6. **Numer i wersja na karcie** (zrobione, gałąź `claude/noc`): komenda `WERSJA`, pola wbudowane `[_numer]`, `[_kopia]`, `[_liczba]`, `[_id]`, `[_wersja]`, `[_talia]`, `[_projekt]`, `[_data]`; stopka w szablonie startowym.
 7. **Drukuj tylko zmienione karty** (zaplanowane): aplikacja pamięta odcisk (hash) każdej karty z ostatniego PDF i drukuje tylko zmienione od tamtej pory.
 8. **Druk wybranych kart** (zaplanowane): zaznaczanie kart w podglądzie i PDF/druk tylko z nich.
 9. **Tryb szkicu** (zaplanowane): wydruk czarno-biały bez teł (oszczędność tuszu przy prototypach).
-10. **Ikony bez `ikony.csv`** (zaplanowane): każdy plik z folderu `Ikony/` działa jako znacznik `{nazwa_pliku}`; `ikony.csv` tylko do wyjątków (emoji zastępcze, odstęp).
-11. **Stałe w szablonie** (zaplanowane): `STAŁA = margines, 3.5` i użycie `[=margines]` (także w działaniach na liczbach).
+10. **Ikony bez `ikony.csv`** (zrobione, `claude/noc`): każdy obrazek z `Ikony/` (albo `Icons/`) działa jako `{nazwa_pliku}` (też bez polskich znaków); wpis w `ikony.csv` ma pierwszeństwo.
+11. **Stałe w szablonie** (zrobione, `claude/noc`): `STAŁA = margines, 3.5` i `[=margines]` w argumentach dowolnej komendy, w całym pliku (kolejność bez znaczenia). Bez działań na liczbach – ewentualnie później.
 12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
 13. **Raport projektu** (zaplanowane): duplikaty ID, puste wymagane kolumny, nieużywane kolumny i obrazki w folderach projektu.
 14. **Historia wersji** (zaplanowane): ukryty folder `.historia/` w projekcie; kopia szablonu i plików danych (CSV/XLSX) tylko gdy treść różni się od ostatniej kopii (zapis z edytora albo zmiana z zewnątrz).

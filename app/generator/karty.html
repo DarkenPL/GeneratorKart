@@ -198,6 +198,7 @@ const CONFIG = {
 let PALETA = {};
 let STOL_PCIO = '';
 let PROJEKT = 'NowaGra';     // nazwa projektu: PROJEKT = … w szablonie, inaczej nazwa pliku szablonu
+let WERSJA = '';             // WERSJA = … w szablonie – pole [_wersja] na kartach
 
 // ═══════════════════════════════════════════════════════════════════════════
 const $ = (id) => document.getElementById(id);
@@ -256,8 +257,11 @@ async function loadFromServer({ tylkoNowe = false } = {}) {
     t.pliki.forEach((d) => refs.add(d));
   }
   await Promise.all([...refs].map(put));
-  // 3) obrazki i ikony, do których odwołują się dane
+  // 3) obrazki i ikony, do których odwołują się dane, oraz ikony z folderów Ikony/ i Icons/
   const imgs = new Set(Object.values(CONFIG.ikonyDomyslne).map((v) => v[0]));
+  ikonyZFolderow = await znajdzIkony();
+  spisIkon = JSON.stringify(ikonyZFolderow);
+  ikonyZFolderow.forEach((x) => imgs.add(x.plik));
   const ik = next.get(norm(CONFIG.plikIkon));
   if (ik) for (const r of parseCSV(await ik.text())) if (r['Plik']) imgs.add(r['Plik']);
   for (const [k, f] of [...next]) {
@@ -281,7 +285,8 @@ async function serverStamp() {
   const extra = await Promise.all(serverWanted.map(async (n) => {
     try { const r = await fetch(encodePath(n), { method: 'HEAD', cache: 'no-store' }); return r.ok ? n : ''; } catch (e) { return ''; }
   }));
-  return heads.join('|') + '#' + extra.join('|');
+  const ikony = JSON.stringify(await znajdzIkony());              // nowy plik w Ikony/ też odświeża karty
+  return heads.join('|') + '#' + extra.join('|') + '#' + ikony;
 }
 
 $('odswiez').onclick = () => loadFromServer();
@@ -346,8 +351,34 @@ function fileUrl(rel) {
   const u = URL.createObjectURL(svg ? new Blob([f], { type: 'image/svg+xml' }) : f); urls.push(u); return u;
 }
 
+// Ikony z folderów Ikony/ i Icons/ – każdy plik obrazka to znacznik {nazwa_pliku} (bez ikony.csv).
+const FOLDERY_IKON = ['Ikony', 'Icons'];
+const OBRAZ_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
+let ikonyZFolderow = [];       // [{ klucz, plik }]
+let spisIkon = '';             // do wykrywania nowych plików ikon
+
+async function spisFolderu(dir) {
+  try {
+    const r = await fetch(encodePath(dir) + '/', { cache: 'no-store' });
+    if (!r.ok) return [];
+    const l = await r.json();
+    return Array.isArray(l) ? l : [];
+  } catch (e) { return []; }
+}
+async function znajdzIkony() {
+  const wynik = [];
+  for (const dir of FOLDERY_IKON)
+    for (const n of await spisFolderu(dir)) if (OBRAZ_RE.test(n)) wynik.push({ klucz: n.replace(OBRAZ_RE, ''), plik: dir + '/' + n });
+  return wynik;
+}
+
 async function loadIcons(warn) {
   const icons = {};
+  for (const { klucz, plik } of ikonyZFolderow) {
+    const k = iconKey(klucz);
+    icons[k] = { plik, odstep: true, znak: '' };
+    if (!icons[plain(k)]) icons[plain(k)] = icons[k];          // {ogien} = {ogień}
+  }
   for (const [k, [plik, odstep, znak]] of Object.entries(CONFIG.ikonyDomyslne)) icons[k] = { plik, odstep, znak: znak || '' };
   const f = files.get(norm(CONFIG.plikIkon));
   if (f) {
@@ -399,7 +430,7 @@ function renderText(text, icons, warn) {
       warn.add('Brak pliku ikony: ' + ic.plik + (ic.znak ? ' (użyto ' + ic.znak + ')' : ''));
       out += esc(ic.znak || m[0]);
     } else {
-      warn.add('Nieznany znacznik: ' + m[0]);
+      warn.add('Nieznany znacznik: ' + m[0] + ` – dodaj plik Ikony/${m[1].trim()}.svg (albo .png) lub wpis w ikony.csv`);
       out += esc(m[0]);
     }
     last = re.lastIndex;
@@ -456,7 +487,7 @@ function num(v) {
 // Plik szablonu: jedna talia albo kilka sekcji [TALIA Nazwa]. Wszystko przed pierwszą
 // [TALIA …] jest wspólne dla talii z tego pliku (KARTA, CZCIONKA, elementy awersu i rewersu).
 function parseTemplate(text, plik) {
-  const out = { talie: [], pliki: [], dane: [], czcionki: [], google: [], kolory: [], stol: '', bledy: [] };
+  const out = { talie: [], pliki: [], dane: [], czcionki: [], google: [], kolory: [], stol: '', wersja: '', bledy: [] };
   const nowa = (nazwa, wz) => ({
     plik, nazwa, dane: [], pcio: '', w: wz ? wz.w : 63, h: wz ? wz.h : 88,
     karta: wz ? { ...wz.karta } : {}, kartaRewers: wz ? wz.kartaRewers : undefined,
@@ -469,7 +500,22 @@ function parseTemplate(text, plik) {
   const wspolne = nowa(plik.replace(/\.txt$/i, '').replace(/^\d+[_ .-]*/, ''));
   let t = wspolne, cel = t.awers, font = { flags: new Set() }, fontWspolny = font;
 
-  text.replace(/^﻿/, '').split(/\r?\n/).forEach((raw, i) => {
+  // Stałe: STAŁA = nazwa, wartość – używane jako [=nazwa] w dowolnym miejscu szablonu (kolejność bez znaczenia).
+  const linie = text.replace(/^﻿/, '').split(/\r?\n/);
+  const stale = {};
+  linie.forEach((raw) => {
+    const m = /^\s*([^=;#\[]+?)\s*=\s*([\s\S]*)$/.exec(stripComment(raw));
+    if (!m || plain(m[1]) !== 'stala') return;
+    const [nazwa, ...reszta] = splitArgs(m[2]);
+    if (nazwa) stale[plain(nazwa)] = reszta.map((x) => unq(x).v).join(', ');
+  });
+  const wstawStale = (t, where) => t.replace(/\[=\s*([^\]]+?)\s*\]/g, (x, n) => {
+    if (plain(n) in stale) return stale[plain(n)];
+    out.bledy.push(`${where}: nieznana stała [=${n}] (dodaj STAŁA = ${n}, wartość)`);
+    return x;
+  });
+
+  linie.forEach((raw, i) => {
     const where = `${plik}, wiersz ${i + 1}`;
     let line = raw.trim();
     if (!line || /^(;|#|\/\/)/.test(line)) return;
@@ -490,8 +536,12 @@ function parseTemplate(text, plik) {
     const m = /^([^=]+?)\s*=\s*([\s\S]*)$/.exec(line);
     if (!m) { out.bledy.push(`${where}: nie rozumiem „${line}” (oczekiwano KOMENDA = …)`); return; }
     const kom = plain(m[1]);
+    if (kom === 'stala') {
+      if (splitArgs(m[2]).length < 2) out.bledy.push(`${where}: STAŁA = nazwa, wartość`);
+      return;
+    }
     const args = [], opt = {}, flags = new Set();
-    for (const a of splitArgs(m[2])) {
+    for (const a of splitArgs(wstawStale(m[2], where))) {
       const u = unq(a);
       const o = !u.q && /^([\p{L}_][\p{L}\p{N}_ ]*?)\s*=\s*([\s\S]*)$/u.exec(a);
       if (o) opt[plain(o[1])] = unq(o[2]).v;
@@ -524,6 +574,7 @@ function parseTemplate(text, plik) {
         break;
       case 'stol': if (args[0]) out.stol = args[0]; break;
       case 'projekt': if (args[0]) out.projekt = args[0].trim(); break;
+      case 'wersja': out.wersja = (args[0] || '').trim(); break;
       default:
         if (!ELEMENTY.includes(kom)) { out.bledy.push(`${where}: nieznana komenda ${m[1].trim()}`); return; }
         if (kom === 'tekst') {
@@ -549,7 +600,15 @@ const fontFamily = (v) => String(v).split(',').map((x) => x.trim()).filter(Boole
   .map((x) => GENERYCZNE.test(x) ? x : `'${x.replace(/["']/g, '')}'`).join(', ');
 
 function cell(row, k, ctx) {
+  // Pola wbudowane: [_numer], [_kopia], [_liczba], [_id], [_wersja], [_talia], [_projekt], [_data]
+  if (/^_/.test(k.trim()) && ctx.wbudowane) {
+    const v = ctx.wbudowane[plain(k.trim().slice(1))];
+    if (v !== undefined) return String(v);
+    if (ctx.kolumny) ctx.warn.add(`${ctx.plik}: nieznane pole wbudowane [${k}] – dostępne: [_numer], [_kopia], [_liczba], [_id], [_wersja], [_talia], [_projekt], [_data]`);
+    return '';
+  }
   if (k in row) return String(row[k] ?? '');
+  if (/^=/.test(k.trim())) return '';   // nieznana stała – uwaga jest już przy wierszu szablonu
   const want = k.trim().toLowerCase();
   const hit = Object.keys(row).find((x) => x.trim().toLowerCase() === want);
   if (hit !== undefined) return String(row[hit] ?? '');
@@ -763,6 +822,7 @@ async function build() {
 
   TALIE = []; PALETA = {}; STOL_PCIO = '';
   PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
+  WERSJA = '';
   const fontCss = [];
   for (const [, f] of tplFiles) {
     const t = parseTemplate(await f.text(), f.name);
@@ -770,6 +830,7 @@ async function build() {
     for (const [n, v] of t.kolory) { PALETA[n.toLowerCase()] = v; PALETA[plain(n)] = v; }
     if (t.stol && !STOL_PCIO) STOL_PCIO = t.stol;
     if (t.projekt) PROJEKT = t.projekt;
+    if (t.wersja) WERSJA = t.wersja;
     for (const talia of t.talie) {
       if (TALIE.some((x) => x.nazwa === talia.nazwa)) warn.add(`${talia.plik}: talia „${talia.nazwa}” występuje dwa razy – pominięto drugą (zmień NAZWA).`);
       else TALIE.push(talia);
@@ -799,22 +860,33 @@ async function build() {
     try { rows = await readTable(files.get(name)); }
     catch (e) { warn.add(talia.nazwa + ': błąd odczytu ' + name + ' – ' + e.message); continue; }
 
+    const liczba = rows.reduce((s, r) => s + copies(r), 0);
+    const dzis = new Date().toLocaleDateString('pl-PL');
+    const wspolneWb = { liczba, wersja: WERSJA, talia: talia.nazwa, projekt: PROJEKT, data: dzis };
+    // Numer albo kopia na karcie → każdą kopię rysujemy osobno; inaczej jedna kopia powielona.
+    const kazdaKopia = /\[\s*_(numer|kopia)\s*\]/i.test(tekstSzablonu);
     const base = { warn, icons, plik: `${talia.plik} (${talia.nazwa})` };
     let cards = '', n = 0;
     rows.forEach((r, i) => {
       const label = `${talia.nazwa} ${pole(r, 'ID') || i + 1}${pole(r, 'Nazwa') ? ' ' + pole(r, 'Nazwa') : ''}`;
       const k = copies(r);
       if (!k) return;
-      const card = renderCard(talia, talia.awers, r, { ...base, label, kolumny: true });
-      const one = `<div class="karta" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="${esc(pole(r, 'ID') || String(i + 1))}" data-row="${i}" title="${esc(label)}">${card.html}</div>`;
-      cards += one.repeat(k); n += k;
+      const id = pole(r, 'ID') || String(i + 1);
+      const karta = (kopia) => {
+        const card = renderCard(talia, talia.awers, r, { ...base, label, kolumny: true,
+          wbudowane: { ...wspolneWb, numer: n + kopia, kopia, id } });
+        return `<div class="karta" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="${esc(id)}" data-row="${i}" title="${esc(label)}">${card.html}</div>`;
+      };
+      if (kazdaKopia) for (let c = 1; c <= k; c++) cards += karta(c);
+      else cards += karta(1).repeat(k);
+      n += k;
     });
     total += n;
     found.push(`${talia.nazwa}: ${n}`);
     let back = '';
     if (talia.rewers.length) {
       const label = `${talia.nazwa} – rewers`;
-      const card = renderCard(talia, talia.rewers, {}, { ...base, label, kolumny: false });
+      const card = renderCard(talia, talia.rewers, {}, { ...base, label, kolumny: false, wbudowane: wspolneWb });
       back = `<div class="rewers-podglad"><div class="karta rewers" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="rewers" title="${esc(label)}">${card.html}</div><span class="etykieta">Rewers</span></div>`;
     }
     html += `<section class="talia" data-talia="${esc(talia.nazwa)}"><h2 class="talia-tytul">${esc(talia.nazwa)} · ${n} kart (${name}, szablon ${esc(talia.plik)})</h2><div class="siatka">${back}${cards}</div></section>`;
