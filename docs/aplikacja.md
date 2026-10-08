@@ -62,4 +62,12 @@ npm run dist       # budowanie .app (na macOS)
 - `app/serwer.js`: lokalny serwer HTTP, ten sam protokół co `Uruchom generator.command`.
 - `app/scripts/zasoby.js`: kopiuje `karty.html`, przykłady, biblioteki i czcionki do `app/zasoby/`.
 - Tryb testowy: `Generator kart --test-pdf <folder> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG, zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. Folder `-` oznacza ekran powitalny.
-- `.github/workflows/aplikacja-mac.yml`: budowanie na macOS przy każdej zmianie, tag `v*` tworzy wydanie.
+- `.github/workflows/aplikacja-mac.yml`: budowanie na macOS przy każdej zmianie.
+
+### Nowe wydanie
+
+1. Na GitHubie: **Releases → Draft a new release**.
+2. W polu tagu wpisz nową wersję, np. `v0.2.0` (**Create new tag**), i dodaj opis.
+3. Kliknij **Publish release**.
+
+Workflow sam zbuduje i przetestuje aplikację, a po kilku minutach dołączy do wydania oba pliki ZIP. Działa też wysłanie samego tagu `v*` (`git push origin v0.2.0`). Numer wersji w aplikacji ustawia pole `version` w `app/package.json`.
