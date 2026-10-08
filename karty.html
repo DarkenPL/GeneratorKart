@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator kart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   KARTY – wygląd kart opisują pliki w folderze Szablony (komendy TEKST, OBRAZEK…).
+   Tu są tylko wspólne zasady rysowania elementów.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.karta {
+  position: relative; overflow: hidden; break-inside: avoid;
+  background: #fff; color: #1d1b19;
+  font-family: "EB Garamond", Georgia, serif; font-size: 10pt; line-height: 1.15;
+}
+.el { position: absolute; box-sizing: border-box; }
+.el.tekst { display: flex; flex-direction: column; overflow: hidden; }
+.el.tekst > .tresc { flex: none; min-width: 0; }
+.el.jedna-linia > .tresc { white-space: nowrap; }
+.el.obrazek img { width: 100%; height: 100%; display: block; }
+.el.ikony { display: flex; overflow: hidden; }
+.el.ikony .ikona { height: 100%; width: auto; vertical-align: 0; }
+.el.ikony .ikona-kolor { height: 100%; width: auto; aspect-ratio: 1.42; }
+.ikona { height: calc(var(--ik, 0.9) * 1em); width: auto; vertical-align: -0.15em; }
+.odstep { display: inline-block; width: 0.25em; }
+/* Prostokąt w kolorze z palety, rysowany kodem: {kolor-nazwa}, {kolor-nazwa-mix} */
+.ikona-kolor {
+  display: inline-block; width: 1.35em; height: 0.95em; vertical-align: -0.15em; box-sizing: border-box;
+  border: 0.08em solid #222; border-radius: 0.08em;
+  background: linear-gradient(to bottom, var(--k) 0 var(--p, 100%), #fff var(--p, 100%) 100%);
+}
+.karta b { font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Interfejs (bez wpływu na wydruk)
+   ═══════════════════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #ece9e4; color: #222; }
+.pasek {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  padding: 10px 16px; background: #fbfaf8; border-bottom: 1px solid #d8d3cb;
+}
+.pasek h1 { font-size: 15px; margin: 0 6px 0 0; }
+button, select { font: inherit; padding: 6px 12px; border: 1px solid #c9c2b8; border-radius: 6px; background: #fff; cursor: pointer; }
+button.glowny { background: #c8463f; border-color: #c8463f; color: #fff; }
+button:disabled { opacity: .45; cursor: default; }
+label { display: inline-flex; gap: 6px; align-items: center; }
+.status { color: #6b655d; font-size: 13px; }
+.uwagi { margin: 12px 16px 0; padding: 10px 14px; background: #fff4e0; border: 1px solid #f0d3a0; border-radius: 6px; font-size: 13px; display: none; }
+.uwagi.widoczne { display: block; }
+.uwagi ul { margin: 4px 0 0; padding-left: 18px; }
+.start { max-width: 600px; margin: 60px auto; padding: 24px 28px; background: #fff; border-radius: 10px; border: 1px solid #ddd6cc; }
+.start h2 { margin-top: 0; }
+.start code { background: #f3f0eb; padding: 1px 5px; border-radius: 4px; }
+.talia-tytul { margin: 18px 16px 0; font-size: 15px; color: #4a453f; }
+.rewers-podglad { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #6b655d; margin-right: 10px; }
+.siatka .rewers-podglad .karta { outline: 2px dashed #b9b1a6; outline-offset: 4px; }
+.siatka { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 16px 16px; align-items: flex-start; }
+.siatka .karta { box-shadow: 0 1px 4px rgba(0,0,0,.18); border-radius: 2mm; }
+.siatka .karta.za-dlugi { outline: 2px dashed #d00; outline-offset: 3px; }
+#druk { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Druk
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media print {
+  body { background: #fff; }
+  .pasek, .uwagi, #podglad, .start { display: none !important; }
+  #druk { display: block; }
+  .arkusz { position: relative; break-after: page; overflow: hidden; margin: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; }
+  .arkusz:last-child { break-after: auto; }
+  .uklad { display: grid; }
+  .znacznik { position: absolute; background: #000; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+<style id="styl-strony"></style>
+<style id="czcionki-szablonow"></style>
+</head>
+<body>
+
+<div class="pasek">
+  <h1>Generator kart</h1>
+  <button class="glowny" id="wybierz">Wybierz folder projektu…</button>
+  <input type="file" id="wybierzStary" webkitdirectory multiple hidden>
+  <button id="odswiez" disabled>Odśwież</button>
+  <label title="Działa w Chrome i Edge"><input type="checkbox" id="auto" checked> Odświeżaj automatycznie</label>
+  <select id="filtr"><option value="">Wszystkie talie</option></select>
+  <select id="tryb">
+    <option value="a4">Druk: A4 ze znacznikami cięcia (karty 1:1)</option>
+    <option value="pojedyncze">Druk: każda karta na osobnej stronie</option>
+  </select>
+  <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
+  <button id="drukuj" disabled title="W oknie drukowania: papier A4, skala 100%, marginesy: brak">Drukuj / zapisz PDF</button>
+  <button id="png" disabled>Eksport JPG (ZIP)</button>
+  <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
+  <input type="file" id="pcioPlik" accept=".pcio,.zip" hidden>
+  <span class="status" id="status"></span>
+</div>
+<div class="uwagi" id="uwagi"></div>
+
+<div class="start" id="start">
+  <h2>Jak zacząć</h2>
+  <p>Kliknij <b>Wybierz folder projektu</b> i wskaż folder z grą. Potrzebne są w nim:</p>
+  <ul>
+    <li>folder <code>Szablony</code> – jeden plik <code>.txt</code> na talię, opisujący wygląd kart (opis komend: <code>Szablony/_opis_komend.txt</code>),</li>
+    <li>pliki z kartami wskazane w szablonach komendą <code>DANE</code> (np. <code>karty.csv</code>),</li>
+    <li>foldery z obrazkami (np. <code>Art</code>, <code>Icons</code>) i opcjonalnie <code>ikony.csv</code>.</li>
+  </ul>
+  <p><b>Najwygodniej:</b> uruchom dwuklikiem <code>Uruchom generator.command</code> z folderu projektu – karty wczytają się same i będą się odświeżać po każdym zapisie, w każdej przeglądarce.</p>
+  <p>Gdy otwierasz ten plik bezpośrednio: w Chrome i Edge karty odświeżą się same po każdym zapisie pliku, w innych przeglądarkach kliknij <b>Odśwież</b>.</p>
+</div>
+
+<div id="podglad"></div>
+<div id="druk"></div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// USTAWIENIA
+// ═══════════════════════════════════════════════════════════════════════════
+const CONFIG = {
+  // Talie i wygląd kart opisują pliki .txt w tym folderze (jeden plik = jedna talia, kolejność wg nazwy pliku).
+  // Pliki zaczynające się od „_” są pomijane (np. _opis_komend.txt).
+  folderSzablonow: 'Szablony',
+  // Nazwy kolorów i plik pokoju playingcards.io ustawia się w szablonach:
+  // KOLOR = nazwa, #RRGGBB   oraz   STOL = plik.pcio
+  plikIkon: 'ikony.csv',
+  odstep: true,                            // odstęp po ikonach z "Odstęp = tak"
+  minSkalaTekstu: 0.6,                     // domyślnie najmniej 60% rozmiaru, gdy tekst się nie mieści
+  jpgDpi: 150,                             // rozdzielczość eksportu pojedynczych kart
+  jpgJakosc: 0.92,                         // jakość JPG (0–1)
+  pcioRozmiar: 560,                        // dłuższy bok obrazka karty w pikselach
+  // Ikony wbudowane (bez ikony.csv). Znacznik: [plik, odstęp po ikonie, znak zastępczy gdy pliku brak]
+  ikonyDomyslne: {},
+};
+
+// Paleta nazwanych kolorów i plik pokoju playingcards.io – zbierane z szablonów przy każdym odświeżeniu.
+let PALETA = {};
+let STOL_PCIO = '';
+
+// ═══════════════════════════════════════════════════════════════════════════
+const $ = (id) => document.getElementById(id);
+const norm = (s) => String(s).normalize('NFC').toLowerCase().replace(/\\/g, '/').replace(/^\.\//, '');
+const iconKey = (s) => String(s || '').replace(/[{}:\s]/g, '').toLowerCase();
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let files = new Map();       // ścieżka (znormalizowana, względem folderu) → File
+let dirHandle = null;
+let urls = [];
+let lastStamp = '';
+
+// ── Czytanie folderu ─────────────────────────────────────────────────────────
+
+async function readHandle(handle, prefix = '') {
+  for await (const entry of handle.values()) {
+    if (entry.name.startsWith('.')) continue;
+    if (entry.kind === 'directory') await readHandle(entry, prefix + entry.name + '/');
+    else files.set(norm(prefix + entry.name), await entry.getFile());
+  }
+}
+async function loadFromHandle() { files = new Map(); await readHandle(dirHandle); await build(); }
+function loadFromInput(list) {
+  files = new Map();
+  for (const f of list) {
+    const rel = f.webkitRelativePath.split('/').slice(1).join('/');
+    if (!rel.split('/').some((p) => p.startsWith('.'))) files.set(norm(rel), f);
+  }
+  build();
+}
+
+// ── Tryb serwera: strona otwarta przez „Uruchom generator.command” ──────────
+// Pliki czytamy wtedy wprost z folderu, w którym leży karty.html – bez wybierania.
+const SERWER = /^https?:$/.test(location.protocol);
+let serverPaths = [];          // ścieżki wczytane z serwera (do sprawdzania zmian)
+
+// ?folder=przyklady/01-wyprawa – projekt w podfolderze (np. przykłady w repozytorium generatora).
+const BAZA = (new URLSearchParams(location.search).get('folder') || '').replace(/^[\/.]+|\/+$/g, '');
+const encodePath = (rel) => (BAZA ? BAZA + '/' : '') + rel.split('/').map(encodeURIComponent).join('/');
+
+async function fetchFile(rel) {
+  try {
+    const r = await fetch(encodePath(rel), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const lm = Date.parse(r.headers.get('Last-Modified') || '') || Date.now();
+    const blob = await r.blob();
+    return new File([blob], rel.split('/').pop(), { lastModified: lm, type: blob.type });
+  } catch (e) { return null; }
+}
+
+let serverListing = '';         // spis folderu szablonów (do wykrywania nowych plików)
+
+// Spis plików w folderze (serwer z „Uruchom generator.command” zwraca listę nazw jako JSON).
+async function listServerDir(dir) {
+  try {
+    const r = await fetch(encodePath(dir) + '/', { cache: 'no-store' });
+    if (!r.ok) return null;
+    const list = await r.json();
+    return Array.isArray(list) ? list : null;
+  } catch (e) { return null; }
+}
+
+// Pliki, do których odwołuje się szablon wprost (czcionki, obrazki, pliki danych).
+const PLIK_RE = /\.(png|jpe?g|gif|webp|svg|ttf|otf|woff2?|csv|xlsx)$/i;
+
+async function loadFromServer() {
+  const next = new Map(), paths = [];
+  const put = async (rel) => {
+    rel = String(rel || '').trim();
+    if (!rel || next.has(norm(rel))) return;
+    const f = await fetchFile(rel);
+    if (f) { next.set(norm(rel), f); paths.push(rel); }
+  };
+  // 1) szablony talii
+  const dir = CONFIG.folderSzablonow;
+  const list = await listServerDir(dir);
+  serverListing = JSON.stringify(list);
+  serverMissingList = false;
+  if (!list) {                                                  // brak folderu czy stary serwer bez spisów folderów?
+    try { serverMissingList = !(await fetch('/.wersja', { cache: 'no-store' })).ok; } catch (e) { serverMissingList = true; }
+  }
+  if (list) await Promise.all(list.filter((n) => /\.txt$/i.test(n)).map((n) => put(dir + '/' + n)));
+  // 2) pliki danych i inne pliki wskazane w szablonach
+  const refs = new Set([CONFIG.plikIkon]);
+  for (const [k, f] of next) {
+    if (!k.endsWith('.txt')) continue;
+    const t = parseTemplate(await f.text(), f.name);
+    t.dane.forEach((d) => refs.add(d));
+    t.pliki.forEach((d) => refs.add(d));
+  }
+  await Promise.all([...refs].map(put));
+  // 3) obrazki i ikony, do których odwołują się dane
+  const imgs = new Set(Object.values(CONFIG.ikonyDomyslne).map((v) => v[0]));
+  const ik = next.get(norm(CONFIG.plikIkon));
+  if (ik) for (const r of parseCSV(await ik.text())) if (r['Plik']) imgs.add(r['Plik']);
+  for (const [k, f] of [...next]) {
+    if (!/\.(csv|xlsx)$/.test(k) || k === norm(CONFIG.plikIkon)) continue;
+    try { for (const r of await readTable(f)) for (const v of Object.values(r)) if (PLIK_RE.test(v)) imgs.add(v); } catch (e) {}
+  }
+  await Promise.all([...imgs].map(put));
+  serverWanted = [...refs].filter((r) => !next.has(norm(r)));
+  files = next; serverPaths = paths;
+  await build();
+}
+let serverMissingList = false;
+let serverWanted = [];         // pliki wskazane w szablonach, których jeszcze nie ma
+
+async function serverStamp() {
+  const heads = await Promise.all(serverPaths.map(async (rel) => {
+    try {
+      const r = await fetch(encodePath(rel), { method: 'HEAD', cache: 'no-store' });
+      return rel + (r.ok ? (r.headers.get('Last-Modified') || '') + r.headers.get('Content-Length') : 'x');
+    } catch (e) { return rel + '?'; }
+  }));
+  // Nowe pliki szablonów i pliki danych, których jeszcze nie było, też sprawdzamy.
+  const listing = JSON.stringify(await listServerDir(CONFIG.folderSzablonow));
+  const extra = await Promise.all(serverWanted.map(async (n) => {
+    try { const r = await fetch(encodePath(n), { method: 'HEAD', cache: 'no-store' }); return r.ok ? n : ''; } catch (e) { return ''; }
+  }));
+  return heads.join('|') + '#' + listing + '#' + extra.join('|');
+}
+
+$('wybierz').onclick = async () => {
+  if (window.showDirectoryPicker) {
+    try { dirHandle = await window.showDirectoryPicker({ mode: 'read' }); await loadFromHandle(); }
+    catch (e) { if (e.name !== 'AbortError') status('Błąd: ' + e.message); }
+  } else $('wybierzStary').click();
+};
+$('wybierzStary').onchange = (e) => loadFromInput(e.target.files);
+$('odswiez').onclick = () => SERWER ? loadFromServer() : dirHandle ? loadFromHandle() : $('wybierzStary').click();
+$('filtr').onchange = applyFilter;
+
+// Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian plików w folderze projektu.
+setInterval(async () => {
+  if (SERWER) {
+    if (!$('auto').checked || document.hidden || !serverPaths.length) return;
+    const stamp = await serverStamp();
+    if (lastStamp && stamp !== lastStamp) await loadFromServer();
+    lastStamp = stamp;
+    return;
+  }
+  if (!dirHandle || !$('auto').checked || document.hidden) return;
+  try {
+    // Pliki w głównym folderze i w podfolderach pierwszego poziomu (Szablony, Art, Icons…).
+    const parts = [];
+    for await (const e of dirHandle.values()) {
+      if (e.name.startsWith('.')) continue;
+      if (e.kind === 'file') { const f = await e.getFile(); parts.push(e.name + f.lastModified + f.size); continue; }
+      try {
+        for await (const x of e.values()) if (x.kind === 'file' && !x.name.startsWith('.')) { const f = await x.getFile(); parts.push(e.name + '/' + x.name + f.lastModified + f.size); }
+      } catch (err) {}
+    }
+    const stamp = parts.join('|');
+    if (lastStamp && stamp !== lastStamp) await loadFromHandle();
+    lastStamp = stamp;
+  } catch (e) { /* folder chwilowo niedostępny */ }
+}, 1500);
+
+// ── CSV / XLSX ───────────────────────────────────────────────────────────────
+
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '');
+  const first = text.split(/\r?\n/, 1)[0];
+  const sep = (first.split(';').length >= first.split(',').length) ? ';' : ',';
+  const rows = []; let row = [], field = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += c; }
+    else if (c === '"') q = true;
+    else if (c === sep) { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(field); rows.push(row); row = []; field = ''; }
+    else field += c;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return toObjects(rows);
+}
+function toObjects(rows) {
+  rows = rows.filter((r) => r.some((v) => String(v ?? '').trim() !== ''));
+  if (!rows.length) return [];
+  const head = rows[0].map((h) => String(h ?? '').trim());
+  return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, String(r[i] ?? '').trim()])));
+}
+async function loadScript(src) {
+  return new Promise((ok, fail) => {
+    const s = document.createElement('script'); s.src = src; s.onload = ok;
+    s.onerror = () => fail(new Error('Nie można wczytać ' + src + ' (brak internetu?)'));
+    document.head.appendChild(s);
+  });
+}
+async function readTable(file) {
+  if (/\.xlsx$/i.test(file.name)) {
+    if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return toObjects(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }));
+  }
+  return parseCSV(await file.text());
+}
+
+// ── Wspólne elementy kart ────────────────────────────────────────────────────
+
+function fileUrl(rel) {
+  const f = files.get(norm(rel));
+  if (!f) return null;
+  // SVG wyświetla się tylko z właściwym typem pliku (PNG/JPG przeglądarka rozpozna sama).
+  const svg = /\.svg$/i.test(rel) && f.type !== 'image/svg+xml';
+  const u = URL.createObjectURL(svg ? new Blob([f], { type: 'image/svg+xml' }) : f); urls.push(u); return u;
+}
+
+async function loadIcons(warn) {
+  const icons = {};
+  for (const [k, [plik, odstep, znak]] of Object.entries(CONFIG.ikonyDomyslne)) icons[k] = { plik, odstep, znak: znak || '' };
+  const f = files.get(norm(CONFIG.plikIkon));
+  if (f) {
+    for (const r of parseCSV(await f.text())) {
+      const k = iconKey(r['Znacznik']); if (!k) continue;
+      const prev = icons[k] || { plik: '', odstep: false, znak: '' };
+      icons[k] = {
+        plik: r['Plik'] || prev.plik,
+        odstep: r['Odstęp'] === undefined ? prev.odstep : /^(tak|t|1|x|yes)$/i.test(r['Odstęp']),
+        znak: r['Znak'] || prev.znak,
+      };
+    }
+  }
+  for (const k in icons) icons[k].url = fileUrl(icons[k].plik);
+  return icons;
+}
+
+function color(value, label, warn) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  const named = PALETA[v.toLowerCase()] || PALETA[plain(v)];
+  if (named) return named;
+  if (/^(brak|przezroczysty|none|transparent)$/i.test(v)) return 'transparent';
+  if (/^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) return '#' + v.replace('#', '');
+  if (/^(rgba?|hsla?)\([^()]*\)$/i.test(v)) return v;
+  warn.add(label + ': nieznany kolor „' + v + '”');
+  return null;
+}
+
+// Tekst ze znacznikami {fire} → HTML z obrazkami ikon; nowa linia w komórce = nowa linia na karcie.
+function renderText(text, icons, warn) {
+  let out = '';
+  const re = /\{([^{}]+)\}/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    out += esc(text.slice(last, m.index));
+    const key = iconKey(m[1]);
+    const ic = icons[key];
+    // {kolor-nazwa} / {kolor-nazwa-mix} – prostokąt w kolorze z palety (KOLOR = …), rysowany kodem.
+    // {osiag-…} działa tak samo (starsza nazwa).
+    const sw = /^(?:kolor|osiag)-(.+?)(-mix)?$/.exec(key);
+    const swc = sw && (PALETA[sw[1]] || PALETA[plain(sw[1])]);
+    if (swc) {
+      out += `<span class="ikona-kolor" style="--k:${swc};${sw[2] ? '--p:45%' : ''}" title="${esc(m[1])}"></span>`;
+    } else if (ic && ic.url) {
+      out += `<img class="ikona" src="${ic.url}" alt="${esc(m[1])}">`;
+      if (CONFIG.odstep && ic.odstep && text[re.lastIndex] === '{') out += '<span class="odstep"></span>';
+    } else if (ic) {
+      // Brak pliku – zastępczo znak (emoji), żeby karta nadal była czytelna.
+      warn.add('Brak pliku ikony: ' + ic.plik + (ic.znak ? ' (użyto ' + ic.znak + ')' : ''));
+      out += esc(ic.znak || m[0]);
+    } else {
+      warn.add('Nieznany znacznik: ' + m[0]);
+      out += esc(m[0]);
+    }
+    last = re.lastIndex;
+  }
+  return (out + esc(text.slice(last))).replace(/\r?\n/g, '<br>');
+}
+
+// ── Szablony talii (folder Szablony, w stylu nanDecka) ──────────────────────
+// Każdy plik .txt to jedna talia: komendy KOMENDA = argumenty, wymiary w mm,
+// [Kolumna] wstawia wartość z pliku danych. Pełny opis: Szablony/_opis_komend.txt.
+
+const plain = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
+  .toLowerCase().trim().replace(/[\s-]+/g, '_');
+const ELEMENTY = ['tlo', 'prostokat', 'elipsa', 'tekst', 'obrazek', 'ikona'];
+const FLAGI = ['jedna_linia', 'pogrubienie', 'kursywa', 'podkreslenie', 'wersaliki'];
+
+function stripComment(line) {
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"' && line[i - 1] !== '\\') q = !q;
+    else if (!q && (c === ';' || (c === '/' && line[i + 1] === '/')) && /\s/.test(line[i - 1] || ' ')) return line.slice(0, i);
+  }
+  return line;
+}
+// Dzieli argumenty po przecinkach – poza cudzysłowami i nawiasami [ ] { } ( ).
+function splitArgs(s) {
+  const out = []; let cur = '', q = false, depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === '\\' && i + 1 < s.length) { cur += c + s[++i]; continue; } if (c === '"') q = false; cur += c; continue; }
+    if (c === '"') { q = true; cur += c; continue; }
+    if ('[{('.includes(c)) depth++; else if (']})'.includes(c)) depth--;
+    if (c === ',' && depth <= 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += c;
+  }
+  if (cur.trim() !== '' || out.length) out.push(cur.trim());
+  return out;
+}
+function unq(a) {
+  a = String(a).trim();
+  if (a.length >= 2 && a[0] === '"' && a[a.length - 1] === '"')
+    return { v: a.slice(1, -1).replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\'), q: true };
+  return { v: a, q: false };
+}
+// Liczba w mm (albo pt przy rozmiarze); można pisać działania, np. 88 - 1.6 - 10.35.
+function num(v) {
+  if (v === undefined || v === null) return NaN;
+  const s = String(v).trim().replace(/\s*(mm|pt)$/i, '');
+  if (!s || !/^[\d.\s+\-*/()]+$/.test(s)) return NaN;
+  try { return Number(Function('"use strict"; return (' + s + ')')()); } catch (e) { return NaN; }
+}
+
+// Plik szablonu: jedna talia albo kilka sekcji [TALIA Nazwa]. Wszystko przed pierwszą
+// [TALIA …] jest wspólne dla talii z tego pliku (KARTA, CZCIONKA, elementy awersu i rewersu).
+function parseTemplate(text, plik) {
+  const out = { talie: [], pliki: [], dane: [], czcionki: [], google: [], kolory: [], stol: '', bledy: [] };
+  const nowa = (nazwa, wz) => ({
+    plik, nazwa, dane: [], pcio: '', w: wz ? wz.w : 63, h: wz ? wz.h : 88,
+    karta: wz ? { ...wz.karta } : {}, kartaRewers: wz ? wz.kartaRewers : undefined,
+    awers: wz ? [...wz.awers] : [], rewers: wz ? [...wz.rewers] : [],
+  });
+  if (/^\s*\{\\rtf/.test(text)) {
+    out.bledy.push(`${plik}: plik jest zapisany jako RTF. W TextEdit wybierz Format → Zamień na zwykły tekst i zapisz ponownie.`);
+    return out;
+  }
+  const wspolne = nowa(plik.replace(/\.txt$/i, '').replace(/^\d+[_ .-]*/, ''));
+  let t = wspolne, cel = t.awers, font = { flags: new Set() }, fontWspolny = font;
+
+  text.replace(/^﻿/, '').split(/\r?\n/).forEach((raw, i) => {
+    const where = `${plik}, wiersz ${i + 1}`;
+    let line = raw.trim();
+    if (!line || /^(;|#|\/\/)/.test(line)) return;
+    line = stripComment(line).trim();
+    if (!line) return;
+    const sec = /^\[\s*([^\]]+?)\s*\]$|^(\S+)\s*:$/.exec(line);
+    if (sec) {
+      const head = (sec[1] || sec[2]).trim();
+      const talia = /^talia(?:\s+(.+))?$/i.exec(head);
+      if (talia) {
+        if (t === wspolne) fontWspolny = font;
+        t = nowa((talia[1] || '').trim() || `${wspolne.nazwa} ${out.talie.length + 1}`, wspolne);
+        out.talie.push(t); cel = t.awers; font = fontWspolny;
+        return;
+      }
+      if (['awers', 'rewers'].includes(plain(head))) { cel = plain(head) === 'rewers' ? t.rewers : t.awers; return; }
+    }
+    const m = /^([^=]+?)\s*=\s*([\s\S]*)$/.exec(line);
+    if (!m) { out.bledy.push(`${where}: nie rozumiem „${line}” (oczekiwano KOMENDA = …)`); return; }
+    const kom = plain(m[1]);
+    const args = [], opt = {}, flags = new Set();
+    for (const a of splitArgs(m[2])) {
+      const u = unq(a);
+      const o = !u.q && /^([\p{L}_][\p{L}\p{N}_ ]*?)\s*=\s*([\s\S]*)$/u.exec(a);
+      if (o) opt[plain(o[1])] = unq(o[2]).v;
+      else if (!u.q && FLAGI.includes(plain(a))) flags.add(plain(a));
+      else args.push(u.v);
+    }
+    const lit = (v) => { if (v && !/[\[{]/.test(v) && PLIK_RE.test(v)) out.pliki.push(v); };
+    switch (kom) {
+      case 'nazwa': t.nazwa = args[0] || t.nazwa; break;
+      case 'dane': t.dane = args.filter(Boolean); out.dane.push(...t.dane); break;
+      case 'pcio': t.pcio = args[0] || ''; break;
+      case 'karta': {
+        const w = num(args[0]), h = num(args[1]);
+        if (cel === t.rewers) { t.kartaRewers = opt; break; }        // rewers: własne zaokrąglenie/obwódka, rozmiar jak awers
+        if (Number.isNaN(w) || Number.isNaN(h)) out.bledy.push(`${where}: KARTA potrzebuje szerokości i wysokości w mm`);
+        else { t.w = w; t.h = h; }
+        t.karta = opt; break;
+      }
+      case 'czcionka':
+        font = { ...font, ...(args[0] ? { czcionka: args[0] } : {}), ...(args[1] ? { rozmiar: args[1] } : {}), ...opt, flags: new Set(flags) };
+        break;
+      case 'czcionka_plik':
+        if (args.length < 2) { out.bledy.push(`${where}: CZCIONKA_PLIK = "Nazwa", Folder/plik.ttf`); break; }
+        out.czcionki.push({ nazwa: args[0], plik: args[1] }); out.pliki.push(args[1]); break;
+      case 'czcionka_google': if (args[0]) out.google.push(args[0]); break;
+      case 'kolor':
+        if (args.length < 2 || !/^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(args[1].trim()))
+          out.bledy.push(`${where}: KOLOR = nazwa, #RRGGBB`);
+        else out.kolory.push([args[0].trim(), '#' + args[1].trim().replace('#', '')]);
+        break;
+      case 'stol': if (args[0]) out.stol = args[0]; break;
+      default:
+        if (!ELEMENTY.includes(kom)) { out.bledy.push(`${where}: nieznana komenda ${m[1].trim()}`); return; }
+        if (kom === 'tekst') {
+          const { flags: ff, ...fopt } = font;
+          cel.push({ kom, args, opt: { ...fopt, ...opt }, flags: new Set([...ff, ...flags]), where });
+        } else cel.push({ kom, args, opt, flags, where });
+        if (kom === 'obrazek') lit(args[4]);
+        if (kom === 'tlo') lit(args[0]);
+    }
+  });
+  if (!out.talie.length) out.talie.push(wspolne);              // plik bez [TALIA …] = jedna talia
+  else if (wspolne.dane.length) out.bledy.push(`${plik}: DANE przed pierwszą [TALIA …] są pomijane – wpisz je w każdej talii.`);
+  return out;
+}
+
+const ALIGN_H = { lewo: 'left', srodek: 'center', prawo: 'right', wyjustuj: 'justify' };
+const FLEX_H = { lewo: 'flex-start', srodek: 'center', prawo: 'flex-end', wyjustuj: 'flex-start' };
+const FLEX_V = { gora: 'flex-start', srodek: 'center', dol: 'flex-end' };
+const POS_H = { lewo: 'left', srodek: 'center', prawo: 'right' };
+const POS_V = { gora: 'top', srodek: 'center', dol: 'bottom' };
+const GENERYCZNE = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/;
+const fontFamily = (v) => String(v).split(',').map((x) => x.trim()).filter(Boolean)
+  .map((x) => GENERYCZNE.test(x) ? x : `'${x.replace(/["']/g, '')}'`).join(', ');
+
+function cell(row, k, ctx) {
+  if (k in row) return String(row[k] ?? '');
+  const want = k.trim().toLowerCase();
+  const hit = Object.keys(row).find((x) => x.trim().toLowerCase() === want);
+  if (hit !== undefined) return String(row[hit] ?? '');
+  if (ctx.kolumny) ctx.warn.add(`${ctx.plik}: w pliku danych nie ma kolumny [${k}]`);
+  return '';
+}
+
+// Rysuje jedną kartę (awers albo rewers) według komend szablonu.
+function renderCard(tpl, cmds, row, ctx) {
+  // Wstawia wartości [Kolumna]; „empty” = tekst miał pola i wszystkie były puste.
+  const field = (str) => {
+    let had = false, any = false;
+    const s = String(str ?? '').replace(/\[([^\[\]]+)\]/g, (m, k) => {
+      had = true; const v = cell(row, k, ctx); if (v.trim() !== '') any = true;
+      return v.replace(/\*/g, '\u0001');                 // gwiazdki z danych nie są pogrubieniem
+    });
+    return { s, empty: had && !any };
+  };
+  const value = (str) => field(str).s.replace(/\u0001/g, '*').trim();
+  const colorOf = (expr) => {
+    for (const part of String(expr ?? '').split('|')) {
+      const v = value(part); if (!v) continue;
+      const c = color(v, ctx.label, ctx.warn); if (c) return c;
+    }
+    return null;
+  };
+  const condition = (expr) => {
+    const m = /^(.*?)(!=|=)(.*)$/.exec(expr);
+    if (!m) return value(expr) !== '';
+    const a = value(m[1]).toLowerCase(), b = value(m[3]).toLowerCase();
+    const same = (a !== '' && b !== '' && !Number.isNaN(+a) && !Number.isNaN(+b)) ? +a === +b : a === b;   // 001 = 1
+    return m[2] === '=' ? same : !same;
+  };
+  const rich = (s) => renderText(s, ctx.icons, ctx.warn)
+    .replace(/\*\*([\s\S]+?)\*\*/g, '<b>$1</b>').replace(/\*([^*]+?)\*/g, '<i>$1</i>').replace(/\u0001/g, '*');
+  const mm = (v) => (String(v).trim().endsWith('%') ? String(v).trim() : num(v) + 'mm');
+
+  let bg = '', html = '';
+  for (const c of cmds) {
+    if (c.opt.jesli !== undefined && !condition(c.opt.jesli)) continue;
+    const o = c.opt, f = c.flags;
+    if (c.kom === 'tlo') {
+      const v = value(c.args[0]);
+      if (PLIK_RE.test(v)) {
+        const u = fileUrl(v);
+        if (u) bg = `background:url('${u}') center/cover;`; else ctx.warn.add(`${ctx.label}: brak pliku ${v}`);
+      } else { const k = colorOf(c.args[0]); if (k) bg = `background:${k};`; }
+      continue;
+    }
+    const [x, y, w, h] = c.args.slice(0, 4).map(num);
+    if ([x, y, w, h].some(Number.isNaN)) { ctx.warn.add(`${c.where}: potrzebne 4 liczby – x, y, szerokość, wysokość (w mm)`); continue; }
+    const box = `left:${x}mm;top:${y}mm;width:${w}mm;height:${h}mm;`;
+    const ph = plain(o.wyrownanie || ''), pv = plain(o.pion || '');
+
+    if (c.kom === 'prostokat' || c.kom === 'elipsa') {
+      const fill = colorOf(o.kolor ?? c.args[4] ?? (o.obwodka ? 'brak' : '#000000')) || 'transparent';
+      let st = box + `background:${fill};`;
+      if (c.kom === 'elipsa') st += 'border-radius:50%;';
+      else if (o.zaokraglenie) st += `border-radius:${mm(o.zaokraglenie)};`;
+      if (o.obwodka) st += `border:${num(o.obwodka)}mm solid ${colorOf(o.kolor_obwodki || '#000000') || '#000'};`;
+      if (o.krycie) st += `opacity:${num(o.krycie)};`;
+      html += `<div class="el ksztalt" style="${esc(st)}"></div>`;
+    } else if (c.kom === 'tekst') {
+      const tr = field(c.args[4]);
+      if (tr.empty || tr.s.trim() === '') continue;
+      const pt = num(o.rozmiar ?? 10);
+      const st = [box, `font-size:${pt}pt`, `line-height:${num(o.interlinia ?? 1.15)}`,
+                  `text-align:${ALIGN_H[ph] || 'left'}`, `justify-content:${FLEX_V[pv] || 'flex-start'}`];
+      if (o.czcionka) st.push('font-family:' + fontFamily(o.czcionka));
+      if (o.kolor) { const k = colorOf(o.kolor); if (k) st.push('color:' + k); }
+      if (o.ikony) st.push('--ik:' + num(o.ikony));
+      if (f.has('pogrubienie')) st.push('font-weight:600');
+      if (f.has('kursywa')) st.push('font-style:italic');
+      if (f.has('podkreslenie')) st.push('text-decoration:underline');
+      if (f.has('wersaliki')) st.push('text-transform:uppercase');
+      const cls = 'el tekst' + (f.has('jedna_linia') ? ' jedna-linia' : '');
+      const data = ` data-pt="${pt}"` + (o.min ? ` data-min="${num(o.min)}"` : '') + (o.grupa ? ` data-grupa="${esc(o.grupa)}"` : '');
+      html += `<div class="${cls}" style="${esc(st.join(';'))}"${data}><div class="tresc">${rich(tr.s)}</div></div>`;
+    } else if (c.kom === 'obrazek') {
+      const p = value(c.args[4]);
+      if (!p) continue;
+      const u = fileUrl(p);
+      if (!u) { ctx.warn.add(`${ctx.label}: brak pliku ${p}`); continue; }
+      const fit = { zmiesc: 'contain', wypelnij: 'cover', rozciagnij: 'fill' }[plain(o.dopasuj || 'zmiesc')] || 'contain';
+      html += `<div class="el obrazek" style="${box}"><img src="${u}" alt="" style="object-fit:${fit};object-position:${POS_H[ph] || 'center'} ${POS_V[pv] || 'center'}"></div>`;
+    } else if (c.kom === 'ikona') {
+      const tr = field(c.args[4]);
+      if (tr.empty || tr.s.trim() === '') continue;
+      html += `<div class="el ikony" style="${box}align-items:${FLEX_V[pv] || 'center'};justify-content:${FLEX_H[ph] || 'center'};font-size:${h}mm">${renderText(tr.s.replace(/\u0001/g, '*'), ctx.icons, ctx.warn)}</div>`;
+    }
+  }
+  const k = (cmds === tpl.rewers && tpl.kartaRewers) || tpl.karta;
+  const r = k.zaokraglenie ? `border-radius:${mm(k.zaokraglenie)};` : '';
+  if (k.obwodka) html += `<div class="el" style="left:0;top:0;width:100%;height:100%;${r}border:${num(k.obwodka)}mm solid ${colorOf(k.kolor_obwodki || '#000000') || '#000'}"></div>`;
+  return { html, style: `width:${tpl.w}mm;height:${tpl.h}mm;${bg}${r}` };
+}
+
+// ── Dopasowanie tekstu ───────────────────────────────────────────────────────
+// Tekst (razem z ikonami, bo mają rozmiar w em) zmniejsza się, aż zmieści się w polu.
+// Pola z tą samą „grupą” zmniejszają się razem – na wszystkich kartach talii o tyle samo –
+// i nie mogą na siebie nachodzić (np. Koszt i Punkty w jednym wierszu).
+
+const overflows = (el) => {
+  const t = el.firstElementChild;
+  return !!t && (t.getBoundingClientRect().height > el.getBoundingClientRect().height + 0.5 || t.scrollWidth > el.clientWidth + 0.5);
+};
+function contentRect(el) {
+  const t = el.firstElementChild; if (!t || !t.firstChild) return null;
+  const r = document.createRange(); r.selectNodeContents(t); return r.getBoundingClientRect();
+}
+const ODSTEP_GRUPY = 2 * 96 / 25.4;              // 2 mm między polami jednej grupy
+function collide(list) {
+  const rects = list.map(contentRect).filter((r) => r && r.width > 0);
+  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+    const a = rects[i], b = rects[j];
+    if (a.bottom <= b.top || b.bottom <= a.top) continue;
+    if (a.right + ODSTEP_GRUPY > b.left && b.right + ODSTEP_GRUPY > a.left) return true;
+  }
+  return false;
+}
+const setScale = (el, k) => { el.style.fontSize = (parseFloat(el.dataset.pt) * k) + 'pt'; };
+const minOf = (el) => { const v = parseFloat(el.dataset.min); return Number.isNaN(v) ? CONFIG.minSkalaTekstu : v; };
+function groupScale(list) {
+  let k = 1;
+  const min = Math.min(...list.map(minOf));
+  const apply = () => list.forEach((e) => setScale(e, k));
+  apply();
+  while ((list.some(overflows) || collide(list)) && k > min) { k -= 0.02; apply(); }
+  return k;
+}
+function fitAll(root) {
+  const cards = [...root.querySelectorAll('.karta')];
+  const groups = new Map();                          // talia|grupa → listy pól (po jednej na kartę)
+  for (const card of cards) {
+    const local = new Map();
+    for (const el of card.querySelectorAll('.el.tekst[data-grupa]')) {
+      const g = (card.dataset.talia || '') + '|' + el.dataset.grupa;
+      if (!local.has(g)) local.set(g, []); local.get(g).push(el);
+    }
+    for (const [g, list] of local) { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(list); }
+  }
+  const bad = new Set();
+  for (const lists of groups.values()) {
+    const k = Math.min(1, ...lists.map(groupScale));
+    for (const l of lists) {
+      l.forEach((e) => setScale(e, k));
+      if (l.some(overflows) || collide(l)) bad.add(l[0].closest('.karta'));
+    }
+  }
+  for (const el of root.querySelectorAll('.el.tekst:not([data-grupa])')) {
+    let k = 1; setScale(el, 1);
+    const min = minOf(el);
+    while (overflows(el) && k > min) { k -= 0.04; setScale(el, k); }
+    if (overflows(el)) bad.add(el.closest('.karta'));
+  }
+  cards.forEach((c) => c.classList.toggle('za-dlugi', bad.has(c)));
+  return [...bad].map((c) => c.title);
+}
+
+async function waitForImages(root) {
+  await Promise.all([...root.querySelectorAll('img')].map((i) => i.complete ? null : new Promise((r) => { i.onload = i.onerror = r; })));
+  if (document.fonts) await document.fonts.ready;
+}
+
+// ── Budowanie ────────────────────────────────────────────────────────────────
+
+function copies(r) {
+  const raw = String(r['Ilość'] ?? '').trim();
+  if (raw === '') return 1;
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? 1 : Math.max(0, n);       // 0 = karta pominięta
+}
+
+// Plik talii: najpierw w głównym folderze, a jeśli go tam nie ma – w dowolnym podfolderze
+// (np. gdy archiwum rozpakowało się do osobnego folderu).
+function findDeckFile(names) {
+  for (const n of names) if (files.has(norm(n))) return norm(n);
+  for (const n of names) {
+    const hit = [...files.keys()].find((k) => k.split('/').pop() === norm(n));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+let TALIE = [];               // wczytane szablony talii
+const googleFonts = new Set();
+
+async function build() {
+  urls.forEach(URL.revokeObjectURL); urls = [];
+  const warn = new Set();
+  const icons = await loadIcons(warn);
+  const view = $('podglad');
+  let html = '', total = 0;
+  const found = [], missing = [];
+
+  const dir = norm(CONFIG.folderSzablonow) + '/';
+  const tplFiles = [...files.entries()]
+    .filter(([k]) => k.startsWith(dir) && k.endsWith('.txt') && !k.slice(dir.length).includes('/') && !k.slice(dir.length).startsWith('_'))
+    .sort((a, b) => a[0].localeCompare(b[0], 'pl', { numeric: true }));
+  if (!tplFiles.length) {
+    if (SERWER && !serverMissingList && !BAZA) await showExamples();
+    status(serverMissingList
+      ? 'Ten generator potrzebuje nowszego „Uruchom generator.command” – zamknij okno Terminala i uruchom go ponownie.'
+      : `Brak szablonów talii: w folderze projektu nie ma folderu „${CONFIG.folderSzablonow}” z plikami .txt.`);
+    return;
+  }
+
+  TALIE = []; PALETA = {}; STOL_PCIO = '';
+  const fontCss = [];
+  for (const [, f] of tplFiles) {
+    const t = parseTemplate(await f.text(), f.name);
+    t.bledy.forEach((b) => warn.add(b));
+    for (const [n, v] of t.kolory) { PALETA[n.toLowerCase()] = v; PALETA[plain(n)] = v; }
+    if (t.stol && !STOL_PCIO) STOL_PCIO = t.stol;
+    for (const talia of t.talie) {
+      if (TALIE.some((x) => x.nazwa === talia.nazwa)) warn.add(`${talia.plik}: talia „${talia.nazwa}” występuje dwa razy – pominięto drugą (zmień NAZWA).`);
+      else TALIE.push(talia);
+    }
+    for (const { nazwa, plik } of t.czcionki) {
+      const u = fileUrl(plik);
+      if (u) fontCss.push(`@font-face { font-family: "${nazwa.replace(/"/g, '')}"; src: url("${u}"); }`);
+      else warn.add(`${f.name}: brak pliku czcionki ${plik}`);
+    }
+    for (const g of t.google) if (!googleFonts.has(g)) {
+      googleFonts.add(g);
+      const l = document.createElement('link'); l.rel = 'stylesheet';
+      // „Nazwa” albo pełny zapis z Google Fonts, np. "EB Garamond:ital,wght@0,400;0,600;1,400"
+      const [fam, axes] = g.split(':');
+      l.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(fam.trim()).replace(/%20/g, '+') + (axes ? ':' + axes.trim() : '') + '&display=swap';
+      document.head.appendChild(l);
+    }
+  }
+  $('czcionki-szablonow').textContent = fontCss.join('\n');
+
+  for (const talia of TALIE) {
+    if (!talia.dane.length) { warn.add(`${talia.plik}, talia „${talia.nazwa}”: brak komendy DANE (plik z kartami)`); continue; }
+    const name = findDeckFile(talia.dane);
+    if (!name) { missing.push(`${talia.nazwa} (${talia.dane[0]})`); continue; }
+    if (name.includes('/')) warn.add(`${talia.nazwa}: plik znaleziono w podfolderze (${name}) – najlepiej przenieś go do głównego folderu projektu.`);
+    let rows;
+    try { rows = await readTable(files.get(name)); }
+    catch (e) { warn.add(talia.nazwa + ': błąd odczytu ' + name + ' – ' + e.message); continue; }
+
+    const base = { warn, icons, plik: `${talia.plik} (${talia.nazwa})` };
+    let cards = '', n = 0;
+    rows.forEach((r, i) => {
+      const label = `${talia.nazwa} ${r['ID'] || i + 1}${r['Nazwa'] ? ' ' + r['Nazwa'] : ''}`;
+      const k = copies(r);
+      if (!k) return;
+      const card = renderCard(talia, talia.awers, r, { ...base, label, kolumny: true });
+      const one = `<div class="karta" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="${esc(r['ID'] || String(i + 1))}" data-row="${i}" title="${esc(label)}">${card.html}</div>`;
+      cards += one.repeat(k); n += k;
+    });
+    total += n;
+    found.push(`${talia.nazwa}: ${n}`);
+    let back = '';
+    if (talia.rewers.length) {
+      const label = `${talia.nazwa} – rewers`;
+      const card = renderCard(talia, talia.rewers, {}, { ...base, label, kolumny: false });
+      back = `<div class="rewers-podglad"><div class="karta rewers" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="rewers" title="${esc(label)}">${card.html}</div>Rewers</div>`;
+    }
+    html += `<section class="talia" data-talia="${esc(talia.nazwa)}"><h2 class="talia-tytul">${esc(talia.nazwa)} · ${n} kart (${name}, szablon ${esc(talia.plik)})</h2><div class="siatka">${back}${cards}</div></section>`;
+  }
+
+  if (missing.length) warn.add('Nie znaleziono plików z kartami: ' + missing.join(', ') + '. Sprawdź komendę DANE w szablonie i czy plik leży w folderze projektu.');
+  if (!found.length) {
+    status('Żadna talia nie ma pliku z kartami – sprawdź Uwagi.');
+    view.innerHTML = '';
+  } else {
+    view.innerHTML = html;
+    await waitForImages(view);
+    for (const l of new Set(fitAll(view))) warn.add(l + ': tekst nie mieści się nawet po zmniejszeniu (czerwona ramka)');
+
+    const sel = $('filtr'), current = sel.value;
+    sel.innerHTML = '<option value="">Wszystkie talie</option>' +
+      TALIE.filter((t) => view.querySelector(`[data-talia="${CSS.escape(t.nazwa)}"]`)).map((t) => `<option>${esc(t.nazwa)}</option>`).join('');
+    sel.value = [...sel.options].some((o) => o.value === current) ? current : '';
+    applyFilter();
+
+    $('start').style.display = 'none';
+    ['odswiez', 'drukuj', 'png', 'pcio'].forEach((id) => $(id).disabled = false);
+    status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
+  }
+  const u = $('uwagi');
+  u.innerHTML = warn.size ? '<b>Uwagi:</b><ul>' + [...warn].map((w) => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '';
+  u.classList.toggle('widoczne', warn.size > 0);
+}
+
+function applyFilter() {
+  const f = $('filtr').value;
+  for (const s of $('podglad').querySelectorAll('.talia')) s.style.display = (!f || s.dataset.talia === f) ? '' : 'none';
+}
+function visibleSections() {
+  return [...$('podglad').querySelectorAll('.talia')].filter((s) => s.style.display !== 'none');
+}
+function visibleCards() {
+  return visibleSections().flatMap((s) => [...s.querySelectorAll('.karta:not(.rewers)')]);
+}
+function backOf(talia) {
+  const s = [...$('podglad').querySelectorAll('.talia')].find((x) => x.dataset.talia === talia);
+  return s ? s.querySelector('.karta.rewers') : null;
+}
+function status(t) { $('status').textContent = t; }
+
+// ── Druk ─────────────────────────────────────────────────────────────────────
+
+const mm = (v) => v + 'mm';
+function sizeMm(el) { const r = el.getBoundingClientRect(); return [r.width * 25.4 / 96, r.height * 25.4 / 96]; }
+
+// Rozmiar karty w mm – wprost z szablonu (KARTA = 63, 88).
+function cardMm(k) {
+  const w = parseFloat(k.style.width), h = parseFloat(k.style.height);
+  if (k.style.width.endsWith('mm') && k.style.height.endsWith('mm')) return [w, h];
+  return sizeMm(k).map((v) => Math.round(v * 10) / 10);
+}
+
+// Karta do druku. Karty poziome obracamy o 90°, żeby wszystkie arkusze
+// miały ten sam format strony – przeglądarki (zwłaszcza Safari) przy mieszanych formatach
+// zmniejszają cały wydruk i przyklejają go do rogu.
+function printCard(k, w, h) {
+  const c = k.cloneNode(true);
+  c.classList.remove('za-dlugi');
+  c.style.boxShadow = 'none'; c.style.outline = 'none'; c.style.margin = '0';
+  if (w <= h) return c;
+  const cell = document.createElement('div');
+  cell.style.cssText = `position:relative;width:${h}mm;height:${w}mm;overflow:hidden;`;
+  // Przed obrotem karta wystaje w lewo, nie w prawo – inaczej Chrome uznaje stronę za za szeroką
+  // i zmniejsza cały wydruk.
+  c.style.position = 'absolute'; c.style.left = (h - w) + 'mm'; c.style.top = '0';
+  c.style.transformOrigin = '0 0';
+  c.style.transform = `translateX(${w}mm) rotate(90deg)`;
+  cell.appendChild(c);
+  return cell;
+}
+
+function buildPrint() {
+  const tryb = $('tryb').value;
+  const zRewersami = $('rewersy').checked;
+  const druk = $('druk');
+  druk.innerHTML = '';
+  const groups = new Map();                       // talia + rozmiar karty → karty
+  for (const k of visibleCards()) {
+    const [w, h] = cardMm(k);
+    const key = k.dataset.talia + '|' + w + 'x' + h;     // każda talia na osobnych arkuszach
+    if (!groups.has(key)) groups.set(key, { w, h, cards: [], back: backOf(k.dataset.talia) });
+    groups.get(key).cards.push(k);
+  }
+  // Wymiary komórki na arkuszu: zawsze pionowo (krótszy bok = szerokość).
+  const cellOf = (g) => [Math.min(g.w, g.h), Math.max(g.w, g.h)];
+
+  if (tryb === 'pojedyncze') {
+    // Jeden format strony dla całego wydruku: największa karta (pionowo); mniejsze karty na środku.
+    const pw = Math.max(...[...groups.values()].map((g) => cellOf(g)[0]));
+    const ph = Math.max(...[...groups.values()].map((g) => cellOf(g)[1]));
+    const page = (k, w, h) => {
+      const [cw, ch] = cellOf({ w, h });
+      const a = document.createElement('div'); a.className = 'arkusz';
+      a.style.cssText = `width:${pw}mm;height:${ph}mm;`;
+      const box = printCard(k, w, h);
+      box.style.position = 'absolute'; box.style.left = mm((pw - cw) / 2); box.style.top = mm((ph - ch) / 2);
+      a.appendChild(box); druk.appendChild(a);
+    };
+    for (const { w, h, cards, back } of groups.values())
+      for (const k of cards) { page(k, w, h); if (zRewersami && back) page(back, w, h); }
+    $('styl-strony').textContent = `@page { size: ${pw}mm ${ph}mm; margin: 0; }`;
+    return;
+  }
+
+  // A4 pionowo; siatka kart wyśrodkowana na arkuszu, znaczniki cięcia na marginesach.
+  const PW = 210, PH = 297;
+  for (const g of groups.values()) {
+    const { w, h, cards, back } = g;
+    const [cw, ch] = cellOf(g);
+    const cols = Math.max(1, Math.floor((PW - 16) / cw)), rows = Math.max(1, Math.floor((PH - 16) / ch));
+    const per = cols * rows, dl = 4, odst = 1.5;
+    for (let i = 0; i < cards.length; i += per) {
+      const n = Math.min(per, cards.length - i);
+      const used = Math.ceil(n / cols);
+      const usedCols = Math.min(cols, n);
+      // Wyśrodkowanie według faktycznie zajętej siatki (niepełny ostatni arkusz też na środku).
+      const x0 = (PW - usedCols * cw) / 2, y0 = (PH - used * ch) / 2;
+      const sheet = document.createElement('div'); sheet.className = 'arkusz';
+      sheet.style.cssText = `width:${PW}mm;height:${PH}mm;`;
+      const u = document.createElement('div'); u.className = 'uklad';
+      u.style.cssText = `position:absolute;left:${mm(x0)};top:${mm(y0)};grid-template-columns:repeat(${usedCols},${cw}mm);grid-auto-rows:${ch}mm;`;
+      cards.slice(i, i + per).forEach((k) => u.appendChild(printCard(k, w, h)));
+      sheet.appendChild(u);
+      const line = (css) => { const z = document.createElement('div'); z.className = 'znacznik'; z.style.cssText = css; sheet.appendChild(z); };
+      for (let c = 0; c <= usedCols; c++) {
+        const x = x0 + c * cw;
+        line(`left:${mm(x - 0.1)};top:${mm(y0 - odst - dl)};width:0.2mm;height:${mm(dl)}`);
+        line(`left:${mm(x - 0.1)};top:${mm(y0 + used * ch + odst)};width:0.2mm;height:${mm(dl)}`);
+      }
+      for (let r = 0; r <= used; r++) {
+        const y = y0 + r * ch;
+        line(`top:${mm(y - 0.1)};left:${mm(x0 - odst - dl)};height:0.2mm;width:${mm(dl)}`);
+        line(`top:${mm(y - 0.1)};left:${mm(x0 + usedCols * cw + odst)};height:0.2mm;width:${mm(dl)}`);
+      }
+      druk.appendChild(sheet);
+      if (zRewersami && back) {
+        // Arkusz rewersów: ta sama siatka co awersy, zapełniona w całości – pasuje przy każdym obracaniu kartki.
+        const bs = document.createElement('div'); bs.className = 'arkusz'; bs.style.cssText = sheet.style.cssText;
+        const bu = u.cloneNode(false);
+        for (let j = 0; j < used * usedCols; j++) bu.appendChild(printCard(back, w, h));
+        bs.appendChild(bu); druk.appendChild(bs);
+      }
+    }
+  }
+  $('styl-strony').textContent = `@page { size: ${PW}mm ${PH}mm; margin: 0; }`;
+}
+
+$('drukuj').onclick = () => { buildPrint(); window.print(); };
+
+// ── Eksport JPG ──────────────────────────────────────────────────────────────
+
+// JPG: rysujemy kartę na białym tle (zaokrąglone rogi nie robią się czarne) i zapisujemy jako JPEG.
+async function jpegBlob(el, opts) {
+  const c = await htmlToImage.toCanvas(el, opts);
+  const out = document.createElement('canvas');
+  out.width = c.width; out.height = c.height;
+  const g = out.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height);
+  g.drawImage(c, 0, 0);
+  return new Promise((ok) => out.toBlob(ok, 'image/jpeg', opts.quality ?? 0.92));
+}
+
+$('png').onclick = async () => {
+  const btn = $('png'); btn.disabled = true;
+  try {
+    if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
+    if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    const zip = new JSZip();
+    const els = visibleCards().concat(visibleSections().map((s) => s.querySelector('.karta.rewers')).filter(Boolean));
+    const seen = {};
+    for (let i = 0; i < els.length; i++) {
+      status(`Eksport JPG: ${i + 1}/${els.length}…`);
+      const el = els[i];
+      const safe = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').replace(/[^\w-]+/g, '_');
+      const id = safe(el.dataset.talia) + '_' + safe(el.dataset.id || String(i + 1));
+      seen[id] = (seen[id] || 0) + 1;
+      const name = (seen[id] > 1 ? `${id}_${seen[id]}` : id) + '.jpg';
+      const opts = { type: 'image/jpeg', quality: CONFIG.jpgJakosc, pixelRatio: CONFIG.jpgDpi / 96,
+                     style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
+      let blob;
+      try { blob = await jpegBlob(el, opts); }
+      catch (e) { blob = await jpegBlob(el, { ...opts, skipFonts: true }); }
+      zip.file(name, blob);
+    }
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(out); a.download = 'karty_jpg.zip'; a.click();
+    status(`Zapisano karty_jpg.zip (${els.length} plików, ${CONFIG.jpgDpi} dpi)`);
+  } catch (e) {
+    status('Eksport JPG nie powiódł się: ' + e.message);
+  } finally { btn.disabled = false; }
+};
+
+// ── Eksport do playingcards.io ───────────────────────────────────────────────
+// Bierze pokój wskazany komendą STOL (plik .pcio: plansza, miejsca graczy, żetony, przyciski automatyzacji)
+// i podmienia w nim talie na karty z generatora. Identyfikatory talii zostają, więc przyciski działają.
+
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+
+async function cardToJpeg(el, width) {
+  const opts = { pixelRatio: width / el.offsetWidth, quality: 0.9,
+                 style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
+  try { return await jpegBlob(el, opts); }
+  catch (e) { return await jpegBlob(el, { ...opts, skipFonts: true }); }
+}
+
+async function pcioTemplate() {
+  // Plik pokoju z komendy STOL w szablonie; bez niej (albo gdy pliku brak) – prośba o wskazanie pliku.
+  let f = STOL_PCIO ? files.get(norm(STOL_PCIO)) : null;
+  if (!f && STOL_PCIO && SERWER) f = await fetchFile(STOL_PCIO);
+  if (f) return f;
+  // Brak szablonu w folderze – poproś o plik.
+  return new Promise((ok) => {
+    const inp = $('pcioPlik');
+    inp.value = '';
+    inp.onchange = () => ok(inp.files[0] || null);
+    inp.click();
+  });
+}
+
+async function exportPcio() {
+  if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
+  if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+  const tpl = await pcioTemplate();
+  if (!tpl) { status('Eksport do playingcards.io przerwany: nie wskazano pliku pokoju (.pcio).'); return; }
+
+  const src = await JSZip.loadAsync(await tpl.arrayBuffer());
+  const widgets = JSON.parse(await src.file('widgets.json').async('string'));
+  const byId = new Map(widgets.map((w) => [w.id, w]));
+  const newAssets = new Map();                 // nazwa pliku → Blob
+  const report = [];
+  let z = Math.max(0, ...widgets.map((w) => w.z || 0)) + 1;
+
+  // Pokazujemy wszystkie talie, żeby dało się je wyrenderować.
+  const filtr = $('filtr').value; $('filtr').value = ''; applyFilter();
+  try {
+    for (const talia of TALIE) {
+      if (!talia.pcio) continue;
+      const section = [...$('podglad').querySelectorAll('.talia')].find((x) => x.dataset.talia === talia.nazwa);
+      const deck = byId.get(talia.pcio);
+      if (!section) continue;
+      if (!deck || deck.type !== 'cardDeck') { report.push(`${talia.nazwa}: w szablonie nie ma talii ${talia.pcio} – pominięta`); continue; }
+
+      const cw = deck.cardWidth, ch = deck.cardHeight;
+      const L = CONFIG.pcioRozmiar;
+      const imgWidth = (el) => (el.offsetWidth >= el.offsetHeight ? L : Math.round(L * el.offsetWidth / el.offsetHeight));
+
+      // Unikalne karty (wiersze CSV) i liczba kopii.
+      const rows = new Map();
+      for (const el of section.querySelectorAll('.karta:not(.rewers)')) {
+        const key = el.dataset.row;
+        if (!rows.has(key)) rows.set(key, { el, n: 0 }); rows.get(key).n++;
+      }
+
+      // Stare karty tej talii (do zachowania ułożenia, gdy talia nie ma stosu startowego).
+      const oldTypes = Object.keys(deck.cardTypes || {});
+      const oldCards = widgets.filter((w) => w.type === 'card' && w.deck === deck.id);
+      const oldByType = oldTypes.map((t) => oldCards.filter((c) => c.cardType === t));
+
+      const cardTypes = {};
+      const newCards = [];
+      const home = deck.parent ? byId.get(deck.parent) : null;
+      const sample = home && oldCards.find((c) => c.parent === home.id);
+      const ox = sample ? sample.x - home.x : Math.max(0, ((home ? home.width : cw) - cw) / 2);
+      const oy = sample ? sample.y - home.y : Math.max(0, ((home ? home.height : ch) - ch) / 2);
+
+      let i = 0;
+      for (const { el, n } of rows.values()) {
+        status(`playingcards.io: ${talia.nazwa} ${i + 1}/${rows.size}…`);
+        const file = uuid() + '.jpg';
+        newAssets.set(file, await cardToJpeg(el, imgWidth(el)));
+        const typeKey = 'type-' + uuid();
+        cardTypes[typeKey] = { image: 'package://userassets/' + file, label: el.title || el.dataset.id };
+        for (let j = 0; j < n; j++) {
+          const card = { id: uuid(), type: 'card', cardType: typeKey, deck: deck.id, faceup: false, owner: null, layoutStackParent: null, r: 0, z: z++ };
+          const prev = !home && oldByType[i] && oldByType[i][j];
+          if (home) Object.assign(card, { parent: home.id, x: home.x + ox, y: home.y + oy });
+          else if (prev) Object.assign(card, { parent: prev.parent ?? null, x: prev.x, y: prev.y, faceup: !!prev.faceup });
+          else Object.assign(card, { parent: null, x: deck.x || 0, y: deck.y || 0, faceup: true });
+          newCards.push(card);
+        }
+        i++;
+      }
+
+      const face = deck.faceTemplate || {};
+      deck.faceTemplate = { includeBorder: face.includeBorder ?? 'heavy', includeRadius: face.includeRadius ?? true,
+        objects: [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'white', valueType: 'dynamic', value: 'image' }] };
+      deck.cardTypes = cardTypes;
+
+      const back = section.querySelector('.karta.rewers');
+      if (back) {
+        const file = uuid() + '.jpg';
+        newAssets.set(file, await cardToJpeg(back, imgWidth(back)));
+        const bt = deck.backTemplate || {};
+        deck.backTemplate = { includeBorder: bt.includeBorder ?? 'heavy', includeRadius: bt.includeRadius ?? true,
+          objects: [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'transparent', valueType: 'static', value: 'package://userassets/' + file }] };
+      }
+
+      // Podmiana kart w pokoju.
+      for (let k = widgets.length - 1; k >= 0; k--) if (widgets[k].type === 'card' && widgets[k].deck === deck.id) widgets.splice(k, 1);
+      widgets.push(...newCards);
+      report.push(`${talia.nazwa}: ${rows.size} wzorów, ${newCards.length} kart${home ? ` na stosie „${home.label || 'talia'}”` : ''}`);
+    }
+  } finally { $('filtr').value = filtr; applyFilter(); }
+
+  // Nowe archiwum: widgets.json + używane obrazki (stare niepotrzebne obrazki kart znikają).
+  const out = new JSZip();
+  const json = JSON.stringify(widgets);
+  out.file('schemaVersion', await src.file('schemaVersion').async('string'));
+  out.file('widgets.json', json);
+  const used = new Set([...json.matchAll(/package:\/\/userassets\/([^"\\]+)/g)].map((m) => m[1]));
+  out.folder('userassets');
+  for (const name of used) {
+    if (newAssets.has(name)) out.file('userassets/' + name, newAssets.get(name));
+    else if (src.file('userassets/' + name)) out.file('userassets/' + name, await src.file('userassets/' + name).async('uint8array'));
+    else report.push('Brak obrazka w szablonie: ' + name);
+  }
+  const blob = await out.generateAsync({ type: 'blob', compression: 'STORE' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = tpl.name.replace(/\.(pcio|zip)$/i, '') + '-karty.pcio';
+  a.click();
+  status(`Zapisano ${a.download} (${(blob.size / 1048576).toFixed(1)} MB) · ` + report.join(' · '));
+}
+
+$('pcio').onclick = async () => {
+  const btn = $('pcio'); btn.disabled = true;
+  try { await exportPcio(); }
+  catch (e) { status('Eksport do playingcards.io nie powiódł się: ' + e.message); console.error(e); }
+  finally { btn.disabled = false; }
+};
+
+// Folder bez szablonów (np. repozytorium generatora): pokaż projekty z podfolderu „przyklady”.
+async function showExamples() {
+  const list = (await listServerDir('przyklady')) || [];
+  const dirs = list.filter((n) => !/\.[a-z0-9]+$/i.test(n));
+  if (!dirs.length) return;
+  $('start').style.display = '';
+  $('start').innerHTML = '<h2>Przykładowe projekty</h2><p>W tym folderze nie ma szablonów talii. Otwórz jeden z przykładów:</p><ul>' +
+    dirs.map((d) => `<li><a href="?folder=${encodeURIComponent('przyklady/' + d)}">${esc(d)}</a></li>`).join('') + '</ul>';
+}
+if (BAZA) document.title = 'Generator kart – ' + BAZA.split('/').pop();
+
+// Start: w trybie serwera wczytujemy folder od razu.
+if (SERWER) {
+  $('wybierz').style.display = 'none';
+  $('auto').closest('label').title = 'Sprawdza zmiany plików co 1,5 s';
+  $('start').innerHTML = '<p>Wczytywanie kart z folderu…</p>';
+  loadFromServer().then(() => { $('odswiez').disabled = false; });
+}
+</script>
+</body>
+</html>

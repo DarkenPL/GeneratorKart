@@ -1,0 +1,8 @@
+ID;Ilość;Nazwa;Rodzaj;Obrazek;Koszt;Punkty;Efekt;Opis
+1;3;Miecz;broń;Ikony/miecz.svg;{drewno}{zloto};{gwiazda};Zadaj 2 obrażenia.;Prosty, ale niezawodny.
+2;2;Topór;broń;Ikony/topor.svg;{drewno}{drewno}{kamien};{gwiazda}{gwiazda};Zadaj 3 obrażenia, potem odrzuć kartę.;Dobry na drewno i na smoki.
+3;2;Łuk;broń;Ikony/luk.svg;{drewno}{drewno};{gwiazda};Zadaj 1 obrażenie dowolnemu przeciwnikowi.;Z daleka bezpieczniej.
+4;3;Hełm;zbroja;Ikony/helm.svg;{kamien}{zloto};{gwiazda};Ignoruj pierwsze obrażenie w turze.;Ciężki, ale głowa cała.
+5;2;Tarcza;zbroja;Ikony/tarcza.svg;{drewno}{kamien}{kamien};{gwiazda}{gwiazda};Zablokuj jeden atak. {kamien} – zablokuj jeszcze jeden.;Najlepsza obrona to dobra tarcza.
+6;2;Mikstura;magia;Ikony/mikstura.svg;{zloto};;Odzyskaj 2 punkty życia.;Smakuje jak stare skarpety.
+7;1;Pierścień mocy;magia;Ikony/pierscien.svg;{zloto}{zloto}{zloto};{gwiazda}{gwiazda}{gwiazda};Raz na grę: powtórz dowolną akcję.;Jeden, by wszystkimi rządzić? Raczej jeden na grę.

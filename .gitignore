@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+# eksporty generatora
+*.pcio
+*_jpg.zip
+karty_jpg.zip
+# lokalne projekty gier – nie trafiają do repozytorium
+/projekty/
+/Archiwum/

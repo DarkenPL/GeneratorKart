@@ -1,0 +1,6 @@
+ID;Ilość;Nazwa;Typ;Obrazek;Skutek
+1;4;Słoneczny dzień;ładna;Ikony/slonce.svg;Rośliny lubiące {slonce} rosną o 1.
+2;4;Ulewa;ładna;Ikony/deszcz.svg;Rośliny lubiące {deszcz} rosną o 1.
+3;2;Przymrozek;zła;Ikony/snieg.svg;Odrzuć jedną roślinę z grządki „warzywa”.
+4;2;Wichura;zła;Ikony/wiatr.svg;Przesuń jedną roślinę na sąsiednią grządkę.
+5;1;Burza;burza;Ikony/burza.svg;Każdy gracz odrzuca roślinę z największym plonem.
