@@ -89,7 +89,6 @@ Sekcje w kolejności w pliku:
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 3. **DMG zamiast ZIP** (uzgodnione, czeka na sygnał właściciela): `Generator-kart.dmg` z oknem „przeciągnij do Programów” (electron-builder `dmg`, podpis ad hoc aplikacji przed spakowaniem). Zaktualizować link w README i `docs/aplikacja.md` (`releases/latest/download/Generator-kart.dmg`).
-4. Lista talii (`cardDeck`) z pliku `.pcio` w interfejsie, żeby nie trzeba było szukać `PCIO = id` w `widgets.json`.
 5. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
 6. **Edytor szablonów – etap 1** (zaplanowane, czeka na sygnał właściciela): panel edytora w aplikacji obok podglądu.
    - kolorowanie składni szablonu (komendy, [Kolumny], {ikony}, opcje, komentarze),
@@ -103,5 +102,10 @@ Sekcje w kolejności w pliku:
 10. **Kolumny specjalne bez względu na pisownię** (zaplanowane): `Ilość`, `ID`, `Nazwa` rozpoznawane bez wielkości liter i polskich znaków (`ilosc`, `Id`…).
 11. **Nowy projekt…** (zaplanowane): menu tworzy folder gry z szablonem startowym, przykładowym CSV, `ikony.csv`, `Ikony/`, `Art/` i go otwiera.
 12. **Dependabot** (zaplanowane): `.github/dependabot.yml` dla `app/` (npm), PR-y z nową wersją Electrona budowane i testowane przez workflow.
+
+
+### Roadmapa (niski priorytet)
+
+- **Generator stołów playingcards.io**: tworzenie pokoju `.pcio` od zera z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania), zamiast tylko podmiany talii w istniejącym stole. Obejmuje też wybór talii z istniejącego `.pcio` z listy (zamiast ręcznego `PCIO = id`). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
