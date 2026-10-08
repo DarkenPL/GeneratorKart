@@ -98,3 +98,10 @@ Sekcje w kolejności w pliku:
    - ochrona przed utratą pracy: pytanie o niezapisane zmiany przy zamykaniu i zmianie projektu, wykrywanie zmiany pliku na dysku.
    - Etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu.
 7. **Podgląd: rewers nie rozjeżdża siatki** (zaplanowane, czeka na sygnał właściciela). Dziś `.rewers-podglad` (przerywana ramka z odstępem i podpis „Rewers” pod kartą) jest wyższy i przesunięty względem kart, więc pierwszy wiersz siatki się rozjeżdża. Rewers ma zajmować dokładnie miejsce zwykłej karty: podpis jako etykieta na karcie albo pozycjonowana absolutnie, wyróżnienie bez wpływu na układ.
+8. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
+9. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
+10. **Kolumny specjalne bez względu na pisownię** (zaplanowane): `Ilość`, `ID`, `Nazwa` rozpoznawane bez wielkości liter i polskich znaków (`ilosc`, `Id`…).
+11. **Nowy projekt…** (zaplanowane): menu tworzy folder gry z szablonem startowym, przykładowym CSV, `ikony.csv`, `Ikony/`, `Art/` i go otwiera.
+12. **Dependabot** (zaplanowane): `.github/dependabot.yml` dla `app/` (npm), PR-y z nową wersją Electrona budowane i testowane przez workflow.
+
+Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
