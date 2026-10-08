@@ -1,0 +1,108 @@
+# Buduje aplikację „Generator kart” na macOS (Apple Silicon i Intel), testuje ją na przykładach
+# i udostępnia jako artefakt. Tag v* (np. v0.1.0) albo wydanie opublikowane na GitHubie dostaje pliki ZIP.
+name: Aplikacja macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: ['app/**', 'karty.html', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
+  pull_request:
+    paths: ['app/**', 'karty.html', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Zależności
+        run: npm ci
+
+      - name: Zasoby (generator, przykłady, biblioteki, czcionki)
+        run: npm run zasoby
+
+      - name: Budowanie (arm64 i x64)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac dir --arm64 --x64
+
+      - name: Podpis ad hoc (bez konta Apple Developer)
+        run: |
+          for app in "dist/mac-arm64/Generator kart.app" "dist/mac/Generator kart.app"; do
+            codesign --force --deep --sign - "$app"
+            codesign --verify --deep --strict "$app" && echo "OK: $app"
+          done
+
+      - name: Test – przykłady (arm64)
+        run: |
+          mkdir -p "$RUNNER_TEMP/test"
+          bin="dist/mac-arm64/Generator kart.app/Contents/MacOS/Generator kart"
+          for ex in ../przyklady/*/; do
+            n=$(basename "$ex")
+            "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf "$ex" "$RUNNER_TEMP/test/$n.pdf" | tee "$RUNNER_TEMP/test/$n.json"
+            grep -q '"ok":true' "$RUNNER_TEMP/test/$n.json"
+          done
+          "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf - "$RUNNER_TEMP/test/start.pdf"
+
+      - name: Test – Intel (przez Rosettę)
+        continue-on-error: true
+        run: |
+          bin="dist/mac/Generator kart.app/Contents/MacOS/Generator kart"
+          "$bin" --user-data-dir="$RUNNER_TEMP/ud-x64" --test-pdf ../przyklady/02-kuznia "$RUNNER_TEMP/test/x64-kuznia.pdf" | tee "$RUNNER_TEMP/test/x64.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/test/x64.json"
+
+      - name: ZIP
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "dist/mac-arm64/Generator kart.app" "dist/Generator-kart-mac-AppleSilicon.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/mac/Generator kart.app" "dist/Generator-kart-mac-Intel.zip"
+          ls -la dist/*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Generator-kart-mac-AppleSilicon
+          path: app/dist/Generator-kart-mac-AppleSilicon.zip
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Generator-kart-mac-Intel
+          path: app/dist/Generator-kart-mac-Intel.zip
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wyniki-testow
+          path: ${{ runner.temp }}/test
+
+      - name: Wydanie – nowy tag v* (tworzy wydanie z plikami)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/Generator-kart-mac-*.zip \
+            --title "Generator kart $GITHUB_REF_NAME" \
+            --notes "Aplikacja na macOS. Wybierz plik dla swojego Maca: AppleSilicon (M1–M4) albo Intel. Instrukcja pierwszego uruchomienia: docs/aplikacja.md."
+
+      - name: Wydanie – opublikowane na GitHubie (dołącza pliki)
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart-mac-*.zip --clobber

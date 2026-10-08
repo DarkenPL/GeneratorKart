@@ -96,6 +96,7 @@ label { display: inline-flex; gap: 6px; align-items: center; }
     <option value="pojedyncze">Druk: każda karta na osobnej stronie</option>
   </select>
   <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
+  <button id="pdf" disabled hidden title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
   <button id="drukuj" disabled title="W oknie drukowania: papier A4, skala 100%, marginesy: brak">Drukuj / zapisz PDF</button>
   <button id="png" disabled>Eksport JPG (ZIP)</button>
   <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
@@ -836,7 +837,7 @@ async function build() {
     applyFilter();
 
     $('start').style.display = 'none';
-    ['odswiez', 'drukuj', 'png', 'pcio'].forEach((id) => $(id).disabled = false);
+    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf'].forEach((id) => $(id).disabled = false);
     status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
   }
   const u = $('uwagi');
@@ -1164,12 +1165,53 @@ async function showExamples() {
 if (BAZA) document.title = 'Generator kart – ' + BAZA.split('/').pop();
 
 // Start: w trybie serwera wczytujemy folder od razu.
-if (SERWER) {
-  $('wybierz').style.display = 'none';
+// ── Aplikacja na Maca (Electron): window.generatorApp z preload.js ───────────
+const APP = window.generatorApp || null;
+
+// Zapis PDF wprost do pliku (tylko w aplikacji) – wydruk w dokładnym rozmiarze, bez okna drukowania.
+async function zapiszPdf() {
+  if (!APP || $('pdf').disabled) return;
+  buildPrint();
+  const info = await APP.info();
+  const nazwa = (info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4');
+  status('Zapisywanie PDF…');
+  try {
+    const plik = await APP.zapiszPdf(nazwa);
+    status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
+  } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
+}
+window.zapiszPdf = zapiszPdf;
+
+// Ekran powitalny aplikacji, gdy nie wybrano jeszcze projektu.
+async function startAplikacji() {
+  const przyklady = await APP.przyklady();
+  $('start').innerHTML = '<h2>Generator kart</h2>' +
+    '<p>Otwórz folder z projektem gry: plikiem kart (CSV/XLSX) i folderem <code>Szablony</code>.</p>' +
+    '<p><button class="glowny" id="startOtworz">Otwórz projekt…</button></p>' +
+    (przyklady.length ? '<h3>Albo zobacz przykład</h3><ul>' +
+      przyklady.map((n) => `<li><a href="#" data-przyklad="${esc(n)}">${esc(n)}</a></li>`).join('') + '</ul>' : '');
+  $('startOtworz').onclick = () => APP.otworzFolder();
+  for (const a of $('start').querySelectorAll('[data-przyklad]'))
+    a.onclick = (e) => { e.preventDefault(); APP.otworzPrzyklad(a.dataset.przyklad); };
+  status('');
+}
+
+// Start: w trybie serwera (i w aplikacji) wczytujemy folder od razu.
+if (SERWER) (async () => {
   $('auto').closest('label').title = 'Sprawdza zmiany plików co 1,5 s';
+  if (APP) {
+    $('wybierz').textContent = 'Otwórz projekt…';
+    $('wybierz').onclick = () => APP.otworzFolder();
+    $('pdf').hidden = false;
+    $('pdf').onclick = zapiszPdf;
+    $('drukuj').textContent = 'Drukuj…';
+    const info = await APP.info();
+    if (!info.sciezka) return startAplikacji();
+    if (info.przyklad) $('wybierz').title = 'Przykład tylko do odczytu – zmiany zapisuj we własnej kopii';
+  } else $('wybierz').style.display = 'none';
   $('start').innerHTML = '<p>Wczytywanie kart z folderu…</p>';
   loadFromServer().then(() => { $('odswiez').disabled = false; });
-}
+})();
 </script>
 </body>
 </html>

@@ -7,3 +7,7 @@ karty_jpg.zip
 # lokalne projekty gier – nie trafiają do repozytorium
 /projekty/
 /Archiwum/
+# aplikacja (Electron)
+app/node_modules/
+app/zasoby/
+app/dist/

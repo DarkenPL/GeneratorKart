@@ -8,7 +8,9 @@ Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV a
 
 ![Przykładowe karty](docs/img/przyklady.png)
 
-Całość to jeden plik `karty.html`, który działa w przeglądarce, bez instalowania czegokolwiek.
+Generator jest dostępny na dwa sposoby:
+- **aplikacja na Maca** z ikoną, działająca bez internetu i z zapisem PDF jednym kliknięciem ([instrukcja](docs/aplikacja.md), pobieranie w **Releases**);
+- **jeden plik `karty.html`**, który działa w przeglądarce, bez instalowania czegokolwiek (opis poniżej).
 
 ## Szybki start (macOS)
 
@@ -79,6 +81,7 @@ Wymiary są w milimetrach, `[Kolumna]` wstawia wartość z arkusza, `{znacznik}`
 - [Komendy szablonów](docs/komendy.md) – pełna lista
 - [Nowa talia krok po kroku](docs/nowa-talia.md)
 - [Eksport do playingcards.io](docs/playingcards.md)
+- [Aplikacja na Maca](docs/aplikacja.md)
 
 ### Druk
 
@@ -92,9 +95,9 @@ Karty poziome są na arkuszu obracane, więc wszystkie strony mają ten sam form
 ## Wymagania
 
 - Przeglądarka: Chrome lub Edge (pełne wsparcie), Safari i Firefox przez `Uruchom generator.command`.
-- Do eksportu JPG, playingcards.io i plików XLSX potrzebny jest internet: biblioteki pobierane są z jsDelivr.
+- Wersja przeglądarkowa potrzebuje internetu do eksportu JPG i playingcards.io oraz do plików XLSX, bo biblioteki pobierane są z jsDelivr. Aplikacja na Maca ma je w środku.
 - `Uruchom generator.command` korzysta z wbudowanego w macOS Perla. Nic nie trzeba instalować.
 
 ## Licencje
 
-Ikony w przykładach pochodzą z [game-icons.net](https://game-icons.net) (CC BY 3.0). Autorzy są wymienieni w [CREDITS.md](CREDITS.md).
+Ikony w przykładach pochodzą z [game-icons.net](https://game-icons.net) (CC BY 3.0). Autorzy, a także licencje czcionek i bibliotek dołączonych do aplikacji, są wymienieni w [CREDITS.md](CREDITS.md).
