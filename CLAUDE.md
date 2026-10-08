@@ -105,7 +105,10 @@ Sekcje w kolejności w pliku:
 11. **Stałe w szablonie** (zaplanowane): `STAŁA = margines, 3.5` i użycie `[=margines]` (także w działaniach na liczbach).
 12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
 13. **Raport projektu** (zaplanowane): duplikaty ID, puste wymagane kolumny, nieużywane kolumny i obrazki w folderach projektu.
-14. **Historia wersji** (do omówienia z właścicielem): kopie szablonu i danych w ukrytym folderze projektu przy zapisie, z przerzedzaniem i ręcznymi „punktami” (np. „przed playtestem 3”).
+14. **Historia wersji** (zaplanowane): ukryty folder `.historia/` w projekcie; kopia szablonu i plików danych (CSV/XLSX) tylko gdy treść różni się od ostatniej kopii (zapis z edytora albo zmiana z zewnątrz).
+    - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
+    - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).
+    - Plik → Historia wersji…: lista z datami, różnice linii względem obecnej, „Przywróć” (obecna wersja trafia najpierw do historii), „Pokaż karty z tej wersji”. Obrazków nie kopiujemy.
 
 Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
 
