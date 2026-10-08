@@ -97,3 +97,4 @@ Sekcje w kolejności w pliku:
    - zapis ⌘S i podgląd kart na żywo podczas pisania,
    - ochrona przed utratą pracy: pytanie o niezapisane zmiany przy zamykaniu i zmianie projektu, wykrywanie zmiany pliku na dysku.
    - Etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu.
+7. **Podgląd: rewers nie rozjeżdża siatki** (zaplanowane, czeka na sygnał właściciela). Dziś `.rewers-podglad` (przerywana ramka z odstępem i podpis „Rewers” pod kartą) jest wyższy i przesunięty względem kart, więc pierwszy wiersz siatki się rozjeżdża. Rewers ma zajmować dokładnie miejsce zwykłej karty: podpis jako etykieta na karcie albo pozycjonowana absolutnie, wyróżnienie bez wpływu na układ.
