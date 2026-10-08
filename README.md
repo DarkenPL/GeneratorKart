@@ -1,6 +1,6 @@
 # Generator kart
 
-**[⬇️ Pobierz aplikację na Maca](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip)** – najnowsza wersja, Mac z procesorem Apple (M1–M4) · [instalacja i pierwsze uruchomienie](docs/aplikacja.md)
+**[⬇️ Pobierz aplikację na Maca](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg)** – najnowsza wersja, Mac z procesorem Apple (M1–M4) · [instalacja i pierwsze uruchomienie](docs/aplikacja.md)
 
 Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a aplikacja na bieżąco pokazuje gotowe karty. Z aplikacji możesz:
 
@@ -12,7 +12,7 @@ Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV a
 
 ## Szybki start
 
-1. [Pobierz aplikację](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip), rozpakuj i przeciągnij **Generator kart** do folderu **Programy**.
+1. [Pobierz aplikację](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg), otwórz pobrany plik i w okienku przeciągnij **Generator kart** na folder **Programy**.
 2. Za pierwszym razem kliknij ją **prawym przyciskiem → Otwórz**. Aplikacja nie ma podpisu Apple, więc trzeba ją raz odblokować ([szczegóły](docs/aplikacja.md)).
 3. Na ekranie powitalnym wybierz jeden z **przykładów** albo **Otwórz szablon…** swojej gry.
 

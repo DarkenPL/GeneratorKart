@@ -4,6 +4,7 @@
 ;  Wymiary w mm, (0, 0) = lewy górny róg karty.
 ; ═══════════════════════════════════════════════════════════════════
 
+PROJEKT = Wyprawa                           ; nazwa gry w plikach JPG i PDF
 NAZWA = Wydarzenia
 DANE  = wydarzenia.csv
 KARTA = 63, 88

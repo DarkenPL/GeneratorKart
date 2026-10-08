@@ -1,7 +1,7 @@
 {
   "name": "generator-kart",
   "productName": "Generator kart",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Generator kart do gier – karty z arkusza CSV/XLSX i szablonu tekstowego",
   "main": "main.js",
   "private": true,
@@ -60,7 +60,28 @@
         ]
       }
     },
-    "publish": null
+    "publish": null,
+    "dmg": {
+      "artifactName": "Generator-kart.${ext}",
+      "title": "Generator kart",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   },
   "repository": {
     "type": "git",

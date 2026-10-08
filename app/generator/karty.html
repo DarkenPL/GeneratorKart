@@ -57,8 +57,12 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .start h2 { margin-top: 0; }
 .start code { background: #f3f0eb; padding: 1px 5px; border-radius: 4px; }
 .talia-tytul { margin: 18px 16px 0; font-size: 15px; color: #4a453f; }
-.rewers-podglad { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #6b655d; margin-right: 10px; }
-.siatka .rewers-podglad .karta { outline: 2px dashed #b9b1a6; outline-offset: 4px; }
+.rewers-podglad { position: relative; }        /* zajmuje dokładnie miejsce karty – siatka się nie rozjeżdża */
+.rewers-podglad .etykieta {
+  position: absolute; left: 50%; bottom: 7mm; transform: translateX(-50%); pointer-events: none;
+  font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 10px;
+  background: rgba(255,255,255,.85); color: #4a453f; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
 .siatka { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 16px 16px; align-items: flex-start; }
 .siatka .karta { box-shadow: 0 1px 4px rgba(0,0,0,.18); border-radius: 2mm; }
 .siatka .karta.za-dlugi { outline: 2px dashed #d00; outline-offset: 3px; }
@@ -131,6 +135,7 @@ const CONFIG = {
 // Paleta nazwanych kolorów i plik pokoju playingcards.io – zbierane z szablonów przy każdym odświeżeniu.
 let PALETA = {};
 let STOL_PCIO = '';
+let PROJEKT = 'NowaGra';     // nazwa projektu: PROJEKT = … w szablonie, inaczej nazwa pliku szablonu
 
 // ═══════════════════════════════════════════════════════════════════════════
 const $ = (id) => document.getElementById(id);
@@ -450,6 +455,7 @@ function parseTemplate(text, plik) {
         else out.kolory.push([args[0].trim(), '#' + args[1].trim().replace('#', '')]);
         break;
       case 'stol': if (args[0]) out.stol = args[0]; break;
+      case 'projekt': if (args[0]) out.projekt = args[0].trim(); break;
       default:
         if (!ELEMENTY.includes(kom)) { out.bledy.push(`${where}: nieznana komenda ${m[1].trim()}`); return; }
         if (kom === 'tekst') {
@@ -642,8 +648,16 @@ async function waitForImages(root) {
 
 // ── Budowanie ────────────────────────────────────────────────────────────────
 
+// Kolumny specjalne (Ilość, ID, Nazwa) – bez względu na wielkość liter i polskie znaki (ilosc, Id…).
+function pole(r, nazwa) {
+  if (nazwa in r) return String(r[nazwa] ?? '').trim();
+  const want = plain(nazwa);
+  const k = Object.keys(r).find((x) => plain(x) === want);
+  return k === undefined ? '' : String(r[k] ?? '').trim();
+}
+
 function copies(r) {
-  const raw = String(r['Ilość'] ?? '').trim();
+  const raw = pole(r, 'Ilość');
   if (raw === '') return 1;
   const n = parseInt(raw, 10);
   return Number.isNaN(n) ? 1 : Math.max(0, n);       // 0 = karta pominięta
@@ -678,12 +692,14 @@ async function build() {
   }
 
   TALIE = []; PALETA = {}; STOL_PCIO = '';
+  PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
   const fontCss = [];
   for (const [, f] of tplFiles) {
     const t = parseTemplate(await f.text(), f.name);
     t.bledy.forEach((b) => warn.add(b));
     for (const [n, v] of t.kolory) { PALETA[n.toLowerCase()] = v; PALETA[plain(n)] = v; }
     if (t.stol && !STOL_PCIO) STOL_PCIO = t.stol;
+    if (t.projekt) PROJEKT = t.projekt;
     for (const talia of t.talie) {
       if (TALIE.some((x) => x.nazwa === talia.nazwa)) warn.add(`${talia.plik}: talia „${talia.nazwa}” występuje dwa razy – pominięto drugą (zmień NAZWA).`);
       else TALIE.push(talia);
@@ -716,11 +732,11 @@ async function build() {
     const base = { warn, icons, plik: `${talia.plik} (${talia.nazwa})` };
     let cards = '', n = 0;
     rows.forEach((r, i) => {
-      const label = `${talia.nazwa} ${r['ID'] || i + 1}${r['Nazwa'] ? ' ' + r['Nazwa'] : ''}`;
+      const label = `${talia.nazwa} ${pole(r, 'ID') || i + 1}${pole(r, 'Nazwa') ? ' ' + pole(r, 'Nazwa') : ''}`;
       const k = copies(r);
       if (!k) return;
       const card = renderCard(talia, talia.awers, r, { ...base, label, kolumny: true });
-      const one = `<div class="karta" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="${esc(r['ID'] || String(i + 1))}" data-row="${i}" title="${esc(label)}">${card.html}</div>`;
+      const one = `<div class="karta" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="${esc(pole(r, 'ID') || String(i + 1))}" data-row="${i}" title="${esc(label)}">${card.html}</div>`;
       cards += one.repeat(k); n += k;
     });
     total += n;
@@ -729,7 +745,7 @@ async function build() {
     if (talia.rewers.length) {
       const label = `${talia.nazwa} – rewers`;
       const card = renderCard(talia, talia.rewers, {}, { ...base, label, kolumny: false });
-      back = `<div class="rewers-podglad"><div class="karta rewers" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="rewers" title="${esc(label)}">${card.html}</div>Rewers</div>`;
+      back = `<div class="rewers-podglad"><div class="karta rewers" style="${esc(card.style)}" data-talia="${esc(talia.nazwa)}" data-id="rewers" title="${esc(label)}">${card.html}</div><span class="etykieta">Rewers</span></div>`;
     }
     html += `<section class="talia" data-talia="${esc(talia.nazwa)}"><h2 class="talia-tytul">${esc(talia.nazwa)} · ${n} kart (${name}, szablon ${esc(talia.plik)})</h2><div class="siatka">${back}${cards}</div></section>`;
   }
@@ -904,14 +920,22 @@ $('png').onclick = async () => {
     const folder = await APP.eksportStart();
     if (!folder) { status('Eksport JPG anulowany.'); return; }
     const els = visibleCards().concat(visibleSections().map((s) => s.querySelector('.karta.rewers')).filter(Boolean));
-    const seen = {};
-    const safe = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').replace(/[^\w-]+/g, '_');
+    // NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg, rewers: NazwaProjektu_NazwaTalii_rewers.jpg
+    const bezZnakow = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
+    const slowo = (t) => bezZnakow(t).split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'X';
+    const numer = (t) => bezZnakow(t).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'X';
+    const kopie = {};
     for (let i = 0; i < els.length; i++) {
       status(`Eksport JPG: ${i + 1}/${els.length}…`);
       const el = els[i];
-      const id = safe(el.dataset.talia) + '_' + safe(el.dataset.id || String(i + 1));
-      seen[id] = (seen[id] || 0) + 1;
-      const name = (seen[id] > 1 ? `${id}_${seen[id]}` : id) + '.jpg';
+      const przed = slowo(PROJEKT) + '_' + slowo(el.dataset.talia) + '_';
+      let name;
+      if (el.classList.contains('rewers')) name = przed + 'rewers.jpg';
+      else {
+        const klucz = el.dataset.talia + '|' + el.dataset.row;
+        kopie[klucz] = (kopie[klucz] || 0) + 1;
+        name = przed + numer(el.dataset.id) + '_' + kopie[klucz] + '.jpg';
+      }
       const opts = { type: 'image/jpeg', quality: CONFIG.jpgJakosc, pixelRatio: CONFIG.jpgDpi / 96,
                      style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
       let blob;
@@ -1074,7 +1098,7 @@ async function zapiszPdf() {
   if ($('pdf').disabled) return;
   buildPrint();
   const info = await APP.info();
-  const nazwa = (info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4');
+  const nazwa = (PROJEKT || info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4');
   status('Zapisywanie PDF…');
   try {
     const plik = await APP.zapiszPdf(nazwa);
