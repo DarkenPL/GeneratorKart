@@ -45,12 +45,12 @@ TŁO   = #2b2b40
 TEKST = 0, 0, 63, 88, "Zaklęcia", rozmiar=26, kolor=#ffffff, wyrównanie=środek, pion=środek
 ```
 
-Zapisz. Gdy generator jest uruchomiony, talia pojawi się sama.
+Zapisz i otwórz szablon w aplikacji (**Plik → Otwórz szablon…**). Każda kolejna zmiana pojawi się sama po zapisie.
 
 ## 4. Dopracowanie
 
 - **Przesuwanie pól.** Zmieniaj liczby `x, y, szer, wys`; odświeżenie jest natychmiastowe po zapisie.
 - **Za długi tekst.** Generator zmniejsza czcionkę. Czerwona ramka oznacza, że nawet to nie pomogło: powiększ pole albo skróć tekst.
-- **Kilka talii w jednym pliku.** Zamiast osobnego pliku możesz dopisać `[TALIA Zaklęcia]` do istniejącego szablonu, jak w przykładzie [03-ogrod](../przyklady/03-ogrod/Szablony/ogrod.txt).
+- **Kolejna talia w istniejącej grze.** Dopisz `[TALIA Zaklęcia]` do szablonu gry, jak w przykładzie [03-ogrod](../przyklady/03-ogrod/Szablony/ogrod.txt). Aplikacja pokazuje talie z jednego otwartego szablonu.
 
 Pełny opis komend: [komendy.md](komendy.md).

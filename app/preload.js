@@ -5,9 +5,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('generatorApp', {
   info: () => ipcRenderer.invoke('projekt:info'),
-  otworzFolder: () => ipcRenderer.invoke('projekt:otworz'),
+  otworzSzablon: () => ipcRenderer.invoke('projekt:otworz'),
   przyklady: () => ipcRenderer.invoke('projekt:przyklady'),
   otworzPrzyklad: (nazwa) => ipcRenderer.invoke('projekt:przyklad', nazwa),
   pokazFolder: () => ipcRenderer.invoke('projekt:pokaz'),
   zapiszPdf: (nazwa) => ipcRenderer.invoke('pdf:zapisz', nazwa),
+  eksportStart: () => ipcRenderer.invoke('eksport:start'),
+  eksportPlik: (nazwa, dane) => ipcRenderer.invoke('eksport:plik', nazwa, dane),
+  eksportKoniec: () => ipcRenderer.invoke('eksport:koniec'),
 });

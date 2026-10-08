@@ -1,7 +1,7 @@
 'use strict';
 // Generator kart – aplikacja na macOS (Electron).
-// Okno pokazuje ten sam karty.html co wersja przeglądarkowa, w „trybie serwera”:
-// pliki projektu podaje lokalny serwer (serwer.js), a biblioteki i czcionki są w aplikacji.
+// Okno pokazuje generator (generator/karty.html). Pliki projektu podaje lokalny serwer (serwer.js),
+// a biblioteki i czcionki są w aplikacji. Projekt otwiera się przez wskazanie pliku szablonu.
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -12,8 +12,10 @@ const PRZYKLADY = path.join(ZASOBY, 'przyklady');
 const DOKUMENTACJA = 'https://github.com/DarkenPL/GeneratorKart#readme';
 
 let okno = null;
-let projekt = null;          // folder projektu gry (albo przykładu)
+let szablon = null;          // otwarty plik szablonu (.txt)
+let projekt = null;          // folder projektu: folder szablonu, a gdy szablon leży w „Szablony” – folder nad nim
 let port = 0;
+let testowy = false;         // tryb testowy (CI) – bez otwierania okien Findera
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
 const plikUstawien = () => path.join(app.getPath('userData'), 'ustawienia.json');
@@ -25,37 +27,61 @@ function zapiszUstawienia(u) {
   catch (e) { /* bez zapisu ustawień aplikacja nadal działa */ }
 }
 const jestPrzykladem = (p) => !!p && path.resolve(p).startsWith(path.resolve(PRZYKLADY) + path.sep);
-const ostatnie = () => (ustawienia().ostatnie || []).filter((p) => fs.existsSync(p));
+const jestPlikiem = (p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } };
+const jestFolderem = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
+
+// Folder podany zamiast szablonu (np. z poprzedniej wersji) → pierwszy szablon w nim albo w jego „Szablony”.
+function szablonZFolderu(dir) {
+  for (const d of [path.join(dir, 'Szablony'), dir]) {
+    try {
+      const t = fs.readdirSync(d).filter((n) => /\.txt$/i.test(n) && !n.startsWith('_') && !n.startsWith('.'))
+        .sort((a, b) => a.localeCompare(b, 'pl', { numeric: true }));
+      if (t.length) return path.join(d, t[0]);
+    } catch (e) { /* brak folderu */ }
+  }
+  return null;
+}
+const naSzablon = (p) => (!p ? null : jestPlikiem(p) ? p : jestFolderem(p) ? szablonZFolderu(p) : null);
+const ostatnie = () => [...new Set((ustawienia().ostatnie || []).map(naSzablon).filter(Boolean))];
+const folderProjektu = (plik) => {
+  const dir = path.dirname(plik);
+  return path.basename(dir).toLowerCase() === 'szablony' ? path.dirname(dir) : dir;
+};
+const nazwaProjektu = () => (projekt ? path.basename(projekt) : '');
 
 // ── Projekt ─────────────────────────────────────────────────────────────────
-function ustawProjekt(p) {
-  projekt = p;
-  if (p && !jestPrzykladem(p)) {
+function otworzSzablon(plik) {
+  szablon = naSzablon(plik);
+  projekt = szablon ? folderProjektu(szablon) : null;
+  if (szablon && !jestPrzykladem(szablon)) {
     const u = ustawienia();
-    u.ostatnie = [p, ...(u.ostatnie || []).filter((x) => x !== p)].slice(0, 10);
+    u.ostatnie = [szablon, ...(u.ostatnie || []).map(naSzablon).filter((x) => x && x !== szablon)].slice(0, 10);
     zapiszUstawienia(u);
-    app.addRecentDocument(p);
+    app.addRecentDocument(szablon);
   }
   if (okno) {
-    okno.setTitle(p ? `${path.basename(p)} – Generator kart` : 'Generator kart');
-    if (p) okno.setRepresentedFilename(p);
-    okno.loadURL(`http://127.0.0.1:${port}/karty.html`);
+    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – Generator kart` : 'Generator kart');
+    if (szablon) okno.setRepresentedFilename(szablon);
+    const rel = szablon ? path.relative(projekt, szablon).split(path.sep).join('/') : '';
+    okno.loadURL(`http://127.0.0.1:${port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
   }
   zbudujMenu();
 }
 
-async function wybierzProjekt() {
+async function wybierzSzablon() {
   const r = await dialog.showOpenDialog(okno, {
-    title: 'Wybierz folder projektu', buttonLabel: 'Otwórz',
-    properties: ['openDirectory', 'createDirectory'],
-    defaultPath: projekt && !jestPrzykladem(projekt) ? projekt : app.getPath('documents'),
+    title: 'Otwórz szablon kart', buttonLabel: 'Otwórz',
+    message: 'Wybierz plik szablonu (.txt) – wskazuje on pliki z kartami i obrazki.',
+    properties: ['openFile'],
+    filters: [{ name: 'Szablon kart', extensions: ['txt'] }],
+    defaultPath: szablon && !jestPrzykladem(szablon) ? path.dirname(szablon) : app.getPath('documents'),
   });
-  if (!r.canceled && r.filePaths[0]) ustawProjekt(r.filePaths[0]);
+  if (!r.canceled && r.filePaths[0]) otworzSzablon(r.filePaths[0]);
   return !r.canceled;
 }
 
 const listaPrzykladow = () => {
-  try { return fs.readdirSync(PRZYKLADY).filter((n) => !n.startsWith('.') && fs.statSync(path.join(PRZYKLADY, n)).isDirectory()).sort(); }
+  try { return fs.readdirSync(PRZYKLADY).filter((n) => !n.startsWith('.') && jestFolderem(path.join(PRZYKLADY, n))).sort(); }
   catch (e) { return []; }
 };
 
@@ -68,15 +94,37 @@ async function pdfDoPliku(webContents, plik) {
 }
 
 ipcMain.handle('projekt:info', () => ({
-  sciezka: projekt, nazwa: projekt ? path.basename(projekt) : '', przyklad: jestPrzykladem(projekt),
+  szablon, sciezka: projekt, nazwa: nazwaProjektu(), przyklad: jestPrzykladem(szablon),
 }));
-ipcMain.handle('projekt:otworz', () => wybierzProjekt());
+ipcMain.handle('projekt:otworz', () => wybierzSzablon());
 ipcMain.handle('projekt:przyklady', () => listaPrzykladow());
 ipcMain.handle('projekt:przyklad', (e, nazwa) => {
   const p = path.join(PRZYKLADY, path.basename(String(nazwa)));
-  if (fs.existsSync(p)) ustawProjekt(p);
+  if (jestFolderem(p)) otworzSzablon(p);
 });
 ipcMain.handle('projekt:pokaz', () => { if (projekt) shell.openPath(projekt); });
+
+// ── Eksport JPG do folderu Export ───────────────────────────────────────────
+// Przykłady są tylko do odczytu – wtedy pytamy, gdzie zapisać.
+let folderEksportu = null;
+ipcMain.handle('eksport:start', async () => {
+  if (projekt && !jestPrzykladem(projekt)) folderEksportu = path.join(projekt, 'Export');
+  else {
+    const r = await dialog.showOpenDialog(okno, {
+      title: 'Gdzie zapisać obrazki?', buttonLabel: 'Wybierz', properties: ['openDirectory', 'createDirectory'],
+      defaultPath: app.getPath('documents'),
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    folderEksportu = path.join(r.filePaths[0], 'Export');
+  }
+  fs.mkdirSync(folderEksportu, { recursive: true });
+  return folderEksportu;
+});
+ipcMain.handle('eksport:plik', (e, nazwa, dane) => {
+  if (!folderEksportu) throw new Error('Eksport nie został rozpoczęty');
+  fs.writeFileSync(path.join(folderEksportu, path.basename(String(nazwa))), Buffer.from(dane));
+});
+ipcMain.handle('eksport:koniec', () => { if (folderEksportu && !testowy) shell.openPath(folderEksportu); });
 ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
   const katalog = projekt && !jestPrzykladem(projekt) ? projekt : app.getPath('documents');
   const r = await dialog.showSaveDialog(okno, {
@@ -99,25 +147,25 @@ function zbudujMenu() {
     {
       label: 'Plik',
       submenu: [
-        { label: 'Otwórz projekt…', accelerator: 'CmdOrCtrl+O', click: () => wybierzProjekt() },
+        { label: 'Otwórz szablon…', accelerator: 'CmdOrCtrl+O', click: () => wybierzSzablon() },
         {
           label: 'Ostatnie projekty',
           submenu: ost.length
-            ? [...ost.map((p) => ({ label: path.basename(p), sublabel: p, click: () => ustawProjekt(p) })),
+            ? [...ost.map((p) => ({ label: `${path.basename(folderProjektu(p))} – ${path.basename(p)}`, sublabel: p, click: () => otworzSzablon(p) })),
                { type: 'separator' },
                { label: 'Wyczyść listę', click: () => { const u = ustawienia(); u.ostatnie = []; zapiszUstawienia(u); app.clearRecentDocuments(); zbudujMenu(); } }]
             : [{ label: 'Brak', enabled: false }],
         },
         {
           label: 'Przykłady',
-          submenu: przyk.length ? przyk.map((n) => ({ label: n, click: () => ustawProjekt(path.join(PRZYKLADY, n)) })) : [{ label: 'Brak', enabled: false }],
+          submenu: przyk.length ? przyk.map((n) => ({ label: n, click: () => otworzSzablon(path.join(PRZYKLADY, n)) })) : [{ label: 'Brak', enabled: false }],
         },
         { type: 'separator' },
         { label: 'Pokaż folder projektu w Finderze', enabled: !!projekt, click: () => shell.openPath(projekt) },
         { type: 'separator' },
         { label: 'Zapisz PDF…', accelerator: 'CmdOrCtrl+S', enabled: !!projekt, click: wStronie('window.zapiszPdf && zapiszPdf()') },
         { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("document.getElementById('drukuj').click()") },
-        { label: 'Eksport JPG…', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie("document.getElementById('png').click()") },
+        { label: 'Eksport JPG do folderu Export', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie("document.getElementById('png').click()") },
         { label: 'Eksport do playingcards.io…', enabled: !!projekt, click: wStronie("document.getElementById('pcio').click()") },
         { type: 'separator' },
         { role: 'close', label: 'Zamknij okno' },
@@ -181,7 +229,7 @@ function przekierujCdn() {
   });
 }
 
-// ── Tryb testowy (CI): --test-pdf <folder> <plik.pdf> ───────────────────────
+// ── Tryb testowy (CI): --test-pdf <szablon.txt|folder|-> <plik.pdf> ──────────
 // Otwiera projekt, czeka na karty, zapisuje PDF i zrzut podglądu, wypisuje stan i kończy.
 async function trybTestowy(folder, wynik) {
   const wc = okno.webContents;
@@ -206,10 +254,19 @@ async function trybTestowy(folder, wynik) {
     const b = await jpegBlob(document.querySelector('.karta:not(.rewers)'), { pixelRatio: 1, quality: 0.9 });
     return b.type + ' ' + b.size;
   })()`).catch((e) => 'błąd: ' + e.message);
+  // Eksport JPG do folderu Export (tylko poza przykładami – przykłady pytają o folder).
+  let eksport = '';
+  if (!jestPrzykladem(szablon)) {
+    await wc.executeJavaScript("document.getElementById('png').click()");
+    for (let i = 0; i < 240 && !/^(Zapisano|Eksport JPG nie)/.test(eksport); i++) {
+      await czekaj(500);
+      eksport = await wc.executeJavaScript("document.getElementById('status').textContent").catch(() => '');
+    }
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
-  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg);
-  process.stdout.write(JSON.stringify({ folder, stan, uwagi, jpg, pdf: wynik, ok }) + '\n');
+  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'));
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
@@ -217,11 +274,10 @@ async function trybTestowy(folder, wynik) {
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (okno) { if (okno.isMinimized()) okno.restore(); okno.focus(); } });
 
-let doOtwarcia = null;                                   // folder przeciągnięty na ikonę przed startem
+let doOtwarcia = null;                                   // szablon otwarty z Findera przed startem aplikacji
 app.on('open-file', (e, p) => {
   e.preventDefault();
-  const folder = fs.existsSync(p) && fs.statSync(p).isDirectory() ? p : path.dirname(p);
-  if (app.isReady() && okno) ustawProjekt(folder); else doOtwarcia = folder;
+  if (app.isReady() && okno) otworzSzablon(p); else doOtwarcia = p;
 });
 
 app.whenReady().then(async () => {
@@ -234,12 +290,13 @@ app.whenReady().then(async () => {
   const argi = process.argv;
   const t = argi.indexOf('--test-pdf');
   if (t >= 0) {
-    ustawProjekt(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]));
+    testowy = true;
+    otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]));
     okno.webContents.once('did-finish-load', () => trybTestowy(argi[t + 1], path.resolve(argi[t + 2])));
     return;
   }
-  ustawProjekt(doOtwarcia || ostatnie()[0] || null);
+  otworzSzablon(doOtwarcia || ostatnie()[0] || null);
 });
 
-app.on('activate', () => { if (!okno && port) { utworzOkno(); ustawProjekt(projekt); } });
+app.on('activate', () => { if (!okno && port) { utworzOkno(); otworzSzablon(szablon); } });
 app.on('window-all-closed', () => app.quit());

@@ -1,20 +1,26 @@
-# Buduje aplikację „Generator kart” na macOS (Apple Silicon i Intel), testuje ją na przykładach
-# i udostępnia jako artefakt. Tag v* (np. v0.1.0) albo wydanie opublikowane na GitHubie dostaje pliki ZIP.
+# Buduje aplikację „Generator kart” na macOS (Apple Silicon) i testuje ją na przykładach.
+# - każda zmiana w main  → wydanie „Najnowsza wersja” (link w README zawsze wskazuje na nią),
+# - tag v* albo wydanie opublikowane na GitHubie → plik dołączony do tego wydania,
+# - pull request → tylko budowanie i testy (plik w Artifacts).
 name: Aplikacja macOS
 
 on:
   push:
     branches: [main]
     tags: ['v*']
-    paths: ['app/**', 'karty.html', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
+    paths: ['app/**', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
   pull_request:
-    paths: ['app/**', 'karty.html', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
+    paths: ['app/**', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
   workflow_dispatch:
   release:
     types: [published]
 
 permissions:
   contents: write
+
+concurrency:
+  group: aplikacja-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   mac:
@@ -38,52 +44,36 @@ jobs:
       - name: Zasoby (generator, przykłady, biblioteki, czcionki)
         run: npm run zasoby
 
-      - name: Budowanie (arm64 i x64)
+      - name: Budowanie (Apple Silicon)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac dir --arm64 --x64
+        run: npx electron-builder --mac dir --arm64
 
       - name: Podpis ad hoc (bez konta Apple Developer)
         run: |
-          for app in "dist/mac-arm64/Generator kart.app" "dist/mac/Generator kart.app"; do
-            codesign --force --deep --sign - "$app"
-            codesign --verify --deep --strict "$app" && echo "OK: $app"
-          done
+          app="dist/mac-arm64/Generator kart.app"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
 
-      - name: Test – przykłady (arm64)
+      - name: Test – przykłady
         run: |
           mkdir -p "$RUNNER_TEMP/test"
           bin="dist/mac-arm64/Generator kart.app/Contents/MacOS/Generator kart"
           for ex in ../przyklady/*/; do
             n=$(basename "$ex")
-            "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf "$ex" "$RUNNER_TEMP/test/$n.pdf" | tee "$RUNNER_TEMP/test/$n.json"
+            cp -R "$ex" "$RUNNER_TEMP/$n"                 # kopia: test zapisuje też folder Export
+            "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf "$RUNNER_TEMP/$n" "$RUNNER_TEMP/test/$n.pdf" | tee "$RUNNER_TEMP/test/$n.json"
             grep -q '"ok":true' "$RUNNER_TEMP/test/$n.json"
           done
           "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf - "$RUNNER_TEMP/test/start.pdf"
 
-      - name: Test – Intel (przez Rosettę)
-        continue-on-error: true
-        run: |
-          bin="dist/mac/Generator kart.app/Contents/MacOS/Generator kart"
-          "$bin" --user-data-dir="$RUNNER_TEMP/ud-x64" --test-pdf ../przyklady/02-kuznia "$RUNNER_TEMP/test/x64-kuznia.pdf" | tee "$RUNNER_TEMP/test/x64.json"
-          grep -q '"ok":true' "$RUNNER_TEMP/test/x64.json"
-
       - name: ZIP
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/mac-arm64/Generator kart.app" "dist/Generator-kart-mac-AppleSilicon.zip"
-          ditto -c -k --sequesterRsrc --keepParent "dist/mac/Generator kart.app" "dist/Generator-kart-mac-Intel.zip"
-          ls -la dist/*.zip
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/mac-arm64/Generator kart.app" "dist/Generator-kart-mac.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Generator-kart-mac-AppleSilicon
-          path: app/dist/Generator-kart-mac-AppleSilicon.zip
-          compression-level: 0
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Generator-kart-mac-Intel
-          path: app/dist/Generator-kart-mac-Intel.zip
+          name: Generator-kart-mac
+          path: app/dist/Generator-kart-mac.zip
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
@@ -92,17 +82,27 @@ jobs:
           name: wyniki-testow
           path: ${{ runner.temp }}/test
 
-      - name: Wydanie – nowy tag v* (tworzy wydanie z plikami)
+      - name: Wydanie „Najnowsza wersja” (zmiana w main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete najnowsza --yes --cleanup-tag 2>/dev/null || true
+          gh release create najnowsza dist/Generator-kart-mac.zip --latest --target "$GITHUB_SHA" \
+            --title "Generator kart – najnowsza wersja" \
+            --notes "Aplikacja na macOS (Apple Silicon: M1–M4), zbudowana z $(git rev-parse --short HEAD). Pierwsze uruchomienie: prawy przycisk → Otwórz (instrukcja: docs/aplikacja.md)."
+
+      - name: Wydanie – nowy tag v*
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/Generator-kart-mac-*.zip \
+          gh release create "$GITHUB_REF_NAME" dist/Generator-kart-mac.zip \
             --title "Generator kart $GITHUB_REF_NAME" \
-            --notes "Aplikacja na macOS. Wybierz plik dla swojego Maca: AppleSilicon (M1–M4) albo Intel. Instrukcja pierwszego uruchomienia: docs/aplikacja.md."
+            --notes "Aplikacja na macOS (Apple Silicon: M1–M4). Pierwsze uruchomienie: docs/aplikacja.md."
 
-      - name: Wydanie – opublikowane na GitHubie (dołącza pliki)
+      - name: Wydanie – opublikowane na GitHubie (dołącza plik)
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart-mac-*.zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart-mac.zip --clobber

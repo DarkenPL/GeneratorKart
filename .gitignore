@@ -11,3 +11,5 @@ karty_jpg.zip
 app/node_modules/
 app/zasoby/
 app/dist/
+# eksporty JPG w projektach
+Export/

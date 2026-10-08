@@ -1,24 +1,12 @@
-# Aplikacja na Maca
-
-**Generator kart.app** to ten sam generator co `karty.html`, ale jako zwykła aplikacja z ikoną:
-
-- nie potrzebuje okna Terminala ani przeglądarki,
-- działa bez internetu (biblioteki eksportu i czcionki są w środku),
-- pamięta ostatnio otwarte projekty (menu **Plik → Ostatnie projekty**),
-- ma przycisk **Zapisz PDF**, który zapisuje plik od razu w dokładnym rozmiarze (A4 ze znacznikami cięcia albo każda karta osobno), bez okna drukowania i bez pilnowania skali i marginesów,
-- zawiera przykładowe projekty (menu **Plik → Przykłady**).
+# Aplikacja Generator kart
 
 ## Pobieranie
 
-- **Wydanie:** na stronie repozytorium wejdź w **Releases** i pobierz plik dla swojego Maca.
-- **Najnowsza wersja robocza:** zakładka **Actions** → ostatnie uruchomienie „Aplikacja macOS” → sekcja **Artifacts**.
+**[Pobierz najnowszą wersję](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip)** (`Generator-kart-mac.zip`).
 
-| Plik | Dla Maca |
-|---|---|
-| `Generator-kart-mac-AppleSilicon.zip` | z procesorem Apple M1–M4 (większość Maców od 2021 r.) |
-| `Generator-kart-mac-Intel.zip` | z procesorem Intel |
+Aplikacja działa na Macach z procesorem Apple (M1–M4). Jaki masz procesor, sprawdzisz w  → **Ten Mac** (pozycja „Układ”).
 
-Jaki masz procesor, sprawdzisz w  → **Ten Mac** („Układ” albo „Procesor”).
+Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja robocza z pull requestu jest w zakładce **Actions** → uruchomienie „Aplikacja macOS” → **Artifacts**.
 
 ## Instalacja i pierwsze uruchomienie
 
@@ -35,19 +23,24 @@ Jaki masz procesor, sprawdzisz w  → **Ten Mac** („Układ” albo „Procesor
 
 ## Praca
 
-1. **Plik → Otwórz projekt… (⌘O)** i wskaż folder gry: plik kart (CSV/XLSX) i folder `Szablony`. Folder z kopią `karty.html` też zadziała, bo aplikacja zawsze używa własnej, wbudowanej wersji generatora.
-2. Karty odświeżają się same po każdym zapisie pliku.
+1. **Plik → Otwórz szablon… (⌘O)** i wskaż plik szablonu (`.txt`) swojej gry.
+   - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki, pokój playingcards.io.
+   - Ścieżki liczą się od folderu projektu: tego, w którym leży szablon, albo folderu nad `Szablony`, gdy szablon leży w takim podfolderze.
+   - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → Generator kart**.
+2. Karty odświeżają się same po każdym zapisie szablonu, pliku z kartami albo obrazka.
+3. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
 |---|---|
-| ⌘S | Zapisz PDF (A4 albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
+| ⌘O | Otwórz szablon |
+| ⌘S | Zapisz PDF (A4 ze znacznikami albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
 | ⌘P | Drukuj (systemowe okno drukowania) |
-| ⌘E | Eksport JPG |
+| ⌘E | Eksport JPG do folderu `Export` projektu |
 | ⌘R | Odśwież karty |
 
-Pliki JPG i `.pcio` zapisują się domyślnie w folderze projektu.
-
-Przykłady są tylko do odczytu. Żeby na nich eksperymentować, skopiuj folder przykładu, na przykład z repozytorium, i otwórz kopię.
+- **Eksport JPG** zapisuje każdą kartę (i rewersy) jako osobny plik w folderze `Export` obok szablonu albo folderu `Szablony`. Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
+- **Plik `.pcio`** z eksportu do playingcards.io zapisuje się domyślnie w folderze projektu.
+- **Przykłady** są tylko do odczytu. Eksport JPG pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
 
 ## Dla deweloperów
 
@@ -58,16 +51,16 @@ npm start          # zasoby + uruchomienie
 npm run dist       # budowanie .app (na macOS)
 ```
 
-- `app/main.js`: okno, menu, ostatnie projekty, zapis PDF, podmiana adresów CDN na zasoby lokalne.
-- `app/serwer.js`: lokalny serwer HTTP, ten sam protokół co `Uruchom generator.command`.
-- `app/scripts/zasoby.js`: kopiuje `karty.html`, przykłady, biblioteki i czcionki do `app/zasoby/`.
-- Tryb testowy: `Generator kart --test-pdf <folder> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG, zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. Folder `-` oznacza ekran powitalny.
-- `.github/workflows/aplikacja-mac.yml`: budowanie na macOS przy każdej zmianie.
+- `app/generator/karty.html`: interfejs i cały silnik generatora (jeden plik HTML).
+- `app/main.js`: okno, menu, ostatnie projekty, zapis PDF, eksport do `Export/`, podmiana adresów CDN na zasoby lokalne.
+- `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
+- `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
+- Tryb testowy: `Generator kart --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` aktualizuje wydanie „Najnowsza wersja”.
 
-### Nowe wydanie
+### Wydanie z numerem wersji
 
-1. Na GitHubie: **Releases → Draft a new release**.
-2. W polu tagu wpisz nową wersję, np. `v0.2.0` (**Create new tag**), i dodaj opis.
-3. Kliknij **Publish release**.
+1. Ustaw `version` w `app/package.json`.
+2. Na GitHubie: **Releases → Draft a new release**, tag np. `v0.2.0` (**Create new tag**), **Publish release**.
 
-Workflow sam zbuduje i przetestuje aplikację, a po kilku minutach dołączy do wydania oba pliki ZIP. Działa też wysłanie samego tagu `v*` (`git push origin v0.2.0`). Numer wersji w aplikacji ustawia pole `version` w `app/package.json`.
+Workflow dołączy do wydania plik ZIP po kilku minutach.
