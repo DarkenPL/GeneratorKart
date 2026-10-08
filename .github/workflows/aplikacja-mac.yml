@@ -1,5 +1,5 @@
 # Buduje aplikację „Generator kart” na macOS (Apple Silicon i Intel), testuje ją na przykładach
-# i udostępnia jako artefakt. Tag v* (np. v0.1.0) dodatkowo tworzy wydanie (Release) z plikami ZIP.
+# i udostępnia jako artefakt. Tag v* (np. v0.1.0) albo wydanie opublikowane na GitHubie dostaje pliki ZIP.
 name: Aplikacja macOS
 
 on:
@@ -10,6 +10,8 @@ on:
   pull_request:
     paths: ['app/**', 'karty.html', 'przyklady/**', '.github/workflows/aplikacja-mac.yml']
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -90,11 +92,17 @@ jobs:
           name: wyniki-testow
           path: ${{ runner.temp }}/test
 
-      - name: Wydanie (tylko dla tagów v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Wydanie – nowy tag v* (tworzy wydanie z plikami)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/Generator-kart-mac-*.zip \
             --title "Generator kart $GITHUB_REF_NAME" \
             --notes "Aplikacja na macOS. Wybierz plik dla swojego Maca: AppleSilicon (M1–M4) albo Intel. Instrukcja pierwszego uruchomienia: docs/aplikacja.md."
+
+      - name: Wydanie – opublikowane na GitHubie (dołącza pliki)
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart-mac-*.zip --clobber
