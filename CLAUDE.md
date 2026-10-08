@@ -97,6 +97,16 @@ Sekcje w kolejności w pliku:
 4. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
 5. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
 
+6. **Numer i wersja na karcie** (zaplanowane): wbudowane pola `[_numer]`, `[_kopia]`, `[_wersja]` (np. „v3 · 12/34” w rogu); wersja z komendy w szablonie.
+7. **Drukuj tylko zmienione karty** (zaplanowane): aplikacja pamięta odcisk (hash) każdej karty z ostatniego PDF i drukuje tylko zmienione od tamtej pory.
+8. **Druk wybranych kart** (zaplanowane): zaznaczanie kart w podglądzie i PDF/druk tylko z nich.
+9. **Tryb szkicu** (zaplanowane): wydruk czarno-biały bez teł (oszczędność tuszu przy prototypach).
+10. **Ikony bez `ikony.csv`** (zaplanowane): każdy plik z folderu `Ikony/` działa jako znacznik `{nazwa_pliku}`; `ikony.csv` tylko do wyjątków (emoji zastępcze, odstęp).
+11. **Stałe w szablonie** (zaplanowane): `STAŁA = margines, 3.5` i użycie `[=margines]` (także w działaniach na liczbach).
+12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
+13. **Raport projektu** (zaplanowane): duplikaty ID, puste wymagane kolumny, nieużywane kolumny i obrazki w folderach projektu.
+14. **Historia wersji** (do omówienia z właścicielem): kopie szablonu i danych w ukrytym folderze projektu przy zapisie, z przerzedzaniem i ręcznymi „punktami” (np. „przed playtestem 3”).
+
 Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
 
 ### Roadmapa (niski priorytet)
