@@ -1,6 +1,6 @@
 # Komendy szablonów
 
-Wygląd kart opisują pliki tekstowe w folderze `Szablony/` projektu, w stylu [nanDecka](https://www.nandeck.com/). Każda linia to jedna komenda:
+Wygląd kart opisuje plik tekstowy – szablon – w stylu [nanDecka](https://www.nandeck.com/). Każda linia to jedna komenda:
 
 ```
 KOMENDA = argument, argument, opcja=wartość, flaga
@@ -17,11 +17,10 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 - Nazwy komend i opcji można pisać z polskimi znakami lub bez (`TŁO` = `TLO`, `wyrównanie` = `wyrownanie`). Wielkość liter nie ma znaczenia.
 - Elementy rysowane są w kolejności: następny przykrywa poprzedni.
 
-### Pliki szablonów
+### Plik szablonu
 
-- Każdy plik `.txt` w `Szablony/` to jedna talia albo, z sekcjami `[TALIA …]`, kilka talii.
-- Pliki czytane są w kolejności nazw, a talie w pliku od góry.
-- Pomijane są pliki zaczynające się od `_` (np. `_notatki.txt`) oraz podfoldery.
+- W aplikacji otwierasz jeden plik szablonu (`.txt`). Bez sekcji `[TALIA …]` opisuje on jedną talię, z sekcjami – kilka talii, w kolejności z pliku.
+- **Ścieżki** (`DANE`, obrazki, `CZCIONKA_PLIK`, `STÓŁ`, `ikony.csv`) liczą się od **folderu projektu**: folderu, w którym leży szablon, albo folderu nad nim, gdy szablon leży w podfolderze `Szablony`.
 - Edytuj jako **zwykły tekst** (TextEdit: Format → Zamień na zwykły tekst) albo w edytorze kodu. Plik zapisany jako RTF generator wykryje i poda, jak to naprawić.
 
 ## Talia i projekt

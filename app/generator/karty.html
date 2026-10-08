@@ -86,36 +86,25 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 
 <div class="pasek">
   <h1>Generator kart</h1>
-  <button class="glowny" id="wybierz">Wybierz folder projektu…</button>
-  <input type="file" id="wybierzStary" webkitdirectory multiple hidden>
+  <button class="glowny" id="wybierz">Otwórz szablon…</button>
   <button id="odswiez" disabled>Odśwież</button>
-  <label title="Działa w Chrome i Edge"><input type="checkbox" id="auto" checked> Odświeżaj automatycznie</label>
+  <label title="Sprawdza zmiany plików co 1,5 s"><input type="checkbox" id="auto" checked> Odświeżaj automatycznie</label>
   <select id="filtr"><option value="">Wszystkie talie</option></select>
   <select id="tryb">
     <option value="a4">Druk: A4 ze znacznikami cięcia (karty 1:1)</option>
     <option value="pojedyncze">Druk: każda karta na osobnej stronie</option>
   </select>
   <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
-  <button id="pdf" disabled hidden title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
-  <button id="drukuj" disabled title="W oknie drukowania: papier A4, skala 100%, marginesy: brak">Drukuj / zapisz PDF</button>
-  <button id="png" disabled>Eksport JPG (ZIP)</button>
+  <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
+  <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
+  <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
   <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
   <input type="file" id="pcioPlik" accept=".pcio,.zip" hidden>
   <span class="status" id="status"></span>
 </div>
 <div class="uwagi" id="uwagi"></div>
 
-<div class="start" id="start">
-  <h2>Jak zacząć</h2>
-  <p>Kliknij <b>Wybierz folder projektu</b> i wskaż folder z grą. Potrzebne są w nim:</p>
-  <ul>
-    <li>folder <code>Szablony</code> – jeden plik <code>.txt</code> na talię, opisujący wygląd kart (opis komend: <code>Szablony/_opis_komend.txt</code>),</li>
-    <li>pliki z kartami wskazane w szablonach komendą <code>DANE</code> (np. <code>karty.csv</code>),</li>
-    <li>foldery z obrazkami (np. <code>Art</code>, <code>Icons</code>) i opcjonalnie <code>ikony.csv</code>.</li>
-  </ul>
-  <p><b>Najwygodniej:</b> uruchom dwuklikiem <code>Uruchom generator.command</code> z folderu projektu – karty wczytają się same i będą się odświeżać po każdym zapisie, w każdej przeglądarce.</p>
-  <p>Gdy otwierasz ten plik bezpośrednio: w Chrome i Edge karty odświeżą się same po każdym zapisie pliku, w innych przeglądarkach kliknij <b>Odśwież</b>.</p>
-</div>
+<div class="start" id="start"><p>Wczytywanie…</p></div>
 
 <div id="podglad"></div>
 <div id="druk"></div>
@@ -127,9 +116,6 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 // USTAWIENIA
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-  // Talie i wygląd kart opisują pliki .txt w tym folderze (jeden plik = jedna talia, kolejność wg nazwy pliku).
-  // Pliki zaczynające się od „_” są pomijane (np. _opis_komend.txt).
-  folderSzablonow: 'Szablony',
   // Nazwy kolorów i plik pokoju playingcards.io ustawia się w szablonach:
   // KOLOR = nazwa, #RRGGBB   oraz   STOL = plik.pcio
   plikIkon: 'ikony.csv',
@@ -152,38 +138,18 @@ const norm = (s) => String(s).normalize('NFC').toLowerCase().replace(/\\/g, '/')
 const iconKey = (s) => String(s || '').replace(/[{}:\s]/g, '').toLowerCase();
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-let files = new Map();       // ścieżka (znormalizowana, względem folderu) → File
-let dirHandle = null;
+let files = new Map();       // ścieżka (znormalizowana, względem folderu projektu) → File
 let urls = [];
 let lastStamp = '';
 
-// ── Czytanie folderu ─────────────────────────────────────────────────────────
+// ── Wczytywanie projektu ─────────────────────────────────────────────────────
+// Aplikacja podaje pliki folderu projektu przez lokalny serwer; ?szablon= wskazuje otwarty plik
+// szablonu (względem folderu projektu), a szablon wskazuje pozostałe pliki (DANE, obrazki, czcionki).
+const SZABLON = new URLSearchParams(location.search).get('szablon') || '';
+let serverPaths = [];          // ścieżki wczytanych plików (do sprawdzania zmian)
+let serverWanted = [];         // pliki wskazane w szablonie, których jeszcze nie ma
 
-async function readHandle(handle, prefix = '') {
-  for await (const entry of handle.values()) {
-    if (entry.name.startsWith('.')) continue;
-    if (entry.kind === 'directory') await readHandle(entry, prefix + entry.name + '/');
-    else files.set(norm(prefix + entry.name), await entry.getFile());
-  }
-}
-async function loadFromHandle() { files = new Map(); await readHandle(dirHandle); await build(); }
-function loadFromInput(list) {
-  files = new Map();
-  for (const f of list) {
-    const rel = f.webkitRelativePath.split('/').slice(1).join('/');
-    if (!rel.split('/').some((p) => p.startsWith('.'))) files.set(norm(rel), f);
-  }
-  build();
-}
-
-// ── Tryb serwera: strona otwarta przez „Uruchom generator.command” ──────────
-// Pliki czytamy wtedy wprost z folderu, w którym leży karty.html – bez wybierania.
-const SERWER = /^https?:$/.test(location.protocol);
-let serverPaths = [];          // ścieżki wczytane z serwera (do sprawdzania zmian)
-
-// ?folder=przyklady/01-wyprawa – projekt w podfolderze (np. przykłady w repozytorium generatora).
-const BAZA = (new URLSearchParams(location.search).get('folder') || '').replace(/^[\/.]+|\/+$/g, '');
-const encodePath = (rel) => (BAZA ? BAZA + '/' : '') + rel.split('/').map(encodeURIComponent).join('/');
+const encodePath = (rel) => rel.split('/').map(encodeURIComponent).join('/');
 
 async function fetchFile(rel) {
   try {
@@ -192,18 +158,6 @@ async function fetchFile(rel) {
     const lm = Date.parse(r.headers.get('Last-Modified') || '') || Date.now();
     const blob = await r.blob();
     return new File([blob], rel.split('/').pop(), { lastModified: lm, type: blob.type });
-  } catch (e) { return null; }
-}
-
-let serverListing = '';         // spis folderu szablonów (do wykrywania nowych plików)
-
-// Spis plików w folderze (serwer z „Uruchom generator.command” zwraca listę nazw jako JSON).
-async function listServerDir(dir) {
-  try {
-    const r = await fetch(encodePath(dir) + '/', { cache: 'no-store' });
-    if (!r.ok) return null;
-    const list = await r.json();
-    return Array.isArray(list) ? list : null;
   } catch (e) { return null; }
 }
 
@@ -218,20 +172,13 @@ async function loadFromServer() {
     const f = await fetchFile(rel);
     if (f) { next.set(norm(rel), f); paths.push(rel); }
   };
-  // 1) szablony talii
-  const dir = CONFIG.folderSzablonow;
-  const list = await listServerDir(dir);
-  serverListing = JSON.stringify(list);
-  serverMissingList = false;
-  if (!list) {                                                  // brak folderu czy stary serwer bez spisów folderów?
-    try { serverMissingList = !(await fetch('/.wersja', { cache: 'no-store' })).ok; } catch (e) { serverMissingList = true; }
-  }
-  if (list) await Promise.all(list.filter((n) => /\.txt$/i.test(n)).map((n) => put(dir + '/' + n)));
-  // 2) pliki danych i inne pliki wskazane w szablonach
+  // 1) szablon
+  await put(SZABLON);
+  // 2) pliki danych i inne pliki wskazane w szablonie
   const refs = new Set([CONFIG.plikIkon]);
-  for (const [k, f] of next) {
-    if (!k.endsWith('.txt')) continue;
-    const t = parseTemplate(await f.text(), f.name);
+  const tf = next.get(norm(SZABLON));
+  if (tf) {
+    const t = parseTemplate(await tf.text(), tf.name);
     t.dane.forEach((d) => refs.add(d));
     t.pliki.forEach((d) => refs.add(d));
   }
@@ -249,8 +196,6 @@ async function loadFromServer() {
   files = next; serverPaths = paths;
   await build();
 }
-let serverMissingList = false;
-let serverWanted = [];         // pliki wskazane w szablonach, których jeszcze nie ma
 
 async function serverStamp() {
   const heads = await Promise.all(serverPaths.map(async (rel) => {
@@ -259,48 +204,22 @@ async function serverStamp() {
       return rel + (r.ok ? (r.headers.get('Last-Modified') || '') + r.headers.get('Content-Length') : 'x');
     } catch (e) { return rel + '?'; }
   }));
-  // Nowe pliki szablonów i pliki danych, których jeszcze nie było, też sprawdzamy.
-  const listing = JSON.stringify(await listServerDir(CONFIG.folderSzablonow));
+  // Pliki wskazane w szablonie, których jeszcze nie było, też sprawdzamy.
   const extra = await Promise.all(serverWanted.map(async (n) => {
     try { const r = await fetch(encodePath(n), { method: 'HEAD', cache: 'no-store' }); return r.ok ? n : ''; } catch (e) { return ''; }
   }));
-  return heads.join('|') + '#' + listing + '#' + extra.join('|');
+  return heads.join('|') + '#' + extra.join('|');
 }
 
-$('wybierz').onclick = async () => {
-  if (window.showDirectoryPicker) {
-    try { dirHandle = await window.showDirectoryPicker({ mode: 'read' }); await loadFromHandle(); }
-    catch (e) { if (e.name !== 'AbortError') status('Błąd: ' + e.message); }
-  } else $('wybierzStary').click();
-};
-$('wybierzStary').onchange = (e) => loadFromInput(e.target.files);
-$('odswiez').onclick = () => SERWER ? loadFromServer() : dirHandle ? loadFromHandle() : $('wybierzStary').click();
+$('odswiez').onclick = () => loadFromServer();
 $('filtr').onchange = applyFilter;
 
-// Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian plików w folderze projektu.
+// Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików.
 setInterval(async () => {
-  if (SERWER) {
-    if (!$('auto').checked || document.hidden || !serverPaths.length) return;
-    const stamp = await serverStamp();
-    if (lastStamp && stamp !== lastStamp) await loadFromServer();
-    lastStamp = stamp;
-    return;
-  }
-  if (!dirHandle || !$('auto').checked || document.hidden) return;
-  try {
-    // Pliki w głównym folderze i w podfolderach pierwszego poziomu (Szablony, Art, Icons…).
-    const parts = [];
-    for await (const e of dirHandle.values()) {
-      if (e.name.startsWith('.')) continue;
-      if (e.kind === 'file') { const f = await e.getFile(); parts.push(e.name + f.lastModified + f.size); continue; }
-      try {
-        for await (const x of e.values()) if (x.kind === 'file' && !x.name.startsWith('.')) { const f = await x.getFile(); parts.push(e.name + '/' + x.name + f.lastModified + f.size); }
-      } catch (err) {}
-    }
-    const stamp = parts.join('|');
-    if (lastStamp && stamp !== lastStamp) await loadFromHandle();
-    lastStamp = stamp;
-  } catch (e) { /* folder chwilowo niedostępny */ }
+  if (!$('auto').checked || document.hidden || !serverPaths.length) return;
+  const stamp = await serverStamp();
+  if (lastStamp && stamp !== lastStamp) await loadFromServer();
+  lastStamp = stamp;
 }, 1500);
 
 // ── CSV / XLSX ───────────────────────────────────────────────────────────────
@@ -752,15 +671,9 @@ async function build() {
   let html = '', total = 0;
   const found = [], missing = [];
 
-  const dir = norm(CONFIG.folderSzablonow) + '/';
-  const tplFiles = [...files.entries()]
-    .filter(([k]) => k.startsWith(dir) && k.endsWith('.txt') && !k.slice(dir.length).includes('/') && !k.slice(dir.length).startsWith('_'))
-    .sort((a, b) => a[0].localeCompare(b[0], 'pl', { numeric: true }));
+  const tplFiles = files.has(norm(SZABLON)) ? [[norm(SZABLON), files.get(norm(SZABLON))]] : [];
   if (!tplFiles.length) {
-    if (SERWER && !serverMissingList && !BAZA) await showExamples();
-    status(serverMissingList
-      ? 'Ten generator potrzebuje nowszego „Uruchom generator.command” – zamknij okno Terminala i uruchom go ponownie.'
-      : `Brak szablonów talii: w folderze projektu nie ma folderu „${CONFIG.folderSzablonow}” z plikami .txt.`);
+    status(SZABLON ? `Nie można wczytać szablonu ${SZABLON}.` : 'Nie wybrano szablonu.');
     return;
   }
 
@@ -983,18 +896,19 @@ async function jpegBlob(el, opts) {
   return new Promise((ok) => out.toBlob(ok, 'image/jpeg', opts.quality ?? 0.92));
 }
 
+// Każda karta jako osobny plik JPG w folderze Export projektu (zapisuje aplikacja).
 $('png').onclick = async () => {
   const btn = $('png'); btn.disabled = true;
   try {
     if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
-    if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-    const zip = new JSZip();
+    const folder = await APP.eksportStart();
+    if (!folder) { status('Eksport JPG anulowany.'); return; }
     const els = visibleCards().concat(visibleSections().map((s) => s.querySelector('.karta.rewers')).filter(Boolean));
     const seen = {};
+    const safe = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').replace(/[^\w-]+/g, '_');
     for (let i = 0; i < els.length; i++) {
       status(`Eksport JPG: ${i + 1}/${els.length}…`);
       const el = els[i];
-      const safe = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').replace(/[^\w-]+/g, '_');
       const id = safe(el.dataset.talia) + '_' + safe(el.dataset.id || String(i + 1));
       seen[id] = (seen[id] || 0) + 1;
       const name = (seen[id] > 1 ? `${id}_${seen[id]}` : id) + '.jpg';
@@ -1003,11 +917,10 @@ $('png').onclick = async () => {
       let blob;
       try { blob = await jpegBlob(el, opts); }
       catch (e) { blob = await jpegBlob(el, { ...opts, skipFonts: true }); }
-      zip.file(name, blob);
+      await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
     }
-    const out = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(out); a.download = 'karty_jpg.zip'; a.click();
-    status(`Zapisano karty_jpg.zip (${els.length} plików, ${CONFIG.jpgDpi} dpi)`);
+    status(`Zapisano ${els.length} plików JPG (${CONFIG.jpgDpi} dpi) w ${folder}`);
+    APP.eksportKoniec();
   } catch (e) {
     status('Eksport JPG nie powiódł się: ' + e.message);
   } finally { btn.disabled = false; }
@@ -1030,7 +943,7 @@ async function cardToJpeg(el, width) {
 async function pcioTemplate() {
   // Plik pokoju z komendy STOL w szablonie; bez niej (albo gdy pliku brak) – prośba o wskazanie pliku.
   let f = STOL_PCIO ? files.get(norm(STOL_PCIO)) : null;
-  if (!f && STOL_PCIO && SERWER) f = await fetchFile(STOL_PCIO);
+  if (!f && STOL_PCIO) f = await fetchFile(STOL_PCIO);
   if (f) return f;
   // Brak szablonu w folderze – poproś o plik.
   return new Promise((ok) => {
@@ -1153,24 +1066,12 @@ $('pcio').onclick = async () => {
   finally { btn.disabled = false; }
 };
 
-// Folder bez szablonów (np. repozytorium generatora): pokaż projekty z podfolderu „przyklady”.
-async function showExamples() {
-  const list = (await listServerDir('przyklady')) || [];
-  const dirs = list.filter((n) => !/\.[a-z0-9]+$/i.test(n));
-  if (!dirs.length) return;
-  $('start').style.display = '';
-  $('start').innerHTML = '<h2>Przykładowe projekty</h2><p>W tym folderze nie ma szablonów talii. Otwórz jeden z przykładów:</p><ul>' +
-    dirs.map((d) => `<li><a href="?folder=${encodeURIComponent('przyklady/' + d)}">${esc(d)}</a></li>`).join('') + '</ul>';
-}
-if (BAZA) document.title = 'Generator kart – ' + BAZA.split('/').pop();
-
-// Start: w trybie serwera wczytujemy folder od razu.
-// ── Aplikacja na Maca (Electron): window.generatorApp z preload.js ───────────
+// ── Aplikacja (Electron): window.generatorApp z preload.js ───────────────────
 const APP = window.generatorApp || null;
 
 // Zapis PDF wprost do pliku (tylko w aplikacji) – wydruk w dokładnym rozmiarze, bez okna drukowania.
 async function zapiszPdf() {
-  if (!APP || $('pdf').disabled) return;
+  if ($('pdf').disabled) return;
   buildPrint();
   const info = await APP.info();
   const nazwa = (info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4');
@@ -1182,34 +1083,29 @@ async function zapiszPdf() {
 }
 window.zapiszPdf = zapiszPdf;
 
-// Ekran powitalny aplikacji, gdy nie wybrano jeszcze projektu.
+// Ekran powitalny, gdy nie otwarto jeszcze szablonu.
 async function startAplikacji() {
   const przyklady = await APP.przyklady();
   $('start').innerHTML = '<h2>Generator kart</h2>' +
-    '<p>Otwórz folder z projektem gry: plikiem kart (CSV/XLSX) i folderem <code>Szablony</code>.</p>' +
-    '<p><button class="glowny" id="startOtworz">Otwórz projekt…</button></p>' +
+    '<p>Otwórz <b>plik szablonu</b> (.txt) swojej gry. Szablon wskazuje plik z kartami (CSV/XLSX), ' +
+    'obrazki i czcionki – generator wczyta je sam.</p>' +
+    '<p><button class="glowny" id="startOtworz">Otwórz szablon…</button></p>' +
     (przyklady.length ? '<h3>Albo zobacz przykład</h3><ul>' +
       przyklady.map((n) => `<li><a href="#" data-przyklad="${esc(n)}">${esc(n)}</a></li>`).join('') + '</ul>' : '');
-  $('startOtworz').onclick = () => APP.otworzFolder();
+  $('startOtworz').onclick = () => APP.otworzSzablon();
   for (const a of $('start').querySelectorAll('[data-przyklad]'))
     a.onclick = (e) => { e.preventDefault(); APP.otworzPrzyklad(a.dataset.przyklad); };
   status('');
 }
 
-// Start: w trybie serwera (i w aplikacji) wczytujemy folder od razu.
-if (SERWER) (async () => {
-  $('auto').closest('label').title = 'Sprawdza zmiany plików co 1,5 s';
-  if (APP) {
-    $('wybierz').textContent = 'Otwórz projekt…';
-    $('wybierz').onclick = () => APP.otworzFolder();
-    $('pdf').hidden = false;
-    $('pdf').onclick = zapiszPdf;
-    $('drukuj').textContent = 'Drukuj…';
-    const info = await APP.info();
-    if (!info.sciezka) return startAplikacji();
-    if (info.przyklad) $('wybierz').title = 'Przykład tylko do odczytu – zmiany zapisuj we własnej kopii';
-  } else $('wybierz').style.display = 'none';
-  $('start').innerHTML = '<p>Wczytywanie kart z folderu…</p>';
+// Start
+(async () => {
+  if (!APP) { $('start').innerHTML = '<p>Ten plik jest częścią aplikacji Generator kart i działa tylko w niej.</p>'; return; }
+  $('wybierz').onclick = () => APP.otworzSzablon();
+  $('pdf').onclick = zapiszPdf;
+  const info = await APP.info();
+  if (!info.szablon) return startAplikacji();
+  if (info.przyklad) $('wybierz').title = 'Przykład jest tylko do odczytu – żeby go zmieniać, skopiuj jego folder';
   loadFromServer().then(() => { $('odswiez').disabled = false; });
 })();
 </script>

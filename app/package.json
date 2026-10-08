@@ -47,7 +47,17 @@
         "dir"
       ],
       "extendInfo": {
-        "CFBundleDevelopmentRegion": "pl"
+        "CFBundleDevelopmentRegion": "pl",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Szablon kart",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.plain-text"
+            ]
+          }
+        ]
       }
     },
     "publish": null

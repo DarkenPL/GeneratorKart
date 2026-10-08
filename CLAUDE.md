@@ -6,38 +6,40 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 
 - **Bez danych gier użytkownika w repozytorium.** Właściciel trzyma swoje projekty gier lokalnie i nie chce ich udostępniać. W repozytorium są tylko generator, dokumentacja i zmyślone przykłady.
 - Język: polski (interfejs, komunikaty, komentarze w kodzie, dokumentacja).
-- Generator ma pozostać **jednym plikiem HTML** bez kroku budowania.
+- **Tylko aplikacja na Maca (Apple Silicon).** Wersja przeglądarkowa i `Uruchom generator.command` zostały usunięte (decyzja właściciela). Silnik i interfejs to jeden plik `app/generator/karty.html` bez kroku budowania.
 - Nowe ikony do przykładów: tylko na wolnej licencji, z wpisem w `CREDITS.md` (game-icons.net = CC BY 3.0, podać autora i link do ikony).
 - Zmiany wyglądu kart istniejących projektów muszą być zgodne wstecz. Przed zmianą silnika porównaj zrzuty kart przed/po (różnice tylko w wygładzaniu krawędzi).
 
 ## Struktura
 
 ```
-karty.html                 cały generator (HTML + CSS + JS)
-Uruchom generator.command  bash → wbudowany Perl macOS: serwer HTTP 127.0.0.1:8765
 docs/                      dokumentacja użytkownika
 przyklady/NN-nazwa/        przykładowe projekty (Szablony/, CSV, ikony.csv, Ikony/)
 CREDITS.md                 autorzy ikon, licencje
-app/                       aplikacja na Maca (Electron) – patrz niżej
+app/                       aplikacja na Maca (Electron); app/generator/karty.html = silnik i interfejs
 .github/workflows/         budowanie aplikacji na macOS (GitHub Actions)
 ```
 
 ## Aplikacja na Maca (`app/`)
 
 - **`main.js`**:
-  - lokalny serwer (`serwer.js`) na losowym porcie; okno ładuje `http://127.0.0.1:port/karty.html`, więc `karty.html` działa w zwykłym trybie serwera;
+  - projekt otwiera się przez **plik szablonu** (.txt). Folder projektu to folder szablonu, a gdy szablon leży w `Szablony/` – folder nad nim. Ostatnie projekty z v0.1 (foldery) są zamieniane na pierwszy szablon w `Szablony/`;
+  - lokalny serwer (`serwer.js`) na losowym porcie podaje folder projektu; okno ładuje `http://127.0.0.1:port/karty.html?szablon=<ścieżka względna>`;
+  - eksport JPG: `eksport:start/plik/koniec` zapisuje do `<projekt>/Export/` (przykłady: pyta o folder);
   - `webRequest.onBeforeRequest` przekierowuje adresy jsDelivr (html-to-image, JSZip, SheetJS) i Google Fonts (EB Garamond + Patrick Hand) na `/.app/vendor/…` i `/.app/fonts/…`, więc aplikacja działa offline. Inne `CZCIONKA_GOOGLE` idą przez internet;
   - menu, ostatnie projekty (`userData/ustawienia.json`), przykłady (z `zasoby/przyklady`, tylko do odczytu);
   - `pdf:zapisz` → `printToPDF({ preferCSSPageSize: true })`.
-- **`preload.js`** wystawia `window.generatorApp`. `karty.html` po jego wykryciu pokazuje przycisk „Zapisz PDF”, „Otwórz projekt…” i ekran powitalny.
-- **`scripts/zasoby.js`** buduje `app/zasoby/` z `karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy:** `--test-pdf <folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza eksport JPG, kończy z kodem 0 albo 1.
-  - W tym środowisku: `cd app && npm ci && npm run zasoby && xvfb-run -a ./node_modules/.bin/electron --no-sandbox . --test-pdf ../przyklady/03-ogrod /tmp/x.pdf`.
+- **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
+- **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
+- **Tryb testowy:** `--test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+  - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
-  - `electron-builder --mac dir --arm64 --x64`, podpis ad hoc `codesign -s -`, testy przykładów na zbudowanej `.app`, ZIP przez `ditto`, artefakty;
-  - tag `v*` tworzy wydanie.
+  - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, `Generator-kart-mac.zip` przez `ditto`, artefakty;
+  - push do `main` → wydanie `najnowsza` (`--latest`); README linkuje `releases/latest/download/Generator-kart-mac.zip`;
+  - tag `v*` albo wydanie opublikowane w GitHubie → dołączony ZIP.
+  - Sesja Claude nie może tworzyć tagów ani wydań (blokada po stronie GitHuba) – robi to workflow albo właściciel.
   - Brak podpisu Apple Developer i notaryzacji: użytkownik odblokowuje aplikację raz (opis w `docs/aplikacja.md`).
-- Wersje: Electron i biblioteki przypięte w `app/package.json`. Wersje bibliotek muszą zgadzać się z adresami CDN w `karty.html`.
+- Wersje: Electron i biblioteki przypięte w `app/package.json`. Wersje bibliotek muszą zgadzać się z adresami CDN w `karty.html` (aplikacja je przekierowuje).
 
 ## Architektura `karty.html`
 
@@ -45,10 +47,7 @@ Sekcje w kolejności w pliku:
 
 1. **CSS**: wspólne zasady rysowania (`.karta`, `.el.tekst`, `.el.obrazek`, `.el.ikony`, `.ikona-kolor`), interfejs, `@media print`.
 2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, jakość JPG, rozmiar obrazków pcio). Nic, co dotyczy konkretnej gry. Paleta kolorów i plik pokoju pcio są w szablonach (`KOLOR`, `STÓŁ`).
-3. **Wczytywanie plików**, w trzech trybach:
-   - `showDirectoryPicker` (Chrome/Edge, z autoodświeżaniem po zmianie plików),
-   - `<input webkitdirectory>` (zapas),
-   - **tryb serwera**: strona otwarta przez `http(s)`. Pliki pobierane są `fetch`. Spis folderu `Szablony/` daje serwer (GET katalogu → JSON z nazwami). Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s. `?folder=ścieżka` wskazuje projekt w podfolderze. Bez szablonów w katalogu głównym pokazuje się lista `przyklady/`. `/.wersja` odróżnia nowy serwer od starego.
+3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
 5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
 6. **Szablony**:
@@ -62,7 +61,7 @@ Sekcje w kolejności w pliku:
    - jeden format strony dla całego wydruku (A4 pionowo albo rozmiar karty), bo Safari nie obsługuje nazwanych `@page` i zmniejszał wydruk z mieszanymi formatami;
    - karty poziome są obracane o 90°. Przed obrotem karta musi wystawać w lewo, nie w prawo, inaczej Chrome zmniejsza cały wydruk;
    - siatka jest wyśrodkowana, znaczniki cięcia na marginesie, po każdym arkuszu pełny arkusz rewersów.
-9. **Eksport JPG**: html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
+9. **Eksport JPG** (do `Export/` przez aplikację): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
 10. **Eksport playingcards.io** (`exportPcio`):
     - wczytuje `.pcio` (ZIP: `schemaVersion`, `widgets.json`, `userassets/`);
     - dla każdej talii z `PCIO = id` podmienia `cardTypes`, `faceTemplate` i `backTemplate`;
@@ -71,11 +70,10 @@ Sekcje w kolejności w pliku:
 
 ## Testowanie (środowisko Claude)
 
-- Chromium dla Playwright jest w `/opt/pw-browsers`.
-- CDN (jsDelivr, Google Fonts) jest zablokowany. Biblioteki instaluj z npm (`html-to-image`, `jszip`) i podmieniaj przez `page.route('https://cdn.jsdelivr.net/**', …)`. Czcionki wypadają na zastępcze.
-- Serwer testowy: `perl -x "Uruchom generator.command" 8766 <folder>`.
-- Tryb plikowy: `page.set_input_files('#wybierzStary', folder)`.
-- Druk: `buildPrint()`, potem `emulate_media('print')` i `page.pdf(prefer_css_page_size=True, print_background=True)`. Dokładność 1:1 sprawdzaj pomiarem znaczników cięcia na rastrze 300 dpi.
+- Główne narzędzie: tryb testowy aplikacji pod Xvfb (patrz wyżej). Electron z npm pobiera się poprawnie; czcionki i biblioteki są lokalne, więc wynik jest jak na Macu.
+- Dokładność druku 1:1: `pdftoppm -r 300` i pomiar znaczników cięcia (odstępy 63,0 / 88,0 mm).
+- Zrzuty pojedynczych kart (porównanie przed/po zmianie silnika): Playwright (Chromium w `/opt/pw-browsers`) na `http://127.0.0.1:<port>/karty.html?szablon=…` z serwerem `node -e "require('./app/serwer').utworzSerwer({zasoby:'app/zasoby',projekt:()=>'<folder>'}).listen(8766)"`. CDN jest zablokowany: podmieniaj biblioteki przez `page.route` na pliki z `app/node_modules`.
+- Pobieranie artefaktów i wydań GitHuba z tego środowiska nie działa (blob storage zablokowany).
 - Przed oddaniem zmiany przejrzyj wszystkie przykłady: zero Uwag i zero błędów strony.
 
 ## Pomysły / do zrobienia
@@ -90,6 +88,23 @@ Sekcje w kolejności w pliku:
    - wersja na Windows,
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
-3. Lista talii (`cardDeck`) z pliku `.pcio` w interfejsie, żeby nie trzeba było szukać `PCIO = id` w `widgets.json`.
-4. Wersja przeglądarkowa offline: biblioteki i czcionki obok `karty.html` zamiast z CDN (aplikacja już to ma).
-5. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
+3. **DMG zamiast ZIP** (uzgodnione, czeka na sygnał właściciela): `Generator-kart.dmg` z oknem „przeciągnij do Programów” (electron-builder `dmg`, podpis ad hoc aplikacji przed spakowaniem). Zaktualizować link w README i `docs/aplikacja.md` (`releases/latest/download/Generator-kart.dmg`).
+4. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
+5. **Edytor szablonów – etap 1** (zaplanowane, czeka na sygnał właściciela): panel edytora w aplikacji obok podglądu.
+   - kolorowanie składni szablonu (komendy, [Kolumny], {ikony}, opcje, komentarze),
+   - podświetlenie linii z błędami (te same komunikaty co w Uwagach),
+   - zapis ⌘S i podgląd kart na żywo podczas pisania,
+   - ochrona przed utratą pracy: pytanie o niezapisane zmiany przy zamykaniu i zmianie projektu, wykrywanie zmiany pliku na dysku.
+   - Etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu.
+6. **Podgląd: rewers nie rozjeżdża siatki** (zaplanowane, czeka na sygnał właściciela). Dziś `.rewers-podglad` (przerywana ramka z odstępem i podpis „Rewers” pod kartą) jest wyższy i przesunięty względem kart, więc pierwszy wiersz siatki się rozjeżdża. Rewers ma zajmować dokładnie miejsce zwykłej karty: podpis jako etykieta na karcie albo pozycjonowana absolutnie, wyróżnienie bez wpływu na układ.
+7. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
+8. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
+9. **Kolumny specjalne bez względu na pisownię** (zaplanowane): `Ilość`, `ID`, `Nazwa` rozpoznawane bez wielkości liter i polskich znaków (`ilosc`, `Id`…).
+10. **Nowy projekt…** (zaplanowane): menu tworzy folder gry z szablonem startowym, przykładowym CSV, `ikony.csv`, `Ikony/`, `Art/` i go otwiera.
+11. **Dependabot** (zaplanowane): `.github/dependabot.yml` dla `app/` (npm), PR-y z nową wersją Electrona budowane i testowane przez workflow.
+
+### Roadmapa (niski priorytet)
+
+- **Generator stołów playingcards.io**: tworzenie pokoju `.pcio` od zera z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania), zamiast tylko podmiany talii w istniejącym stole. Obejmuje też wybór talii z istniejącego `.pcio` z listy (zamiast ręcznego `PCIO = id`). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText.
+
+Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

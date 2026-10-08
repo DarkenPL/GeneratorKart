@@ -66,11 +66,11 @@ Narysowana na potrzeby projektu (`app/build/icon.svg`).
 
 ## Czcionki
 
-Generator używa czcionek **EB Garamond** i **Patrick Hand** (obie na licencji [SIL Open Font License 1.1](https://openfontlicense.org)). Wersja przeglądarkowa wczytuje je z Google Fonts. Aplikacja ma w środku ich kopie z pakietów [Fontsource](https://fontsource.org).
+Generator używa czcionek **EB Garamond** i **Patrick Hand** (obie na licencji [SIL Open Font License 1.1](https://openfontlicense.org)). Aplikacja ma w środku ich kopie z pakietów [Fontsource](https://fontsource.org).
 
 ## Biblioteki
 
-Wersja przeglądarkowa pobiera je z jsDelivr w chwili użycia. Aplikacja ma w środku ich kopie (nie są częścią repozytorium):
+Aplikacja ma w środku ich kopie (instalowane z npm przy budowaniu, nie są częścią repozytorium):
 
 - [html-to-image](https://github.com/bubkoo/html-to-image) – MIT
 - [JSZip](https://stuk.github.io/jszip/) – MIT lub GPLv3

@@ -12,7 +12,7 @@ const NM = path.join(APP, 'node_modules');
 const kopiuj = (z, d) => { fs.mkdirSync(path.dirname(d), { recursive: true }); fs.cpSync(z, d, { recursive: true }); };
 
 fs.rmSync(CEL, { recursive: true, force: true });
-kopiuj(path.join(REPO, 'karty.html'), path.join(CEL, 'karty.html'));
+kopiuj(path.join(APP, 'generator/karty.html'), path.join(CEL, 'karty.html'));
 kopiuj(path.join(REPO, 'przyklady'), path.join(CEL, 'przyklady'));
 
 // Biblioteki – te same wersje, które karty.html wczytuje z jsDelivr.

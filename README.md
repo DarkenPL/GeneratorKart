@@ -1,46 +1,35 @@
 # Generator kart
 
-Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a generator na bieżąco pokazuje gotowe karty. Z generatora możesz:
+**[⬇️ Pobierz aplikację na Maca](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip)** – najnowsza wersja, Mac z procesorem Apple (M1–M4) · [instalacja i pierwsze uruchomienie](docs/aplikacja.md)
 
-- **wydrukować karty** na A4 ze znacznikami cięcia (karty 1:1, np. 63×88 mm) i z rewersami do druku dwustronnego,
-- **wyeksportować obrazki JPG** każdej karty,
+Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a aplikacja na bieżąco pokazuje gotowe karty. Z aplikacji możesz:
+
+- **zapisać PDF do druku**: A4 ze znacznikami cięcia (karty 1:1, np. 63×88 mm) i z rewersami do druku dwustronnego, albo każda karta na osobnej stronie;
+- **wyeksportować obrazki JPG** każdej karty do folderu `Export` projektu;
 - **wgrać karty do pokoju [playingcards.io](https://playingcards.io)**, podmieniając talie w istniejącym stole.
 
 ![Przykładowe karty](docs/img/przyklady.png)
 
-Generator jest dostępny na dwa sposoby:
-- **aplikacja na Maca** z ikoną, działająca bez internetu i z zapisem PDF jednym kliknięciem ([instrukcja](docs/aplikacja.md), pobieranie w **Releases**);
-- **jeden plik `karty.html`**, który działa w przeglądarce, bez instalowania czegokolwiek (opis poniżej).
+## Szybki start
 
-## Szybki start (macOS)
+1. [Pobierz aplikację](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip), rozpakuj i przeciągnij **Generator kart** do folderu **Programy**.
+2. Za pierwszym razem kliknij ją **prawym przyciskiem → Otwórz**. Aplikacja nie ma podpisu Apple, więc trzeba ją raz odblokować ([szczegóły](docs/aplikacja.md)).
+3. Na ekranie powitalnym wybierz jeden z **przykładów** albo **Otwórz szablon…** swojej gry.
 
-1. Pobierz to repozytorium (**Code → Download ZIP**) i rozpakuj.
-2. Kliknij dwukrotnie **`Uruchom generator.command`**.
-   - Przy pierwszym uruchomieniu macOS może zapytać o zgodę: kliknij plik prawym przyciskiem → **Otwórz**.
-   - Otworzy się okno Terminala (to lokalny serwer, działa tylko na Twoim komputerze) i przeglądarka.
-3. W przeglądarce wybierz jeden z **przykładowych projektów**.
+Karty odświeżają się same po każdym zapisie szablonu albo pliku z kartami.
 
-Żeby zakończyć, zamknij okno Terminala.
+## Projekt gry
 
-### Własny projekt
-
-1. Utwórz folder gry i skopiuj do niego `karty.html` oraz `Uruchom generator.command`.
-2. Dodaj plik z kartami (np. `karty.csv`) i folder `Szablony/` z szablonem (zacznij od kopii przykładu).
-3. Uruchom `Uruchom generator.command` z folderu gry. Generator wczyta pliki z tego folderu i będzie odświeżać karty po każdym zapisie.
-
-Bez uruchamiania serwera możesz też otworzyć `karty.html` bezpośrednio w Chrome lub Edge i kliknąć **Wybierz folder projektu…**.
-
-## Jak to działa
+Projekt otwierasz, wskazując **plik szablonu** (`.txt`). Szablon mówi, skąd wziąć karty i obrazki. Ścieżki w szablonie liczą się od folderu projektu, czyli folderu, w którym leży szablon. Gdy szablon leży w podfolderze `Szablony`, folderem projektu jest folder nad nim.
 
 ```
 moja-gra/
-├── karty.html                  generator
-├── Uruchom generator.command   start (macOS)
 ├── karty.csv                   dane kart – jeden wiersz = jedna karta
 ├── ikony.csv                   znaczniki ikon, np. {drewno} → Ikony/drewno.svg
 ├── Ikony/, Art/                obrazki
-└── Szablony/
-    └── gra.txt                 wygląd kart
+├── Szablony/
+│   └── gra.txt                 wygląd kart – ten plik otwierasz w aplikacji
+└── Export/                     obrazki JPG z eksportu (tworzy aplikacja)
 ```
 
 **`karty.csv`**
@@ -66,9 +55,11 @@ TEKST     = 6, 64, 51, 9, [Nazwa], rozmiar=14, wyrównanie=środek
 TEKST     = 6, 51, 51, 12, "**Efekt:** [Efekt]"
 ```
 
-Wymiary są w milimetrach, `[Kolumna]` wstawia wartość z arkusza, `{znacznik}` wstawia ikonę. Za długi tekst zmniejsza się sam.
+Wymiary są w milimetrach, `[Kolumna]` wstawia wartość z arkusza, a `{znacznik}` wstawia ikonę. Za długi tekst zmniejsza się sam. Jeden szablon może opisywać kilka talii (sekcje `[TALIA …]`).
 
 ## Przykłady
+
+Są wbudowane w aplikację (menu **Plik → Przykłady**), a ich pliki leżą w repozytorium:
 
 | Projekt | Co pokazuje |
 |---|---|
@@ -78,25 +69,10 @@ Wymiary są w milimetrach, `[Kolumna]` wstawia wartość z arkusza, `{znacznik}`
 
 ## Dokumentacja
 
+- [Aplikacja: instalacja, skróty, wydania](docs/aplikacja.md)
 - [Komendy szablonów](docs/komendy.md) – pełna lista
 - [Nowa talia krok po kroku](docs/nowa-talia.md)
 - [Eksport do playingcards.io](docs/playingcards.md)
-- [Aplikacja na Maca](docs/aplikacja.md)
-
-### Druk
-
-Wybierz **Druk: A4 ze znacznikami cięcia** i kliknij **Drukuj / zapisz PDF**. W oknie drukowania ustaw:
-- papier A4,
-- **skalę 100%**,
-- **marginesy: brak**.
-
-Karty poziome są na arkuszu obracane, więc wszystkie strony mają ten sam format. Po każdym arkuszu kart jest arkusz rewersów. Najpewniejszy wynik daje Chrome.
-
-## Wymagania
-
-- Przeglądarka: Chrome lub Edge (pełne wsparcie), Safari i Firefox przez `Uruchom generator.command`.
-- Wersja przeglądarkowa potrzebuje internetu do eksportu JPG i playingcards.io oraz do plików XLSX, bo biblioteki pobierane są z jsDelivr. Aplikacja na Maca ma je w środku.
-- `Uruchom generator.command` korzysta z wbudowanego w macOS Perla. Nic nie trzeba instalować.
 
 ## Licencje
 
