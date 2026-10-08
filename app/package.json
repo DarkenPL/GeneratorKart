@@ -1,0 +1,59 @@
+{
+  "name": "generator-kart",
+  "productName": "Generator kart",
+  "version": "0.1.0",
+  "description": "Generator kart do gier – karty z arkusza CSV/XLSX i szablonu tekstowego",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "zasoby": "node scripts/zasoby.js",
+    "start": "npm run zasoby && electron .",
+    "dist": "npm run zasoby && electron-builder --mac --dir"
+  },
+  "devDependencies": {
+    "@fontsource/eb-garamond": "5.3.0",
+    "@fontsource/patrick-hand": "5.3.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "html-to-image": "1.11.11",
+    "jszip": "3.10.1",
+    "xlsx": "0.18.5"
+  },
+  "build": {
+    "appId": "io.github.generatorkart",
+    "productName": "Generator kart",
+    "copyright": "Generator kart",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "serwer.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "zasoby",
+        "to": "zasoby"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png",
+      "identity": null,
+      "target": [
+        "dir"
+      ],
+      "extendInfo": {
+        "CFBundleDevelopmentRegion": "pl"
+      }
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DarkenPL/GeneratorKart.git"
+  }
+}

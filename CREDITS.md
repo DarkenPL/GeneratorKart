@@ -60,14 +60,19 @@ Ikony autorstwa:
 | `Ikony/konewka.svg` | [watering-can](https://game-icons.net/1x1/delapouite/watering-can.html) | Delapouite |
 | `Ikony/koniczyna.svg` | [clover](https://game-icons.net/1x1/lorc/clover.html) | Lorc |
 
+## Ikona aplikacji
+
+Narysowana na potrzeby projektu (`app/build/icon.svg`).
+
 ## Czcionki
 
-Generator wczytuje z Google Fonts czcionki **EB Garamond** i **Patrick Hand** (obie na licencji [SIL Open Font License 1.1](https://openfontlicense.org)).
+Generator używa czcionek **EB Garamond** i **Patrick Hand** (obie na licencji [SIL Open Font License 1.1](https://openfontlicense.org)). Wersja przeglądarkowa wczytuje je z Google Fonts. Aplikacja ma w środku ich kopie z pakietów [Fontsource](https://fontsource.org).
 
 ## Biblioteki
 
-Pobierane z jsDelivr w chwili użycia (nie są częścią repozytorium):
+Wersja przeglądarkowa pobiera je z jsDelivr w chwili użycia. Aplikacja ma w środku ich kopie (nie są częścią repozytorium):
 
 - [html-to-image](https://github.com/bubkoo/html-to-image) – MIT
 - [JSZip](https://stuk.github.io/jszip/) – MIT lub GPLv3
 - [SheetJS (xlsx)](https://sheetjs.com) – Apache 2.0
+- [Electron](https://www.electronjs.org) – MIT (aplikacja na Maca)

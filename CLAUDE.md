@@ -18,7 +18,26 @@ Uruchom generator.command  bash → wbudowany Perl macOS: serwer HTTP 127.0.0.1:
 docs/                      dokumentacja użytkownika
 przyklady/NN-nazwa/        przykładowe projekty (Szablony/, CSV, ikony.csv, Ikony/)
 CREDITS.md                 autorzy ikon, licencje
+app/                       aplikacja na Maca (Electron) – patrz niżej
+.github/workflows/         budowanie aplikacji na macOS (GitHub Actions)
 ```
+
+## Aplikacja na Maca (`app/`)
+
+- **`main.js`**:
+  - lokalny serwer (`serwer.js`) na losowym porcie; okno ładuje `http://127.0.0.1:port/karty.html`, więc `karty.html` działa w zwykłym trybie serwera;
+  - `webRequest.onBeforeRequest` przekierowuje adresy jsDelivr (html-to-image, JSZip, SheetJS) i Google Fonts (EB Garamond + Patrick Hand) na `/.app/vendor/…` i `/.app/fonts/…`, więc aplikacja działa offline. Inne `CZCIONKA_GOOGLE` idą przez internet;
+  - menu, ostatnie projekty (`userData/ustawienia.json`), przykłady (z `zasoby/przyklady`, tylko do odczytu);
+  - `pdf:zapisz` → `printToPDF({ preferCSSPageSize: true })`.
+- **`preload.js`** wystawia `window.generatorApp`. `karty.html` po jego wykryciu pokazuje przycisk „Zapisz PDF”, „Otwórz projekt…” i ekran powitalny.
+- **`scripts/zasoby.js`** buduje `app/zasoby/` z `karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
+- **Tryb testowy:** `--test-pdf <folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza eksport JPG, kończy z kodem 0 albo 1.
+  - W tym środowisku: `cd app && npm ci && npm run zasoby && xvfb-run -a ./node_modules/.bin/electron --no-sandbox . --test-pdf ../przyklady/03-ogrod /tmp/x.pdf`.
+- **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
+  - `electron-builder --mac dir --arm64 --x64`, podpis ad hoc `codesign -s -`, testy przykładów na zbudowanej `.app`, ZIP przez `ditto`, artefakty;
+  - tag `v*` tworzy wydanie.
+  - Brak podpisu Apple Developer i notaryzacji: użytkownik odblokowuje aplikację raz (opis w `docs/aplikacja.md`).
+- Wersje: Electron i biblioteki przypięte w `app/package.json`. Wersje bibliotek muszą zgadzać się z adresami CDN w `karty.html`.
 
 ## Architektura `karty.html`
 
@@ -66,13 +85,11 @@ Sekcje w kolejności w pliku:
    - Numer karty to kolumna `ID` (gdy brak: numer wiersza). Kopie numerowane zawsze, od `_1`, według `Ilość`.
    - Rewers: `NazwaProjektu_NazwaTalii_rewers.jpg`. ZIP nazwany nazwą projektu.
    - Nazwy bez polskich znaków i spacji (`Złota Wyprawa` → `ZlotaWyprawa`).
-2. **Aplikacja na Maca** (rekomendacja: Electron):
-   - własna ikona, brak Terminala, ten sam silnik co testy;
-   - przycisk „Zapisz PDF” przez `printToPDF` w dokładnym rozmiarze;
-   - czcionki i biblioteki w środku, więc działa offline;
-   - pamięta ostatnie projekty;
-   - budowanie i podpisywanie przez GitHub Actions na macOS;
-   - `karty.html` zostaje jako wersja przeglądarkowa ze wspólnym kodem.
+2. **Aplikacja na Maca**: pierwsza wersja zrobiona (`app/`). Dalej:
+   - automatyczne aktualizacje,
+   - wersja na Windows,
+   - podpis i notaryzacja Apple (wymaga konta Apple Developer),
+   - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 3. Lista talii (`cardDeck`) z pliku `.pcio` w interfejsie, żeby nie trzeba było szukać `PCIO = id` w `widgets.json`.
-4. Biblioteki (html-to-image, JSZip, SheetJS) i czcionki lokalnie zamiast z CDN, żeby generator działał offline.
+4. Wersja przeglądarkowa offline: biblioteki i czcionki obok `karty.html` zamiast z CDN (aplikacja już to ma).
 5. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
