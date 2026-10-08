@@ -3,6 +3,7 @@
 ;  Ikony {drewno}, {kamien}… są zdefiniowane w ikony.csv.
 ; ═══════════════════════════════════════════════════════════════════
 
+PROJEKT = Kuźnia                           ; nazwa gry w plikach JPG i PDF
 NAZWA = Przedmioty
 DANE  = przedmioty.csv
 KARTA = 63, 88

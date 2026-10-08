@@ -27,6 +27,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 
 | Komenda | Opis |
 |---|---|
+| `PROJEKT = Złota Wyprawa` | Nazwa projektu (gry): w nazwach plików JPG i PDF. Bez tej komendy – nazwa pliku szablonu. Zwykle w części wspólnej szablonu. |
 | `NAZWA = Przedmioty` | Nazwa talii (podgląd, pliki JPG, eksport). Domyślnie nazwa z `[TALIA …]` albo z nazwy pliku. |
 | `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. |
 | `KARTA = 63, 88, zaokrąglenie=3, obwódka=0.7, kolor_obwódki=#222222` | Szerokość i wysokość karty w mm. Opcjonalnie zaokrąglone rogi i obwódka całej karty (rysowana na wierzchu). W sekcji `[REWERS]` ustawia tylko rogi i obwódkę rewersu; rozmiar jest zawsze jak awersu. |
@@ -40,7 +41,8 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 - Separator to `;` albo `,` (wykrywany sam). Kodowanie UTF-8.
 - W pliku XLSX czytany jest pierwszy arkusz.
 - Kolumna **`Ilość`** określa liczbę kopii karty: `0` pomija kartę, a brak kolumny oznacza 1.
-- Kolumna **`ID`** służy jako numer karty (podgląd, nazwy plików JPG).
+- Kolumna **`ID`** służy jako numer karty (podgląd, nazwy plików JPG), a **`Nazwa`** jako podpis karty w podglądzie i uwagach.
+- Nazwy tych trzech kolumn można pisać dowolnie: bez polskich znaków i bez względu na wielkość liter (`ilosc`, `Id`, `NAZWA`).
 - Nowa linia w komórce to nowa linia na karcie.
 
 ### Ikony – `ikony.csv`

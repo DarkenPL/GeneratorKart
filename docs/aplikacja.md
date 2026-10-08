@@ -2,7 +2,7 @@
 
 ## Pobieranie
 
-**[Pobierz najnowszą wersję](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart-mac.zip)** (`Generator-kart-mac.zip`).
+**[Pobierz najnowszą wersję](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg)** (`Generator-kart.dmg`).
 
 Aplikacja działa na Macach z procesorem Apple (M1–M4). Jaki masz procesor, sprawdzisz w  → **Ten Mac** (pozycja „Układ”).
 
@@ -10,7 +10,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 
 ## Instalacja i pierwsze uruchomienie
 
-1. Rozpakuj ZIP i przeciągnij **Generator kart** do folderu **Programy**.
+1. Otwórz pobrany plik `Generator-kart.dmg` i w okienku przeciągnij **Generator kart** na folder **Programy**. Potem możesz go wysunąć (w Finderze ⏏) i skasować.
 2. Aplikacja nie jest podpisana certyfikatem Apple (wymaga płatnego konta deweloperskiego), więc przy pierwszym uruchomieniu macOS ją zablokuje. Odblokowujesz ją raz:
    - kliknij aplikację **prawym przyciskiem → Otwórz → Otwórz**,
    - albo, jeśli macOS pokaże tylko „Gotowe/Przenieś do Kosza”: otwórz **Ustawienia systemowe → Prywatność i ochrona**, przewiń w dół i kliknij **Otwórz mimo to** przy „Generator kart”.
@@ -38,7 +38,11 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 | ⌘E | Eksport JPG do folderu `Export` projektu |
 | ⌘R | Odśwież karty |
 
-- **Eksport JPG** zapisuje każdą kartę (i rewersy) jako osobny plik w folderze `Export` obok szablonu albo folderu `Szablony`. Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
+- **Eksport JPG** zapisuje każdą kartę (i rewersy) jako osobny plik w folderze `Export` obok szablonu albo folderu `Szablony`.
+  - Nazwy: `NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg`, np. `ZlotaWyprawa_Przedmioty_7_2.jpg`; rewers: `ZlotaWyprawa_Przedmioty_rewers.jpg`.
+  - Nazwa projektu pochodzi z komendy `PROJEKT = …` w szablonie, a bez niej z nazwy pliku szablonu. Numer karty to kolumna `ID` (gdy jej brak – numer wiersza), a numer kopii liczy się od 1 według kolumny `Ilość`.
+  - Polskie znaki i spacje są pomijane (`Karty Wpływu` → `KartyWplywu`).
+  - Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
 - **Plik `.pcio`** z eksportu do playingcards.io zapisuje się domyślnie w folderze projektu.
 - **Przykłady** są tylko do odczytu. Eksport JPG pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
 
@@ -63,4 +67,4 @@ npm run dist       # budowanie .app (na macOS)
 1. Ustaw `version` w `app/package.json`.
 2. Na GitHubie: **Releases → Draft a new release**, tag np. `v0.2.0` (**Create new tag**), **Publish release**.
 
-Workflow dołączy do wydania plik ZIP po kilku minutach.
+Workflow dołączy do wydania plik DMG po kilku minutach.

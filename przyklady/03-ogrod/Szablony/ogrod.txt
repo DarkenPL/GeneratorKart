@@ -5,6 +5,7 @@
 ; ═══════════════════════════════════════════════════════════════════
 
 ; ── Wspólne ───────────────────────────────────────────────────────
+PROJEKT = Ogród                           ; nazwa gry w plikach JPG i PDF
 KARTA    = 63, 88
 CZCIONKA = "EB Garamond, Georgia, serif", 10, kolor=#1d1b19
 

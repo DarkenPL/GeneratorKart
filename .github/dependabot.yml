@@ -1,0 +1,24 @@
+# Automatyczne propozycje aktualizacji (PR budowany i testowany przez workflow „Aplikacja macOS”).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Electron osobno – to on niesie poprawki bezpieczeństwa silnika Chrome.
+      electron:
+        patterns: ['electron']
+      narzedzia:
+        patterns: ['electron-builder']
+    ignore:
+      # Te wersje muszą zgadzać się z adresami CDN w app/generator/karty.html – podbijać ręcznie.
+      - dependency-name: html-to-image
+      - dependency-name: jszip
+      - dependency-name: xlsx
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
