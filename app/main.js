@@ -150,6 +150,7 @@ async function pdfDoPliku(webContents, plik) {
 }
 
 ipcMain.handle('projekt:info', () => ({
+  auto: ustawienia().auto !== false,
   szablon, sciezka: projekt, nazwa: nazwaProjektu(), przyklad: jestPrzykladem(szablon),
 }));
 ipcMain.handle('projekt:otworz', () => wybierzSzablon());
@@ -213,6 +214,18 @@ ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
 // Jeden plik JSON na szablon w danych aplikacji – folder projektu zostaje czysty, działa też dla przykładów.
 const plikOdciskow = () => szablon && path.join(app.getPath('userData'), 'odciski',
   require('crypto').createHash('sha1').update(szablon).digest('hex').slice(0, 16) + '.json');
+// Ostatnie ustawienia okien druku i eksportu – osobno dla każdego szablonu.
+const plikUstawienEksportu = () => szablon && path.join(app.getPath('userData'), 'eksport',
+  require('crypto').createHash('sha1').update(szablon).digest('hex').slice(0, 16) + '.json');
+ipcMain.handle('eksport:ustawienia', () => {
+  try { return JSON.parse(fs.readFileSync(plikUstawienEksportu(), 'utf8')); } catch (e) { return {}; }
+});
+ipcMain.handle('eksport:zapiszUstawienia', (e, dane) => {
+  const p = plikUstawienEksportu(); if (!p) return false;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(dane || {}, null, 1));
+  return true;
+});
 ipcMain.handle('druk:odciski', () => {
   try { return JSON.parse(fs.readFileSync(plikOdciskow(), 'utf8')); } catch (e) { return null; }
 });
@@ -271,11 +284,17 @@ function zbudujMenu() {
         { label: 'Pokaż folder projektu w Finderze', enabled: !!projekt, click: () => shell.openPath(projekt) },
         { type: 'separator' },
         { label: 'Zapisz szablon', accelerator: 'CmdOrCtrl+S', enabled: !!szablon && !jestPrzykladem(szablon), click: wStronie('window.zapiszSzablon && zapiszSzablon()') },
-        { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!projekt, click: wStronie('window.zapiszPdf && zapiszPdf()') },
         { label: 'Historia wersji…', enabled: !!projekt, click: wStronie('window.pokazHistorie && pokazHistorie(true)') },
-        { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("document.getElementById('drukuj').click()") },
-        { label: 'Eksport JPG do folderu Export', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie("document.getElementById('png').click()") },
-        { label: 'Eksport do playingcards.io…', enabled: !!projekt, click: wStronie("document.getElementById('pcio').click()") },
+        { type: 'separator' },
+        { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("window.oknoDruku && oknoDruku('drukuj')") },
+        { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!projekt, click: wStronie("window.oknoDruku && oknoDruku('pdf')") },
+        {
+          label: 'Eksport',
+          submenu: [
+            { label: 'Obrazki kart (JPG / PNG)…', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie('window.oknoObrazkow && oknoObrazkow()') },
+            { label: 'Pokój playingcards.io…', enabled: !!projekt, click: wStronie('window.oknoPcio && oknoPcio()') },
+          ],
+        },
         { type: 'separator' },
         { role: 'close', label: 'Zamknij okno' },
       ],
@@ -285,7 +304,13 @@ function zbudujMenu() {
       label: 'Widok',
       submenu: [
         { label: 'Edytor szablonu', accelerator: 'Alt+CmdOrCtrl+E', enabled: !!szablon, click: wStronie('window.przelaczEdytor && przelaczEdytor()') },
-        { label: 'Odśwież karty', accelerator: 'CmdOrCtrl+R', click: wStronie("document.getElementById('odswiez').click()") },
+        { label: 'Raport projektu', enabled: !!projekt, click: wStronie('window.pokazRaport && pokazRaport(true)') },
+        { type: 'separator' },
+        { label: 'Odśwież karty', accelerator: 'CmdOrCtrl+R', click: wStronie('window.odswiezKarty && odswiezKarty()') },
+        { label: 'Odświeżaj automatycznie', type: 'checkbox', checked: ustawienia().auto !== false, click: (mi) => {
+          const u = ustawienia(); u.auto = mi.checked; zapiszUstawienia(u);
+          wStronie(`window.ustawAuto && ustawAuto(${mi.checked})`)();
+        } },
         { type: 'separator' },
         { role: 'resetZoom', label: 'Rzeczywisty rozmiar' },
         { role: 'zoomIn', label: 'Powiększ' },
@@ -372,8 +397,8 @@ async function trybTestowy(folder, wynik) {
   // Eksport JPG do folderu Export (tylko poza przykładami – przykłady pytają o folder).
   let eksport = '';
   if (!jestPrzykladem(szablon)) {
-    await wc.executeJavaScript("document.getElementById('png').click()");
-    for (let i = 0; i < 240 && !/^(Zapisano|Eksport JPG nie)/.test(eksport); i++) {
+    wc.executeJavaScript('eksportObrazkow({})');
+    for (let i = 0; i < 240 && !/^(Zapisano|Eksport obrazków nie)/.test(eksport); i++) {
       await czekaj(500);
       eksport = await wc.executeJavaScript("document.getElementById('status').textContent").catch(() => '');
     }
@@ -406,11 +431,11 @@ async function trybTestowy(folder, wynik) {
   let wybor = null;
   if (process.argv.includes('--test-edytor')) {
     wybor = await wc.executeJavaScript(`(() => {
-      wybierzKarty(2); document.getElementById('szkic').checked = true; buildPrint();
+      wybierzKarty(2); buildPrint({ szkic: true, karty: kartyEksportu({ ktore: 'zaznaczone' }) });
       const karty = document.querySelectorAll('#druk .karta:not(.rewers)').length;
       const tlo = getComputedStyle(document.querySelector('#druk .karta')).backgroundColor;
       const pasek = document.getElementById('wybor').hidden;
-      wyczyscWybor(); document.getElementById('szkic').checked = false;
+      wyczyscWybor();
       return { karty, tlo, pasek };
     })()`);
     wybor.raport = await wc.executeJavaScript(`raportProjektu().then((h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText; })`).catch((e) => 'BŁĄD ' + e.message);
@@ -431,7 +456,7 @@ async function trybTestowy(folder, wynik) {
     const poZmianie = await liczby();
     const porownanie = await js("pokazPorownanie(true); document.querySelectorAll('#porownanie .para').length");
     await js('pokazPorownanie(false)');
-    await js("document.getElementById('tylkoZmienione').checked = true; buildPrint(); document.getElementById('tylkoZmienione').checked = false");
+    await js("buildPrint({ karty: kartyEksportu({ ktore: 'zmienione' }) })");
     const doDruku = await js("document.querySelectorAll('#druk .karta:not(.rewers)').length");
     await wpisz(oryginal); await czekaj(3500);
     const poPowrocie = await liczby();
@@ -481,6 +506,31 @@ async function trybTestowy(folder, wynik) {
     const zip = pcio && pcio.plik && fs.existsSync(pcio.plik) ? fs.readFileSync(pcio.plik) : null;
     pcio.ok = !!zip && zip.slice(0, 2).toString() === 'PK' && pcio.holdery === pcio.talieWidok && pcio.karty === pcio.kartyWidok;
   }
+  // Okna eksportu (--test-edytor, poza przykładami): PNG 300 dpi przez okno, zapamiętane ustawienia, okno druku.
+  let okna = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const exportDir = path.join(projekt, 'Export');
+    const przed = new Set(fs.existsSync(exportDir) ? fs.readdirSync(exportDir) : []);
+    await js(`(async () => { const p = oknoObrazkow(); const f = document.getElementById('oknoForm');
+      f.querySelector('[name=format][value=png]').checked = true; f.querySelector('[name=dpi][value="300"]').checked = true;
+      f.querySelector('[name=rewersy]').checked = false; document.querySelector('#oknoPrzyciski .domyslny').click(); await p; })()`);
+    const png = fs.readdirSync(exportDir).filter((n) => n.endsWith('.png') && !przed.has(n));
+    const szer = png.length ? fs.readFileSync(path.join(exportDir, png[0])).readUInt32BE(16) : 0;
+    const zapamietane = await js(`(async () => { const p = otworzOkno('obrazki'); const f = document.getElementById('oknoForm');
+      const r = { format: f.querySelector('[name=format]:checked').value, dpi: f.querySelector('[name=dpi]:checked').value, rewersy: f.querySelector('[name=rewersy]').checked };
+      document.querySelector('#oknoPrzyciski button').click(); await p; return r; })()`);
+    const plik = await js('window.generatorApp.eksportUstawienia()');
+    const druk = await js(`(() => { window.__okno = otworzOkno('druk', 'drukuj'); const f = document.getElementById('oknoForm');
+      return { pola: ['uklad', 'rewersy', 'szkic', 'ktore'].filter((n) => f.querySelector('[name=' + n + ']')).length, domyslny: document.querySelector('#oknoPrzyciski .domyslny').textContent }; })()`);
+    await czekaj(300);
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-okno.png', (await okno.capturePage()).toPNG());
+    await js("document.getElementById('okno').dispatchEvent(new Event('cancel')); window.__okno");
+    const kartyWidok = await js("document.querySelectorAll('#podglad .karta:not(.rewers)').length");
+    okna = { png: png.length, kartyWidok, szer, zapamietane, plik: plik && plik.obrazki, druk };
+    okna.ok = png.length === kartyWidok && szer >= 700 && zapamietane.format === 'png' && zapamietane.dpi === '300' && !zapamietane.rewersy
+      && plik && plik.obrazki && plik.obrazki.format === 'png' && druk.pola === 4 && druk.domyslny === 'Drukuj…';
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
@@ -488,8 +538,8 @@ async function trybTestowy(folder, wynik) {
   const plik = Menu.getApplicationMenu()?.items.find((i) => i.label === 'Plik');
   const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
   const ok = menuOk && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, menu, pdf: wynik, ok }) + '\n');
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, menu, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 

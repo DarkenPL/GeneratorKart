@@ -5,7 +5,7 @@
 Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a aplikacja na bieżąco pokazuje gotowe karty. Z aplikacji możesz:
 
 - **zapisać PDF do druku**: A4 ze znacznikami cięcia (karty 1:1, np. 63×88 mm) i z rewersami do druku dwustronnego, albo każda karta na osobnej stronie;
-- **wyeksportować obrazki JPG** każdej karty do folderu `Export` projektu;
+- **wyeksportować obrazki** każdej karty (JPG albo PNG, 150 lub 300 dpi) do folderu `Export` projektu;
 - **przygotować pokój [playingcards.io](https://playingcards.io)**: każda talia jako osobny stos, gotowy do dalszego ustawienia.
 
 ![Przykładowe karty](docs/img/przyklady.png)

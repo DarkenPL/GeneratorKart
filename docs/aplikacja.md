@@ -40,19 +40,23 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    - przykłady są w edytorze tylko do odczytu.
 
    Szablon nadal możesz edytować w dowolnym innym edytorze tekstu.
-4. **Druk wybranych kart:** kliknij kartę w podglądzie, żeby ją zaznaczyć (niebieska ramka), Shift+klik zaznacza zakres. Gdy coś jest zaznaczone, PDF i druk obejmują tylko zaznaczone karty (z rewersami), a w pasku widać ich liczbę i przycisk **Wyczyść**. Zaznaczenie zostaje po odświeżeniu kart. Eksport JPG zawsze obejmuje wszystkie karty.
-5. **Szkic** (pole w pasku): PDF i druk bez teł i obrazków, z czarnym tekstem i ikonami w szarościach – oszczędza tusz przy prototypach. Podgląd na ekranie się nie zmienia.
-6. **Zmienione karty:** po każdym zapisie PDF aplikacja zapamiętuje wygląd wydrukowanych kart. Potem karty zmienione od tamtej pory mają **pomarańczową** obwódkę, a nowe **zieloną**; w pasku widać ich liczbę.
-   - **Tylko zmienione** – PDF i druk obejmują tylko zmienione i nowe karty (można to łączyć z zaznaczaniem). Nazwa PDF dostaje „– zmienione”.
-   - **Porównaj** – pokazuje każdą zmienioną kartę „przed” (z ostatniego PDF) i „teraz”.
-   - Zmianą jest wszystko, co widać na karcie: tekst z danych, szablon, obrazek. Karty z częściowego wydruku są zapamiętywane pojedynczo, więc „zmienione” znaczy „zmienione od ostatniego wydruku tej karty”. Systemowe okno drukowania (⌘P) nie zapamiętuje kart, bo nie wiadomo, czy wydruk się udał.
+4. **Pasek** nad kartami: **Edytor**, **Historia**, **Raport**, wybór talii w podglądzie i **Eksport obrazków…**. Pod nim wiersz stanu: liczba kart, karty zmienione od ostatniego PDF i zaznaczone karty. Pozostałe polecenia są w menu **Plik** (druk, PDF, eksport do playingcards.io) i **Widok** (odświeżanie, raport).
+5. **Okna druku i eksportu.** Eksport obrazków (⌘E), druk (⌘P), zapis PDF (⇧⌘S) i pokój playingcards.io otwierają okno z opcjami. Okno **pamięta ostatnie ustawienia osobno dla każdego projektu**. Enter zatwierdza, Esc anuluje.
+   - **Obrazki:** rozdzielczość 150 dpi (ekran, playtesty online) albo 300 dpi (druk, drukarnie), format JPG albo PNG (przezroczyste zaokrąglone rogi), które karty, talie, rewersy jako osobne pliki.
+   - **Druk i PDF:** układ (A4 ze znacznikami cięcia albo każda karta na osobnej stronie), rewersy, **szkic** (bez teł i obrazków, czarny tekst – oszczędza tusz), które karty, talie; przyciski **Drukuj…** i **Zapisz PDF**.
+   - **playingcards.io:** rozdzielczość i talie ([opis](playingcards.md)).
+   - **Które karty:** wszystkie, tylko zaznaczone albo tylko zmienione od ostatniego PDF.
+6. **Zaznaczanie i zmienione karty:**
+   - Kliknij kartę w podglądzie, żeby ją zaznaczyć (niebieska ramka), Shift+klik zaznacza zakres. Liczbę zaznaczonych i przycisk **Wyczyść** widać w wierszu stanu. Zaznaczenie zostaje po odświeżeniu kart.
+   - Po każdym zapisie PDF aplikacja zapamiętuje wygląd wydrukowanych kart. Karty zmienione od tamtej pory mają **pomarańczową** obwódkę, a nowe **zieloną**. **Porównaj** pokazuje każdą zmienioną kartę „przed” (z ostatniego PDF) i „teraz”.
+   - Zmianą jest wszystko, co widać na karcie: tekst z danych, szablon, obrazek. Karty z częściowego wydruku są zapamiętywane pojedynczo, więc „zmienione” znaczy „zmienione od ostatniego wydruku tej karty”. Druk przez systemowe okno drukowania nie zapamiętuje kart, bo nie wiadomo, czy wydruk się udał.
 7. **Historia wersji** (przycisk **Historia** albo **Plik → Historia wersji…**): aplikacja sama zapisuje kopię szablonu i plików z kartami (CSV, XLSX) przy każdej zmianie – z edytora i z innych programów – w ukrytym folderze `.historia` projektu.
    - Kopia powstaje tylko wtedy, gdy plik naprawdę się zmienił. Starsze kopie są przerzedzane: z ostatniej godziny zostaje jedna na 5 minut, z ostatniej doby jedna na godzinę, z miesiąca jedna na dzień, starsze jedna na tydzień.
    - Na zawsze zostają **punkty**: otwarcie projektu (10 ostatnich), stan sprzed przywrócenia i punkty nazwane przez Ciebie (pole „np. przed playtestem 3” → **Zapisz punkt**).
    - Przy każdej wersji: **Zmiany** (różnice linii względem obecnej wersji), **Pokaż karty** (podgląd kart z tamtej wersji; obrazki są obecne, bo nie są kopiowane) i **Przywróć…** (drugie kliknięcie potwierdza). Przed przywróceniem obecny stan trafia do historii, więc przywrócenie da się cofnąć.
    - Przykłady nie mają historii. Folder `.historia` możesz usunąć – historia zacznie się od nowa.
    - **Z innych programów** (np. gdy Claude zmienia pliki gry): punkt z opisem można dodać z konsoli – `node historia-cli.js punkt <folder projektu> "opis"` (także `lista` i `przywroc <nr>`; plik `app/historia-cli.js` z repozytorium, wymaga Node 18+) – albo przez **skrzynkę**: folder `.historia/przychodzace/<nazwa>/` z kopiami plików (ścieżki jak w projekcie, np. `Szablony/gra.txt`) i plikiem `opis.txt`. Aplikacja w ciągu kilku sekund zamienia go w punkt historii z tym opisem i usuwa folder. Nazwa folderu w formie `2026-10-09T12-30-00` ustala datę punktu.
-8. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
+8. **Raport** (przycisk w pasku albo **Widok → Raport projektu**) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
 9. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
@@ -60,19 +64,19 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 | ⌘N | Nowy projekt |
 | ⌘O | Otwórz szablon |
 | ⌘S | Zapisz szablon (z edytora) |
-| ⇧⌘S | Zapisz PDF (A4 ze znacznikami albo „każda karta na osobnej stronie” – wg wyboru w pasku) |
+| ⌘E | Eksport obrazków (okno opcji) |
+| ⌘P | Drukuj (okno opcji, potem systemowe okno drukowania) |
+| ⇧⌘S | Zapisz PDF (okno opcji) |
 | ⌥⌘E | Pokaż/ukryj edytor szablonu |
-| ⌘P | Drukuj (systemowe okno drukowania) |
-| ⌘E | Eksport JPG do folderu `Export` projektu |
-| ⌘R | Odśwież karty |
+| ⌘R | Odśwież karty (automatyczne odświeżanie: **Widok → Odświeżaj automatycznie**) |
 
-- **Eksport JPG** zapisuje każdą kartę (i rewersy) jako osobny plik w folderze `Export` obok szablonu albo folderu `Szablony`.
-  - Nazwy: `NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg`, np. `ZlotaWyprawa_Przedmioty_7_2.jpg`; rewers: `ZlotaWyprawa_Przedmioty_rewers.jpg`.
+- **Eksport obrazków** zapisuje każdą kartę (i rewersy) jako osobny plik JPG albo PNG w folderze `Export` obok szablonu albo folderu `Szablony`.
+  - Nazwy: `NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg` (albo `.png`), np. `ZlotaWyprawa_Przedmioty_7_2.jpg`; rewers: `ZlotaWyprawa_Przedmioty_rewers.jpg`.
   - Nazwa projektu pochodzi z komendy `PROJEKT = …` w szablonie, a bez niej z nazwy pliku szablonu. Numer karty to kolumna `ID` (gdy jej brak – numer wiersza), a numer kopii liczy się od 1 według kolumny `Ilość`.
   - Polskie znaki i spacje są pomijane (`Karty Wpływu` → `KartyWplywu`).
   - Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
 - **Eksport do playingcards.io** zapisuje nowy pokój (`NazwaProjektu – playingcards.pcio`) w folderze projektu – każda talia jako osobny stos ([opis](playingcards.md)).
-- **Przykłady** są tylko do odczytu. Eksport JPG pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
+- **Przykłady** są tylko do odczytu. Eksport obrazków pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
 
 ## Dla deweloperów
 

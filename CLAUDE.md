@@ -37,10 +37,10 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - Podgląd na żywo: `podgladNaZywo()` podmienia szablon w `files` i woła `build()`; nowe pliki z szablonu dociąga `loadFromServer({ tylkoNowe: true })`.
   - Stan: `ED.dysk` to ostatnia wersja z dysku. `edytorZDysku()` przy każdym wczytaniu decyduje: brak zmian → tekst z dysku; niezapisane zmiany → tekst edytora i baner konfliktu, gdy dysk się zmienił.
   - Zapis: IPC `edytor:zapisz`. `edytor:zmiany` ustawia `setDocumentEdited`. Main pyta o zapis (`czyMoznaPorzucic`) przy zamknięciu okna, ⌘Q, otwieraniu innego szablonu i nowym projekcie.
-  - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
+  - ⌘S = zapisz szablon, ⇧⌘S = okno PDF, ⌘P = okno druku, ⌘E = okno eksportu obrazków, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione” i historię wersji ze skrzynką; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione”, historię wersji ze skrzynką i okna eksportu; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`, `-okno.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -56,7 +56,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
 Sekcje w kolejności w pliku:
 
 1. **CSS**: wspólne zasady rysowania (`.karta`, `.el.tekst`, `.el.obrazek`, `.el.ikony`, `.ikona-kolor`), interfejs, `@media print`.
-2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, rozdzielczość i jakość JPG – też dla obrazków playingcards.io). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
+2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, domyślna rozdzielczość i jakość JPG). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
 3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `build()` kolejkuje przebudowy (`KOLEJKA_BUDOWY` → `zbudujTeraz`), bo równoległe przebudowy unieważniały sobie adresy blob: obrazków; eksporty (JPG, playingcards.io) idą przez `naWylacznosc()`: czekają na trwające przebudowy, a nowe przebudowy czekają na koniec eksportu (`KONIEC_EKSPORTU`); `EKSPORT_TRWA` wstrzymuje też odświeżanie. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
 5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. Obrazki z folderu `Ikony/`/`Icons/` (listing JSON z serwera, `znajdzIkony`) rejestrują się same jako `{nazwa}`; `ikony.csv` je nadpisuje. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
@@ -70,11 +70,11 @@ Sekcje w kolejności w pliku:
    - Pola wbudowane `[_x]` czyta `cell()` z `ctx.wbudowane`; gdy szablon używa `[_numer]`/`[_kopia]`, każda kopia jest renderowana osobno.
    - `jeśli=` porównuje wartości bez względu na wielkość liter, a liczby liczbowo (001 = 1).
 7. **Dopasowanie tekstu** (`fitAll`): pole zmniejsza się co 0,04 do `min`. Pola z `grupa=` skalują się razem: wspólna minimalna skala dla całej talii, krok 0,02, a kolizja to odstęp poniżej 2 mm. Pole, które się nie mieści, dostaje klasę `.za-dlugi` (czerwona ramka i uwaga).
-8. **Druk** (`buildPrint`):
+8. **Druk** (`buildPrint(o)` – opcje z okna Druk i PDF):
    - jeden format strony dla całego wydruku (A4 pionowo albo rozmiar karty), bo Safari nie obsługuje nazwanych `@page` i zmniejszał wydruk z mieszanymi formatami;
    - karty poziome są obracane o 90°. Przed obrotem karta musi wystawać w lewo, nie w prawo, inaczej Chrome zmniejsza cały wydruk;
    - siatka jest wyśrodkowana, znaczniki cięcia na marginesie, po każdym arkuszu pełny arkusz rewersów.
-9. **Eksport JPG** (do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
+9. **Eksport obrazków** (`eksportObrazkow(o)`, JPG/PNG, 150/300 dpi; do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg|png`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
 10. **Eksport playingcards.io** (`exportPcio`): nowy pokój od zera – ZIP (`schemaVersion` 8, `widgets.json`, `userassets/`); na talię `holder` (label = nazwa talii, karta + ramka 4) z `cardDeck` (`parent` = holder, dłuższy bok karty 160, `faceTemplate` obraz dynamiczny, `backTemplate` obraz rewersu albo kolor + nazwa) i kartami zakrytymi w stosie. Holdery w rzędach (`PCIO` w kodzie: odstęp 40, szerokość stołu 1500). Bez przycisków. Zapis IPC `pcio:zapisz` do `<projekt>/<PROJEKT> – playingcards.pcio` (przykłady: okno zapisu). Komendy `PCIO`/`STÓŁ` dają tylko uwagę (dawny tryb podmiany usunięty).
 
 ## Testowanie (środowisko Claude)
@@ -104,15 +104,7 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
 20. **Porównanie z dowolną wersją z historii** (reszta pkt 20; „przed/teraz” od ostatniego PDF jest zrobione).
 21. **Eksport do Tabletop Simulator**: arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
 22. **Katalog kart do PDF**: wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
-23. **Rozdzielczość eksportu**: wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG). Eksport playingcards.io używa tych samych ustawień (`cardToJpeg` = `CONFIG.jpgDpi`, `CONFIG.jpgJakosc`), więc wybór działa w obu.
 25. **Pełna wersja konsolowa (CLI)** – odłożona: `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia, `--json`), `pdf`, `jpg`, `png <ID…>`. Część z historią zrobiona (pkt 26). Uwaga: w powłoce Linux na Macu właściciela (Ubuntu 22.04 arm64, Node 22, Xvfb, bez roota) Electron nie wystartuje – brak GTK3 i `libXss`, ports.ubuntu.com zablokowane; alternatywa: Chromium bez GTK z npm (np. `@sparticuz/chromium`) + `puppeteer-core`, albo renderowanie w środowisku Claude na kopii plików.
-28. **Okna eksportu i przebudowa paska** (decyzja właściciela 9.10.2026; razem z pkt 23):
-    - Każdy eksport i druk otwiera **okno z opcjami** (wspólny komponent, inny zestaw pól na eksport). Okno **zapamiętuje ostatnie ustawienia osobno dla każdego projektu** (np. `userData/eksport/<sha1 szablonu>.json`, jak odciski). Enter = zatwierdź, Esc = anuluj.
-    - **Obrazki** (najczęstszy eksport, ⌘E): rozdzielczość 150/300 dpi, JPG/PNG, które karty (wszystkie / zaznaczone / tylko zmienione), talie, z rewersami lub bez.
-    - **Druk / PDF** (⌘P, ⇧⌘S): układ (A4 ze znacznikami / karta na stronę), rewersy, szkic, które karty, talie; przyciski Drukuj… i Zapisz PDF. **Tylko w menu** – usunięte z paska.
-    - **playingcards.io**: rozdzielczość, talie. Tylko w menu. Później w tym samym oknie: Tabletop Simulator, katalog.
-    - **Pasek:** `[Edytor] [Historia] [Raport]  Talia ▾  …  [Eksport obrazków…]`; pod spodem cienki wiersz stanu (liczby kart, zmienione + Porównaj, zaznaczone). Z paska znikają: napis „Generator kart”, „Otwórz szablon…”, „Odśwież”, „Odświeżaj automatycznie” (menu Widok), wybór układu druku, Rewersy, Szkic, Tylko zmienione, Zapisz PDF, Drukuj…, Eksport do playingcards.io.
-    - **Menu Plik:** grupy Projekt (Nowy, Otwórz, Ostatnie, Przykłady, Pokaż w Finderze) · Szablon (Zapisz, Historia wersji) · Druk / PDF… · Eksport ▸ (Obrazki…, playingcards.io…) · Zamknij.
 
 ### Roadmapa (niski priorytet)
 
@@ -141,5 +133,11 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
   - 26. Historia z konsoli: `app/historia-cli.js` (`punkt <folder> "opis"`, `lista`, `przywroc <nr>`); blokada `.historia/indeks.lock` (`zBlokada`, stara > 10 s zdejmowana). Użycie przez Claude: skrypt kopiowany do katalogu tymczasowego w powłoce na Macu (Node 22), punkty „Claude: przed …” / „Claude: po …” wokół zmian w plikach gry.
   - 27. Eksport playingcards.io jako nowy pokój (zastąpił podmianę talii; szczegóły w „Architektura”, pkt 10).
   - Poprawki: menu aplikacji (przesłonięta zmienna `szablon` – w v0.4.0 menu było domyślne, bez skrótów), kolejka przebudów i eksporty na wyłączność.
+- **v0.4.2** – okna druku i eksportu (pkt 28 i 23):
+  - 28. Pasek: `[Edytor] [Historia] [Raport]  Talia ▾ … [Eksport obrazków…]` + wiersz stanu (`.stan`: `#status`, `#zmiany` z Porównaj, `#wybor`). Druk, PDF i playingcards.io tylko w menu Plik (Drukuj… ⌘P, Zapisz PDF… ⇧⌘S, Eksport ▸ Obrazki ⌘E / playingcards.io); menu Widok: Raport, Odśwież (⌘R), „Odświeżaj automatycznie” (checkbox, `ustawienia().auto`, strona: `AUTO_ODSWIEZANIE`).
+  - Okna: `<dialog id="okno">`, `otworzOkno(rodzaj, domyślnaAkcja)` → `{akcja, opcje}` | null; rodzaje w `OKNA` (`obrazki`, `druk`, `pcio`), pola w `poleOkna()`. Ustawienia osobno dla szablonu: `USTAWIENIA_OKIEN` ↔ IPC `eksport:ustawienia` / `eksport:zapiszUstawienia` (`userData/eksport/<sha1 szablonu>.json`). Zapamiętany niedostępny wybór (np. „zaznaczone” przy 0) → „wszystkie”.
+  - Opcje zamiast pól paska: `kartyEksportu({ktore, pominTalie})`, `buildPrint({uklad, rewersy, szkic, karty})`, `zapiszPdf(o)`, `drukuj(o)`, `eksportObrazkow({dpi, format, ktore, pominTalie, rewersy})`, `exportPcio({dpi, pominTalie})`. Talie wybiera okno (filtr podglądu nie ogranicza eksportu).
+  - 23. `obrazKarty(el, {dpi, format})`: JPG na białym tle, PNG z przezroczystymi rogami; 150/300 dpi; ta sama funkcja dla playingcards.io. Numer kopii w nazwie pliku z `data-kopia`.
+  - Test (`--test-edytor`, poza przykładami): PNG 300 dpi przez okno, zapamiętanie ustawień, okno druku; zrzut `-okno.png`.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

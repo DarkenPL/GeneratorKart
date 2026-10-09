@@ -44,9 +44,21 @@ body { margin: 0; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
   padding: 10px 16px; background: #fbfaf8; border-bottom: 1px solid #d8d3cb;
 }
-.pasek h1 { font-size: 15px; margin: 0 6px 0 0; }
+.pasek .odstep, .stan .odstep { flex: 1; }
+.stan { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12px; color: #6b655d; min-height: 20px; }
+.stan button { font-size: 12px; padding: 1px 8px; }
+.okno { border: 1px solid #c9c2b8; border-radius: 10px; padding: 18px 22px; min-width: 380px; max-width: 560px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.okno::backdrop { background: rgba(40,35,30,.25); }
+.okno h3 { margin: 0 0 12px; font-size: 16px; }
+.okno fieldset { border: 0; padding: 0; margin: 0 0 12px; }
+.okno legend { font-weight: 600; font-size: 13px; margin-bottom: 4px; padding: 0; }
+.okno fieldset label { display: flex; margin: 3px 0; font-size: 13px; }
+.okno .opis { color: #8a8378; font-size: 12px; }
+.okno .talie { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.okno-przyciski { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 button, select { font: inherit; padding: 6px 12px; border: 1px solid #c9c2b8; border-radius: 6px; background: #fff; cursor: pointer; }
 button.glowny { background: #c8463f; border-color: #c8463f; color: #fff; }
+.okno-przyciski button.domyslny { background: #4a453f; border-color: #4a453f; color: #fff; }
 button:disabled { opacity: .45; cursor: default; }
 label { display: inline-flex; gap: 6px; align-items: center; }
 .status { color: #6b655d; font-size: 13px; }
@@ -169,28 +181,20 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
 <body>
 
 <div class="pasek" id="pasek">
-  <h1>Generator kart</h1>
-  <button class="glowny" id="wybierz">Otwórz szablon…</button>
   <button id="edytorPrzycisk" disabled title="Edytor szablonu (⌥⌘E)">Edytor</button>
-  <button id="odswiez" disabled>Odśwież</button>
-  <label title="Sprawdza zmiany plików co 1,5 s"><input type="checkbox" id="auto" checked> Odświeżaj automatycznie</label>
-  <select id="filtr"><option value="">Wszystkie talie</option></select>
-  <select id="tryb">
-    <option value="a4">Druk: A4 ze znacznikami cięcia (karty 1:1)</option>
-    <option value="pojedyncze">Druk: każda karta na osobnej stronie</option>
-  </select>
-  <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
-  <label title="Druk i PDF bez teł i obrazków, tekst czarny – oszczędza tusz przy prototypach"><input type="checkbox" id="szkic"> Szkic</label>
-  <span id="zmiany" hidden title="Karty zmienione (pomarańczowa obwódka) albo nowe (zielona) od ostatniego zapisanego PDF"><label><input type="checkbox" id="tylkoZmienione"> Tylko zmienione</label><span class="legenda-zm" style="background:#e8912d"></span><b id="zmLiczba"></b><span class="legenda-zm" style="background:#3aa55d"></span><b id="noweLiczba"></b> <button id="porownaj">Porównaj</button></span>
-  <span id="wybor" hidden title="Kliknij kartę, żeby ją zaznaczyć (Shift – zakres). Druk i PDF obejmą tylko zaznaczone.">Do druku: <b id="wyborLiczba"></b> zaznaczone <button id="wyborCzysc">Wyczyść</button></span>
-  <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
-  <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
-  <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
   <button id="historiaPrzycisk" disabled title="Historia wersji szablonu i plików danych">Historia</button>
   <button id="raportPrzycisk" disabled title="Duplikaty ID, puste pola, nieużywane kolumny, obrazki i ikony">Raport</button>
-  <button id="pcio" disabled title="Nowy pokój playingcards.io: każda talia jako osobny stos (plik .pcio w folderze projektu)">Eksport do playingcards.io</button>
-  <span class="status" id="status"></span>
+  <label title="Które talie pokazać w podglądzie">Talia: <select id="filtr"><option value="">Wszystkie talie</option></select></label>
+  <span class="odstep"></span>
+  <button class="glowny" id="obrazkiPrzycisk" disabled title="Każda karta jako osobny obrazek w folderze Export projektu (⌘E)">Eksport obrazków…</button>
+  <div class="stan">
+    <span class="status" id="status"></span>
+    <span class="odstep"></span>
+    <span id="zmiany" hidden title="Karty zmienione (pomarańczowa obwódka) albo nowe (zielona) od ostatniego zapisanego PDF"><span class="legenda-zm" style="background:#e8912d"></span><b id="zmLiczba"></b> zmienione <span class="legenda-zm" style="background:#3aa55d"></span><b id="noweLiczba"></b> nowe <button id="porownaj">Porównaj</button></span>
+    <span id="wybor" hidden title="Kliknij kartę, żeby ją zaznaczyć (Shift – zakres). W oknach druku i eksportu możesz wybrać tylko zaznaczone."><b id="wyborLiczba"></b> zaznaczone <button id="wyborCzysc">Wyczyść</button></span>
+  </div>
 </div>
+<dialog id="okno" class="okno"><form id="oknoForm" autocomplete="off"><h3 id="oknoTytul"></h3><div id="oknoPola"></div><div class="okno-przyciski" id="oknoPrzyciski"></div></form></dialog>
 <div class="uwagi" id="uwagi"></div>
 <div class="raport" id="raport" hidden></div>
 <div class="raport porownanie" id="porownanie" hidden></div>
@@ -327,12 +331,14 @@ async function serverStamp() {
   return heads.join('|') + '#' + extra.join('|') + '#' + ikony;
 }
 
-$('odswiez').onclick = () => loadFromServer();
+let AUTO_ODSWIEZANIE = true;      // menu Widok → Odświeżaj automatycznie
+window.ustawAuto = (b) => { AUTO_ODSWIEZANIE = !!b; };
+window.odswiezKarty = () => loadFromServer();
 $('filtr').onchange = applyFilter;
 
 // Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików.
 setInterval(async () => {
-  if (!$('auto').checked || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
+  if (!AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
   const stamp = await serverStamp();
   if (lastStamp && stamp !== lastStamp) await loadFromServer();
   lastStamp = stamp;
@@ -990,7 +996,7 @@ async function zbudujTeraz() {
     applyFilter();
 
     $('start').style.display = 'none';
-    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf', 'raportPrzycisk', 'historiaPrzycisk'].forEach((id) => $(id).disabled = false);
+    ['obrazkiPrzycisk', 'raportPrzycisk', 'historiaPrzycisk'].forEach((id) => $(id).disabled = false);
     status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
   }
   // Uwagi z numerem wiersza szablonu (i brakujące kolumny) trafiają też do edytora.
@@ -1132,7 +1138,7 @@ async function oznaczZmiany(view) {
   return { zm, nowe };
 }
 // Po zapisie PDF: zapamiętujemy odciski kart z tego wydruku (i rewersów ich talii).
-async function zapamietajDruk(karty = kartyDoDruku()) {
+async function zapamietajDruk(karty = kartyEksportu()) {
   if (!APP || !APP.zapiszOdciski) return;
   const dane = ODCISKI || { karty: {} };
   dane.data = new Date().toISOString();
@@ -1344,13 +1350,17 @@ $('wyborCzysc').onclick = () => {
   for (const k of $('podglad').querySelectorAll('.karta.wybrana')) k.classList.remove('wybrana');
   pokazWybor();
 };
-// Karty do druku: widoczne talie → (opcjonalnie) tylko zmienione → zaznaczone, jeśli są.
-function kartyDoDruku() {
-  let w = visibleCards();
-  if ($('tylkoZmienione').checked && !$('zmiany').hidden) w = w.filter((k) => k.classList.contains('zmieniona') || k.classList.contains('nowa'));
-  const z = w.filter((k) => k.classList.contains('wybrana'));
-  return z.length ? z : w;
+// Karty do druku i eksportu według opcji z okna: talie (pominTalie) i które karty (wszystkie / zaznaczone / zmienione).
+// Talie ukryte filtrem podglądu też się liczą – o taliach decyduje okno.
+function kartyEksportu(o = {}) {
+  const pomin = new Set(o.pominTalie || []);
+  let k = [...$('podglad').querySelectorAll('.talia')].filter((s) => !pomin.has(s.dataset.talia))
+    .flatMap((s) => [...s.querySelectorAll('.karta:not(.rewers)')]);
+  if (o.ktore === 'zaznaczone') k = k.filter((x) => x.classList.contains('wybrana'));
+  if (o.ktore === 'zmienione') k = k.filter((x) => x.classList.contains('zmieniona') || x.classList.contains('nowa'));
+  return k;
 }
+window.kartyEksportu = kartyEksportu;
 window.wybierzKarty = (n) => { visibleCards().slice(0, n).forEach((k) => { k.classList.add('wybrana'); WYBRANE.add(kluczKarty(k)); }); pokazWybor(); };
 window.wyczyscWybor = () => $('wyborCzysc').onclick();
 
@@ -1385,14 +1395,15 @@ function printCard(k, w, h) {
   return cell;
 }
 
-function buildPrint() {
-  const tryb = $('tryb').value;
-  const zRewersami = $('rewersy').checked;
+// o: { uklad: 'a4' | 'pojedyncze', rewersy, szkic, karty } – z okna Druk / PDF (domyślnie wszystkie karty, A4, z rewersami).
+function buildPrint(o = {}) {
+  const tryb = o.uklad || 'a4';
+  const zRewersami = o.rewersy !== false;
   const druk = $('druk');
   druk.innerHTML = '';
-  druk.classList.toggle('szkic', $('szkic').checked);
+  druk.classList.toggle('szkic', !!o.szkic);
   const groups = new Map();                       // talia + rozmiar karty → karty
-  for (const k of kartyDoDruku()) {
+  for (const k of (o.karty || kartyEksportu())) {
     const [w, h] = cardMm(k);
     const key = k.dataset.talia + '|' + w + 'x' + h;     // każda talia na osobnych arkuszach
     if (!groups.has(key)) groups.set(key, { w, h, cards: [], back: backOf(k.dataset.talia) });
@@ -1462,61 +1473,65 @@ function buildPrint() {
   $('styl-strony').textContent = `@page { size: ${PW}mm ${PH}mm; margin: 0; }`;
 }
 
-$('drukuj').onclick = () => {
-  if (!kartyDoDruku().length) { status('Brak kart do druku (Tylko zmienione: nic się nie zmieniło).'); return; }
-  buildPrint(); window.print();
-};
+function drukuj(o = {}) {
+  const karty = kartyEksportu(o);
+  if (!karty.length) { status('Brak kart do druku – sprawdź wybór kart i talii.'); return; }
+  buildPrint({ ...o, karty }); window.print();
+}
+window.drukuj = drukuj;
 
 // ── Eksport JPG ──────────────────────────────────────────────────────────────
 
-// JPG: rysujemy kartę na białym tle (zaokrąglone rogi nie robią się czarne) i zapisujemy jako JPEG.
-async function jpegBlob(el, opts) {
-  const c = await htmlToImage.toCanvas(el, opts);
+// Obrazek karty: JPG – na białym tle (zaokrąglone rogi nie robią się czarne); PNG – z przezroczystymi rogami.
+async function obrazKarty(el, { dpi = CONFIG.jpgDpi, format = 'jpg' } = {}) {
+  if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
+  const opts = { pixelRatio: dpi / 96, style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
+  let c;
+  try { c = await htmlToImage.toCanvas(el, opts); } catch (e) { c = await htmlToImage.toCanvas(el, { ...opts, skipFonts: true }); }
+  if (format === 'png') return new Promise((ok) => c.toBlob(ok, 'image/png'));
   const out = document.createElement('canvas');
   out.width = c.width; out.height = c.height;
   const g = out.getContext('2d');
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height);
   g.drawImage(c, 0, 0);
-  return new Promise((ok) => out.toBlob(ok, 'image/jpeg', opts.quality ?? 0.92));
+  return new Promise((ok) => out.toBlob(ok, 'image/jpeg', CONFIG.jpgJakosc));
 }
 
-// Każda karta jako osobny plik JPG w folderze Export projektu (zapisuje aplikacja).
-$('png').onclick = () => naWylacznosc(async () => {
-  const btn = $('png'); btn.disabled = true;
-  try {
-    if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
-    const folder = await APP.eksportStart();
-    if (!folder) { status('Eksport JPG anulowany.'); return; }
-    const els = visibleCards().concat(visibleSections().map((s) => s.querySelector('.karta.rewers')).filter(Boolean));
-    // NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg, rewers: NazwaProjektu_NazwaTalii_rewers.jpg
-    const bezZnakow = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
-    const slowo = (t) => bezZnakow(t).split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'X';
-    const numer = (t) => bezZnakow(t).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'X';
-    const kopie = {};
-    for (let i = 0; i < els.length; i++) {
-      status(`Eksport JPG: ${i + 1}/${els.length}…`);
-      const el = els[i];
-      const przed = slowo(PROJEKT) + '_' + slowo(el.dataset.talia) + '_';
-      let name;
-      if (el.classList.contains('rewers')) name = przed + 'rewers.jpg';
-      else {
-        const klucz = el.dataset.talia + '|' + el.dataset.row;
-        kopie[klucz] = (kopie[klucz] || 0) + 1;
-        name = przed + numer(el.dataset.id) + '_' + kopie[klucz] + '.jpg';
+// Każda karta jako osobny obrazek w folderze Export projektu (zapisuje aplikacja).
+// o: { dpi: 150 | 300, format: 'jpg' | 'png', ktore, pominTalie, rewersy }
+async function eksportObrazkow(o = {}) {
+  const dpi = +o.dpi || CONFIG.jpgDpi, format = o.format === 'png' ? 'png' : 'jpg', FMT = format.toUpperCase();
+  const karty = kartyEksportu(o);
+  if (!karty.length) { status('Eksport obrazków: brak kart – sprawdź wybór kart i talii.'); return; }
+  return naWylacznosc(async () => {
+    try {
+      const folder = await APP.eksportStart();
+      if (!folder) { status('Eksport obrazków anulowany.'); return; }
+      const talie = new Set(karty.map((k) => k.dataset.talia));
+      const rewersy = o.rewersy === false ? [] : [...$('podglad').querySelectorAll('.siatka .karta.rewers')].filter((k) => talie.has(k.dataset.talia));
+      const els = karty.concat(rewersy);
+      // NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg, rewers: NazwaProjektu_NazwaTalii_rewers.jpg
+      const bezZnakow = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
+      const slowo = (t) => bezZnakow(t).split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'X';
+      const numer = (t) => bezZnakow(t).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'X';
+      for (let i = 0; i < els.length; i++) {
+        status(`Eksport ${FMT}: ${i + 1}/${els.length}…`);
+        const el = els[i];
+        const przed = slowo(PROJEKT) + '_' + slowo(el.dataset.talia) + '_';
+        const name = przed + (el.classList.contains('rewers') ? 'rewers' : numer(el.dataset.id) + '_' + (el.dataset.kopia || 1)) + '.' + format;
+        const blob = await obrazKarty(el, { dpi, format });
+        await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
       }
-      const opts = { type: 'image/jpeg', quality: CONFIG.jpgJakosc, pixelRatio: CONFIG.jpgDpi / 96,
-                     style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
-      let blob;
-      try { blob = await jpegBlob(el, opts); }
-      catch (e) { blob = await jpegBlob(el, { ...opts, skipFonts: true }); }
-      await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
+      status(`Zapisano ${els.length} plików ${FMT} (${dpi} dpi) w ${folder}`);
+      APP.eksportKoniec();
+      return { folder, pliki: els.length };
+    } catch (e) {
+      status('Eksport obrazków nie powiódł się: ' + ((e && e.message) || e));
     }
-    status(`Zapisano ${els.length} plików JPG (${CONFIG.jpgDpi} dpi) w ${folder}`);
-    APP.eksportKoniec();
-  } catch (e) {
-    status('Eksport JPG nie powiódł się: ' + e.message);
-  } finally { btn.disabled = false; }
-});
+  });
+}
+window.eksportObrazkow = eksportObrazkow;
+async function jpegBlob(el) { return obrazKarty(el); }   // tryb testowy (podgląd JPG)
 
 // ── Eksport do playingcards.io ───────────────────────────────────────────────
 // Tworzy nowy pokój (.pcio): każda talia to osobny stos (holder) z kartami zakrytymi,
@@ -1525,21 +1540,18 @@ $('png').onclick = () => naWylacznosc(async () => {
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-// Te same ustawienia co eksport JPG (CONFIG.jpgDpi, CONFIG.jpgJakosc).
-async function cardToJpeg(el) {
-  const opts = { pixelRatio: CONFIG.jpgDpi / 96, quality: CONFIG.jpgJakosc,
-                 style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
-  try { return await jpegBlob(el, opts); }
-  catch (e) { return await jpegBlob(el, { ...opts, skipFonts: true }); }
-}
+// Obrazki kart jak w eksporcie obrazków (JPG, rozdzielczość z okna).
+const cardToJpeg = (el, dpi) => obrazKarty(el, { dpi, format: 'jpg' });
 
 const PCIO = { dluzszyBok: 160, odstep: 40, margines: 40, szerokoscStolu: 1500, ramka: 4 };
 
-async function exportPcio() {
+// o: { dpi, pominTalie } – z okna „Pokój playingcards.io”.
+async function exportPcio(o = {}) {
   if (EKSPORT_TRWA) return;
-  return naWylacznosc(eksportujPcio);
+  return naWylacznosc(() => eksportujPcio(o));
 }
-async function eksportujPcio() {
+async function eksportujPcio(o = {}) {
+  const pomin = new Set(o.pominTalie || []), dpi = +o.dpi || CONFIG.jpgDpi;
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
   if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
   const widgets = [], assets = new Map(), report = [];
@@ -1550,6 +1562,7 @@ async function eksportujPcio() {
   try {
     for (const section of $('podglad').querySelectorAll('.talia')) {
       const nazwa = section.dataset.talia;
+      if (pomin.has(nazwa)) continue;
       const karty = [...section.querySelectorAll('.karta:not(.rewers)')];
       if (!karty.length) continue;
       // Rozmiar karty w jednostkach stołu: dłuższy bok = 160, proporcje jak KARTA.
@@ -1573,7 +1586,7 @@ async function eksportujPcio() {
       for (const { el, n } of wzory.values()) {
         status(`playingcards.io: ${nazwa} ${++i}/${wzory.size}…`);
         const plik = uuid() + '.jpg';
-        assets.set(plik, await cardToJpeg(el));
+        assets.set(plik, await cardToJpeg(el, dpi));
         const typ = 'type-' + uuid();
         deck.cardTypes[typ] = { image: 'package://userassets/' + plik, label: el.title || el.dataset.id };
         for (let j = 0; j < n; j++) cards.push({ id: uuid(), type: 'card', cardType: typ, deck: deck.id, parent: holder.id,
@@ -1585,7 +1598,7 @@ async function eksportujPcio() {
       let tylObiekty;
       if (back) {
         const plik = uuid() + '.jpg';
-        assets.set(plik, await cardToJpeg(back));
+        assets.set(plik, await cardToJpeg(back, dpi));
         tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'transparent', valueType: 'static', value: 'package://userassets/' + plik }];
       } else {
         tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: '#3d3a36', valueType: 'static', value: '' },
@@ -1616,12 +1629,6 @@ async function eksportujPcio() {
 }
 window.exportPcio = exportPcio;
 
-$('pcio').onclick = async () => {
-  const btn = $('pcio'); btn.disabled = true;
-  try { await exportPcio(); }
-  catch (e) { status('Eksport do playingcards.io nie powiódł się: ' + ((e && e.message) || e)); console.error(e); }
-  finally { btn.disabled = false; }
-};
 
 // ── Edytor szablonu ──────────────────────────────────────────────────────────
 // Pole tekstowe z kolorowaniem składni (warstwa <pre> pod przezroczystym <textarea>),
@@ -1779,23 +1786,125 @@ $('edytorPrzycisk').onclick = () => przelaczEdytor();
 const APP = window.generatorApp || null;
 
 // Zapis PDF wprost do pliku (tylko w aplikacji) – wydruk w dokładnym rozmiarze, bez okna drukowania.
-async function zapiszPdf() {
-  if ($('pdf').disabled) return;
-  if (!kartyDoDruku().length) { status('Brak kart do druku (Tylko zmienione: nic się nie zmieniło).'); return; }
-  const karty = kartyDoDruku();
-  buildPrint();
+// o: { uklad, rewersy, szkic, ktore, pominTalie } – z okna Druk / PDF.
+async function zapiszPdf(o = {}) {
+  const karty = kartyEksportu(o);
+  if (!karty.length) { status('Brak kart do PDF – sprawdź wybór kart i talii.'); return; }
+  buildPrint({ ...o, karty });
   const info = await APP.info();
-  const nazwa = (PROJEKT || info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4')
-    + ($('podglad').querySelector('.karta.wybrana') ? ' – wybrane' : '') + ($('szkic').checked ? ' – szkic' : '')
-    + ($('tylkoZmienione').checked && !$('zmiany').hidden ? ' – zmienione' : '');
+  const nazwa = (PROJEKT || info.nazwa || 'karty') + (o.uklad === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4')
+    + (o.ktore === 'zaznaczone' ? ' – wybrane' : '') + (o.ktore === 'zmienione' ? ' – zmienione' : '') + (o.szkic ? ' – szkic' : '');
   status('Zapisywanie PDF…');
   try {
     const plik = await APP.zapiszPdf(nazwa);
     status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
     if (plik) await zapamietajDruk(karty);
+    return plik;
   } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
 }
 window.zapiszPdf = zapiszPdf;
+
+// ── Okna druku i eksportu ────────────────────────────────────────────────────
+// Jedno okno dialogowe z zestawem pól zależnym od rodzaju. Ostatnie ustawienia są zapamiętywane
+// osobno dla każdego projektu (dane aplikacji: eksport/<szablon>.json). Enter = przycisk domyślny, Esc = anuluj.
+let USTAWIENIA_OKIEN = {};
+const OKNA = {
+  obrazki: { tytul: 'Eksport obrazków', pola: ['dpi', 'format', 'ktore', 'talie', 'rewersy'],
+    domyslne: { dpi: 150, format: 'jpg', ktore: 'wszystkie', rewersy: true, pominTalie: [] },
+    przyciski: [['ok', 'Eksportuj']],
+    opis: 'Każda karta jako osobny plik w folderze Export projektu.' },
+  druk: { tytul: 'Druk i PDF', pola: ['uklad', 'rewersy', 'szkic', 'ktore', 'talie'],
+    domyslne: { uklad: 'a4', rewersy: true, szkic: false, ktore: 'wszystkie', pominTalie: [] },
+    przyciski: [['drukuj', 'Drukuj…'], ['pdf', 'Zapisz PDF']] },
+  pcio: { tytul: 'Pokój playingcards.io', pola: ['dpi', 'talie'],
+    domyslne: { dpi: 150, pominTalie: [] },
+    przyciski: [['ok', 'Zapisz pokój']],
+    opis: 'Nowy pokój: każda talia jako osobny stos. Plik .pcio w folderze projektu; w playingcards.io: Edit Table → Import room.' },
+};
+function poleOkna(nazwa, rodzaj, u) {
+  const radio = (legenda, name, opcje) => `<fieldset><legend>${legenda}</legend>` + opcje.map(([v, t, wyl]) =>
+    `<label><input type="radio" name="${name}" value="${v}"${String(u[name]) === String(v) ? ' checked' : ''}${wyl ? ' disabled' : ''}> ${t}</label>`).join('') + '</fieldset>';
+  const pole = (name, t) => `<fieldset><label><input type="checkbox" name="${name}"${u[name] ? ' checked' : ''}> ${t}</label></fieldset>`;
+  const ile = (cls) => $('podglad').querySelectorAll('.siatka .karta.' + cls + ':not(.rewers)').length;
+  switch (nazwa) {
+    case 'dpi': return radio('Rozdzielczość', 'dpi', [[150, '150 dpi <span class="opis">– ekran, playtesty online (karta 63×88 mm ≈ 372×520 px)</span>'],
+      [300, '300 dpi <span class="opis">– druk, drukarnie (≈ 744×1039 px)</span>']]);
+    case 'format': return radio('Format', 'format', [['jpg', 'JPG <span class="opis">– mniejsze pliki, rogi białe</span>'], ['png', 'PNG <span class="opis">– przezroczyste zaokrąglone rogi</span>']]);
+    case 'uklad': return radio('Układ', 'uklad', [['a4', 'A4 ze znacznikami cięcia (karty 1:1)'], ['pojedyncze', 'Każda karta na osobnej stronie']]);
+    case 'rewersy': return pole('rewersy', rodzaj === 'druk' ? 'Rewersy <span class="opis">– po każdym arkuszu kart arkusz rewersów (druk dwustronny)</span>' : 'Rewersy talii <span class="opis">– osobne pliki</span>');
+    case 'szkic': return pole('szkic', 'Szkic <span class="opis">– bez teł i obrazków, tekst czarny (oszczędza tusz)</span>');
+    case 'ktore': {
+      const z = ile('wybrana'), zm = ODCISKI ? ile('zmieniona') + ile('nowa') : 0;
+      return radio('Karty', 'ktore', [['wszystkie', 'Wszystkie'], ['zaznaczone', `Tylko zaznaczone (${z})`, !z],
+        ['zmienione', ODCISKI ? `Tylko zmienione od ostatniego PDF (${zm})` : 'Tylko zmienione <span class="opis">– po pierwszym zapisanym PDF</span>', !zm]]);
+    }
+    case 'talie': {
+      const talie = [...$('podglad').querySelectorAll('.talia')].map((t) => t.dataset.talia);
+      if (talie.length < 2) return '';
+      const pomin = new Set(u.pominTalie || []);
+      return '<fieldset><legend>Talie</legend><div class="talie">' + talie.map((t) =>
+        `<label><input type="checkbox" name="talia" value="${esc(t)}"${pomin.has(t) ? '' : ' checked'}> ${esc(t)}</label>`).join('') + '</div></fieldset>';
+    }
+  }
+  return '';
+}
+// Zwraca { akcja, opcje } albo null (anulowano). domyslna: która akcja jest pod Enterem.
+function otworzOkno(rodzaj, domyslna) {
+  const def = OKNA[rodzaj];
+  const u = { ...def.domyslne, ...(USTAWIENIA_OKIEN[rodzaj] || {}) };
+  const okno = $('okno'), form = $('oknoForm');
+  $('oknoTytul').textContent = def.tytul;
+  $('oknoPola').innerHTML = (def.opis ? `<p class="opis">${esc(def.opis)}</p>` : '') + def.pola.map((p) => poleOkna(p, rodzaj, u)).join('');
+  // Zapamiętany wybór, którego teraz nie da się użyć (np. brak zaznaczonych) → „Wszystkie”.
+  const ktore = form.querySelector('[name=ktore]:checked');
+  if (form.querySelector('[name=ktore]') && (!ktore || ktore.disabled)) form.querySelector('[name=ktore][value=wszystkie]').checked = true;
+  domyslna = domyslna || def.przyciski[def.przyciski.length - 1][0];
+  $('oknoPrzyciski').innerHTML = '<button type="button" data-akcja="">Anuluj</button>' + def.przyciski.map(([a, t]) =>
+    `<button type="button" data-akcja="${a}"${a === domyslna ? ' class="domyslny"' : ''}>${t}</button>`).join('');
+  return new Promise((koniec) => {
+    const zamknij = (wynik) => { okno.onkeydown = null; okno.oncancel = null; if (okno.open) okno.close(); koniec(wynik); };
+    const zbierz = () => {
+      const o = {};
+      for (const p of def.pola) {
+        if (p === 'talie') {
+          const pola = [...form.querySelectorAll('[name=talia]')];
+          o.pominTalie = pola.filter((x) => !x.checked).map((x) => x.value);
+        } else if (['rewersy', 'szkic'].includes(p)) o[p] = !!form.querySelector(`[name=${p}]`)?.checked;
+        else { const x = form.querySelector(`[name=${p}]:checked`); o[p] = x ? (p === 'dpi' ? +x.value : x.value) : u[p]; }
+      }
+      return o;
+    };
+    for (const b of $('oknoPrzyciski').querySelectorAll('button')) b.onclick = async () => {
+      if (!b.dataset.akcja) return zamknij(null);
+      const opcje = zbierz();
+      USTAWIENIA_OKIEN[rodzaj] = opcje;
+      try { await APP.zapiszEksportUstawienia(USTAWIENIA_OKIEN); } catch (e) { /* bez zapamiętania */ }
+      zamknij({ akcja: b.dataset.akcja, opcje });
+    };
+    okno.oncancel = (e) => { e.preventDefault(); zamknij(null); };
+    okno.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('oknoPrzyciski').querySelector('.domyslny').click(); } };
+    okno.showModal();
+    ($('oknoPrzyciski').querySelector('.domyslny') || okno).focus();
+  });
+}
+window.otworzOkno = otworzOkno;
+async function oknoObrazkow() {
+  const r = await otworzOkno('obrazki');
+  if (r) return eksportObrazkow(r.opcje);
+}
+async function oknoDruku(domyslna = 'pdf') {
+  const r = await otworzOkno('druk', domyslna);
+  if (!r) return;
+  return r.akcja === 'drukuj' ? drukuj(r.opcje) : zapiszPdf(r.opcje);
+}
+async function oknoPcio() {
+  const r = await otworzOkno('pcio');
+  if (!r) return;
+  try { return await exportPcio(r.opcje); }
+  catch (e) { status('Eksport do playingcards.io nie powiódł się: ' + ((e && e.message) || e)); console.error(e); }
+}
+Object.assign(window, { oknoObrazkow, oknoDruku, oknoPcio });
+$('obrazkiPrzycisk').onclick = () => oknoObrazkow();
 
 // Ekran powitalny, gdy nie otwarto jeszcze szablonu.
 async function startAplikacji() {
@@ -1816,11 +1925,10 @@ async function startAplikacji() {
 // Start
 (async () => {
   if (!APP) { $('start').innerHTML = '<p>Ten plik jest częścią aplikacji Generator kart i działa tylko w niej.</p>'; return; }
-  $('wybierz').onclick = () => APP.otworzSzablon();
-  $('pdf').onclick = zapiszPdf;
   const info = await APP.info();
+  AUTO_ODSWIEZANIE = info.auto !== false;
+  try { USTAWIENIA_OKIEN = (await APP.eksportUstawienia()) || {}; } catch (e) { USTAWIENIA_OKIEN = {}; }
   if (!info.szablon) return startAplikacji();
-  if (info.przyklad) $('wybierz').title = 'Przykład jest tylko do odczytu – żeby go zmieniać, skopiuj jego folder';
   // Edytor szablonu
   ED.tylkoOdczyt = !!info.przyklad;
   edPole.readOnly = ED.tylkoOdczyt;
@@ -1831,7 +1939,7 @@ async function startAplikacji() {
   let otwarty = false;
   try { otwarty = localStorage.getItem('edytor') === '1'; } catch (e) { /* domyślnie zamknięty */ }
   if (otwarty) przelaczEdytor(true);
-  loadFromServer().then(() => { $('odswiez').disabled = false; });
+  loadFromServer();
 })();
 </script>
 </body>

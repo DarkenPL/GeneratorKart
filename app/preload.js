@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('generatorApp', {
   naZmianeHistorii: (fn) => ipcRenderer.on('historia:zmiana', () => fn()),
   historiaPrzywroc: (czas) => ipcRenderer.invoke('historia:przywroc', czas),
   zapiszPcio: (nazwa, dane) => ipcRenderer.invoke('pcio:zapisz', nazwa, dane),
+  eksportUstawienia: () => ipcRenderer.invoke('eksport:ustawienia'),
+  zapiszEksportUstawienia: (dane) => ipcRenderer.invoke('eksport:zapiszUstawienia', dane),
   eksportStart: () => ipcRenderer.invoke('eksport:start'),
   eksportPlik: (nazwa, dane) => ipcRenderer.invoke('eksport:plik', nazwa, dane),
   eksportKoniec: () => ipcRenderer.invoke('eksport:koniec'),
