@@ -247,7 +247,8 @@ const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).
 function zbudujMenu() {
   const ost = ostatnie();
   const przyk = listaPrzykladow();
-  const szablon = [
+  // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
+  const menu = [
     { role: 'appMenu', label: 'Generator kart' },
     {
       label: 'Plik',
@@ -297,7 +298,7 @@ function zbudujMenu() {
     { role: 'windowMenu', label: 'Okno' },
     { role: 'help', label: 'Pomoc', submenu: [{ label: 'Dokumentacja', click: () => shell.openExternal(DOKUMENTACJA) }] },
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(szablon));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
 }
 
 // ── Okno ────────────────────────────────────────────────────────────────────
@@ -482,9 +483,13 @@ async function trybTestowy(folder, wynik) {
   }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
-  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
+  // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
+  const menu = (Menu.getApplicationMenu()?.items || []).map((i) => i.label);
+  const plik = Menu.getApplicationMenu()?.items.find((i) => i.label === 'Plik');
+  const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
+  const ok = menuOk && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, pdf: wynik, ok }) + '\n');
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, menu, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
