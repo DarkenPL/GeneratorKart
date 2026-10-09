@@ -364,7 +364,8 @@ async function trybTestowy(folder, wynik) {
       wyczyscWybor(); document.getElementById('szkic').checked = false;
       return { karty, tlo, pasek };
     })()`);
-    wybor.ok = wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek;
+    wybor.raport = await wc.executeJavaScript(`raportProjektu().then((h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText; })`).catch((e) => 'BŁĄD ' + e.message);
+    wybor.ok = /Talia /.test(wybor.raport) && wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek;
   }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);

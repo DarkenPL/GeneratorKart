@@ -106,7 +106,7 @@ Sekcje w kolejności w pliku:
 10. **Ikony bez `ikony.csv`** (zrobione, `claude/noc`): każdy obrazek z `Ikony/` (albo `Icons/`) działa jako `{nazwa_pliku}` (też bez polskich znaków); wpis w `ikony.csv` ma pierwszeństwo.
 11. **Stałe w szablonie** (zrobione, `claude/noc`): `STAŁA = margines, 3.5` i `[=margines]` w argumentach dowolnej komendy, w całym pliku (kolejność bez znaczenia). Bez działań na liczbach – ewentualnie później.
 12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
-13. **Raport projektu** (zaplanowane): duplikaty ID, puste wymagane kolumny, nieużywane kolumny i obrazki w folderach projektu.
+13. **Raport projektu** (zrobione, `claude/noc`): przycisk „Raport”, `raportProjektu()` na danych z ostatniego `build` (`RAPORT`): duplikaty ID, puste pola używanych kolumn, nieużywane kolumny, ikony (bez znacznika i bez użycia pliku) i obrazki w folderach, do których odwołuje się projekt, oraz `Ikony/`.
 14. **Historia wersji** (zaplanowane): ukryty folder `.historia/` w projekcie; kopia szablonu i plików danych (CSV/XLSX) tylko gdy treść różni się od ostatniej kopii (zapis z edytora albo zmiana z zewnątrz).
     - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
     - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).

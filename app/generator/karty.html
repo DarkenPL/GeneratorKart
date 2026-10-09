@@ -52,6 +52,12 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .status { color: #6b655d; font-size: 13px; }
 .uwagi { margin: 12px 16px 0; padding: 10px 14px; background: #fff4e0; border: 1px solid #f0d3a0; border-radius: 6px; font-size: 13px; display: none; }
 .uwagi.widoczne { display: block; }
+.raport { margin: 12px 16px 0; padding: 10px 14px; background: #eef4fb; border: 1px solid #c6d8ee; border-radius: 6px; font-size: 13px; }
+.raport h3 { margin: 10px 0 4px; font-size: 14px; }
+.raport h3:first-of-type { margin-top: 0; }
+.raport ul { margin: 2px 0 0; padding-left: 18px; }
+.raport .ok { color: #2f7d4a; }
+.raport .zamknij { float: right; }
 .uwagi ul { margin: 4px 0 0; padding-left: 18px; }
 .start { max-width: 600px; margin: 60px auto; padding: 24px 28px; background: #fff; border-radius: 10px; border: 1px solid #ddd6cc; }
 .start h2 { margin-top: 0; }
@@ -164,11 +170,13 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
   <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
   <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
   <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
+  <button id="raportPrzycisk" disabled title="Duplikaty ID, puste pola, nieużywane kolumny, obrazki i ikony">Raport</button>
   <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
   <input type="file" id="pcioPlik" accept=".pcio,.zip" hidden>
   <span class="status" id="status"></span>
 </div>
 <div class="uwagi" id="uwagi"></div>
+<div class="raport" id="raport" hidden></div>
 
 <div id="edytor" hidden>
   <div class="ed-pasek"><b id="edNazwa">Szablon</b><span id="edStan"></span><button id="edZapisz" disabled title="⌘S">Zapisz</button></div>
@@ -813,6 +821,7 @@ function findDeckFile(names) {
   return null;
 }
 
+let RAPORT = { tekst: '', talie: [], icons: {} };   // dane do raportu projektu (z ostatniego build)
 let TALIE = [];               // wczytane szablony talii
 const googleFonts = new Set();
 
@@ -833,6 +842,7 @@ async function build() {
   const tekstSzablonu = await tplFiles[0][1].text();
 
   TALIE = []; PALETA = {}; STOL_PCIO = '';
+  RAPORT = { tekst: tekstSzablonu, talie: [], icons };
   PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
   WERSJA = '';
   const fontCss = [];
@@ -872,6 +882,7 @@ async function build() {
     try { rows = await readTable(files.get(name)); }
     catch (e) { warn.add(talia.nazwa + ': błąd odczytu ' + name + ' – ' + e.message); continue; }
 
+    RAPORT.talie.push({ nazwa: talia.nazwa, plik: name, rows });
     const liczba = rows.reduce((s, r) => s + copies(r), 0);
     const dzis = new Date().toLocaleDateString('pl-PL');
     const wspolneWb = { liczba, wersja: WERSJA, talia: talia.nazwa, projekt: PROJEKT, data: dzis };
@@ -921,7 +932,7 @@ async function build() {
     applyFilter();
 
     $('start').style.display = 'none';
-    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf'].forEach((id) => $(id).disabled = false);
+    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf', 'raportPrzycisk'].forEach((id) => $(id).disabled = false);
     status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
   }
   // Uwagi z numerem wiersza szablonu (i brakujące kolumny) trafiają też do edytora.
@@ -945,7 +956,86 @@ async function build() {
   }).join('') + '</ul>' : '';
   for (const a of u.querySelectorAll('[data-linia]')) a.onclick = (e) => { e.preventDefault(); idzDoLinii(+a.dataset.linia); };
   u.classList.toggle('widoczne', warn.size > 0);
+  if (!$('raport').hidden) pokazRaport(true);
 }
+
+// ── Raport projektu ─────────────────────────────────────────────────────────
+// Duplikaty ID, puste pola używanych kolumn, nieużywane kolumny, obrazki i ikony.
+async function raportProjektu() {
+  const sekcje = [];
+  const lista = (tyt, el, pusto) => sekcje.push(`<h3>${esc(tyt)}</h3>` + (el.length
+    ? '<ul>' + el.map((x) => '<li>' + x + '</li>').join('') + '</ul>' : `<div class="ok">✓ ${esc(pusto)}</div>`));
+  const tekst = RAPORT.tekst, tl = tekst.toLowerCase();
+  const uzytaKolumna = (k) => tl.includes('[' + k.trim().toLowerCase() + ']');
+  const SPECJALNE = ['ilosc', 'id', 'nazwa'];
+  const skrot = (a) => a.slice(0, 12).join(', ') + (a.length > 12 ? ` … (+${a.length - 12})` : '');
+  let wszystkieWartosci = tekst;
+  const plikiZDanych = new Set();
+
+  for (const { nazwa, plik, rows } of RAPORT.talie) {
+    const el = [];
+    const aktywne = rows.map((r, i) => ({ r, i })).filter(({ r }) => copies(r) > 0);
+    const kopie = aktywne.reduce((s, { r }) => s + copies(r), 0);
+    const pominiete = rows.length - aktywne.length;
+    el.push(`${aktywne.length} kart (${kopie} z kopiami) w pliku ${esc(plik)}` + (pominiete ? `, ${pominiete} pominiętych (Ilość = 0)` : ''));
+    const idKarty = ({ r, i }) => pole(r, 'ID') || 'wiersz ' + (i + 2);
+    // Duplikaty ID
+    const ile = {};
+    for (const x of aktywne) { const id = pole(x.r, 'ID'); if (id) ile[id] = (ile[id] || 0) + 1; }
+    const dup = Object.entries(ile).filter(([, n]) => n > 1).map(([id, n]) => `${id} (×${n})`);
+    if (dup.length) el.push(`<b>Powtórzone ID:</b> ${esc(skrot(dup))}`);
+    // Kolumny
+    const kolumny = rows.length ? Object.keys(rows[0]).filter((k) => k) : [];
+    const nieuzywane = kolumny.filter((k) => !SPECJALNE.includes(plain(k).toLowerCase()) && !uzytaKolumna(k));
+    if (nieuzywane.length) el.push(`<b>Kolumny nieużywane w szablonie:</b> ${esc(nieuzywane.join(', '))}`);
+    for (const k of kolumny.filter(uzytaKolumna)) {
+      const puste = aktywne.filter(({ r }) => !String(r[k] ?? '').trim()).map(idKarty);
+      if (puste.length && puste.length < aktywne.length) el.push(`Kolumna <b>${esc(k)}</b> pusta w ${puste.length} kartach: ${esc(skrot(puste))}`);
+      else if (puste.length) el.push(`Kolumna <b>${esc(k)}</b> pusta we wszystkich kartach`);
+    }
+    for (const { r } of aktywne) for (const v of Object.values(r)) {
+      wszystkieWartosci += '\n' + v;
+      if (PLIK_RE.test(v)) plikiZDanych.add(norm(v));
+    }
+    lista(`Talia ${nazwa}`, el, '');
+  }
+
+  // Ikony: znaczniki {x} użyte w szablonie i danych
+  const uzyteZnaczniki = new Set([...wszystkieWartosci.matchAll(/\{([^{}]+)\}/g)].flatMap((m) => [iconKey(m[1]), plain(iconKey(m[1]))]));
+  const ikonyNieuzywane = [], plikiIkonUzyte = new Set();
+  const widziane = new Set();
+  for (const [k, v] of Object.entries(RAPORT.icons)) {
+    if (widziane.has(v)) continue; widziane.add(v);
+    const klucze = Object.entries(RAPORT.icons).filter(([, x]) => x === v).map(([kk]) => kk);
+    if (klucze.some((kk) => uzyteZnaczniki.has(kk) || uzyteZnaczniki.has(plain(kk)))) { if (v.plik) plikiIkonUzyte.add(norm(v.plik)); }
+    else if (v.plik || v.znak) ikonyNieuzywane.push([k, v.plik ? norm(v.plik) : '']);
+  }
+
+  // Obrazki w folderach, do których odwołuje się projekt (i Ikony/), ale których nic nie używa.
+  const t = parseTemplate(tekst, SZABLON.split('/').pop());
+  const uzyte = new Set([...plikiZDanych, ...plikiIkonUzyte, ...t.pliki.map(norm)]);
+  for (const m of tekst.matchAll(/[^\s",=]+\.(png|jpe?g|gif|webp|svg)/gi)) uzyte.add(norm(m[0]));
+  const foldery = new Set(FOLDERY_IKON);
+  for (const u of [...plikiZDanych, ...t.pliki.map(norm)]) if (u.includes('/') && OBRAZ_RE.test(u)) foldery.add(u.slice(0, u.lastIndexOf('/')));
+  // Ikona jest nieużywana, gdy nie ma jej znacznika i jej pliku nie używa nic innego (inny znacznik, dane).
+  const ikonyBez = ikonyNieuzywane.filter(([, f]) => !f || !uzyte.has(f));
+  lista('Ikony nieużywane', ikonyBez.map(([k]) => `{${esc(k)}}`), 'wszystkie ikony są używane');
+  ikonyBez.forEach(([, f]) => f && uzyte.add(f));           // nie powtarzamy ich w obrazkach
+  const nieuzyteObrazki = [];
+  for (const dir of foldery) for (const n of await spisFolderu(dir))
+    if (OBRAZ_RE.test(n) && !uzyte.has(norm(dir + '/' + n))) nieuzyteObrazki.push(esc(dir + '/' + n));
+  lista('Obrazki nieużywane', nieuzyteObrazki, 'w folderach projektu nie ma nieużywanych obrazków');
+  return sekcje.join('');
+}
+async function pokazRaport(pokaz = $('raport').hidden) {
+  const r = $('raport');
+  r.hidden = !pokaz;
+  if (!pokaz) return;
+  r.innerHTML = '<button class="zamknij" id="raportZamknij">Zamknij</button>' + await raportProjektu();
+  $('raportZamknij').onclick = () => pokazRaport(false);
+}
+window.raportProjektu = raportProjektu;
+$('raportPrzycisk').onclick = () => pokazRaport();
 
 function applyFilter() {
   const f = $('filtr').value;
