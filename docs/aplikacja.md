@@ -23,7 +23,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
 
 ## Praca
 
-1. **Plik → Nowy projekt… (⌘N)** tworzy folder gry o podanej nazwie, z gotowym szablonem (`Szablony/gra.txt`), plikiem kart (`karty.csv`), ikonami, przykładowym obrazkiem i krótką instrukcją (`CZYTAJ.txt`), i od razu go otwiera. Wystarczy zmieniać pliki.
+1. **Plik → Nowy projekt… (⌘N)** tworzy folder gry o podanej nazwie, z gotowym szablonem (`Szablony/gra.txt`), plikiem kart (`karty.csv`), ikonami, przykładowym obrazkiem krótką instrukcją (`CZYTAJ.txt`) i plikiem `CLAUDE.md` – kontekstem dla Claude przy pracy nad prototypem (zasady współpracy, ściąga komend, proces prototypu) – i od razu go otwiera. Wystarczy zmieniać pliki.
 
    **Plik → Otwórz szablon… (⌘O)** otwiera istniejący projekt: wskaż plik szablonu (`.txt`) swojej gry.
    - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki.

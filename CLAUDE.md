@@ -30,7 +30,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - eksport JPG: `eksport:start/plik/koniec` zapisuje do `<projekt>/Export/` (przykłady: pyta o folder);
   - `webRequest.onBeforeRequest` przekierowuje adresy jsDelivr (html-to-image, JSZip, SheetJS) i Google Fonts (EB Garamond + Patrick Hand) na `/.app/vendor/…` i `/.app/fonts/…`, więc aplikacja działa offline. Inne `CZCIONKA_GOOGLE` idą przez internet;
   - menu, ostatnie projekty (`userData/ustawienia.json`), przykłady (z `zasoby/przyklady`, tylko do odczytu);
-  - **Nowy projekt…** (⌘N): kopiuje `app/szablon-startowy/` (→ `zasoby/szablon-startowy`) do nowego folderu, podmienia `{{NAZWA}}` i `{{NAZWA_W_CUDZYSLOWIE}}` w `Szablony/gra.txt` i `CZYTAJ.txt`; odmawia, gdy folder istnieje i nie jest pusty. Ikony i obrazek startowy są narysowane na potrzeby projektu (bez licencji zewnętrznych);
+  - **Nowy projekt…** (⌘N): kopiuje `app/szablon-startowy/` (z `CLAUDE.md` – kontekst dla Claude; aktualizuj go razem z komendami) (→ `zasoby/szablon-startowy`) do nowego folderu, podmienia `{{NAZWA}}` i `{{NAZWA_W_CUDZYSLOWIE}}` w `Szablony/gra.txt` i `CZYTAJ.txt`; odmawia, gdy folder istnieje i nie jest pusty. Ikony i obrazek startowy są narysowane na potrzeby projektu (bez licencji zewnętrznych);
   - `pdf:zapisz` → `printToPDF({ preferCSSPageSize: true })`.
 - **Edytor szablonu** (w `karty.html`, sekcja „Edytor szablonu”): `<textarea>` z przezroczystym tekstem nad `<pre>` z kolorowaniem (tokenizer liniowy `kolorujLinie`), numery wierszy, lista błędów.
   - Błędy wierszy pochodzą z Uwag (`plik, wiersz N:`) oraz z „brak kolumny [X]” (wiersze z `[X]`).
@@ -141,5 +141,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
   - Test (`--test-edytor`, poza przykładami): PNG 300 dpi przez okno, zapamiętanie ustawień, okno druku; zrzut `-okno.png`.
 - **v0.4.3** – wydania z numerem wersji tworzone automatycznie po każdym scaleniu do `main` (zamiast nadpisywanego wydania „najnowsza”).
 - **v0.4.4** – poprawka: pętla odświeżania (napis „odświeżono” zmieniał się co 1,5 s po pierwszym przeładowaniu, np. po edycji). `serverPaths` ma kolejność zakończenia równoległych pobrań, więc odcisk w `serverStamp()` zależał od kolejności; teraz listy są sortowane, a sprawdzenia nie nakładają się (`SPRAWDZANIE`). Test: `serverStamp()` po odwróceniu `serverPaths` bez zmian i stały napis po edycji (`edytor.spokoj`).
+- **v0.4.5** – `app/szablon-startowy/CLAUDE.md`: kontekst dla Claude do prototypów gier (współpraca, struktura projektu, ściąga komend, sprawdzanie w trybie testowym, historia z konsoli, proces prototypu, ograniczenia). Kopiowany przez Nowy projekt…; przy zmianach aplikacji aktualizuj ściągę i sekcję „Ograniczenia”.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
