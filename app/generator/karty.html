@@ -172,6 +172,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
   .arkusz:last-child { break-after: auto; }
   .uklad { display: grid; }
   .znacznik { position: absolute; background: #000; }
+  .linia-ciecia { position: absolute; z-index: 2; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>
@@ -503,7 +504,7 @@ function renderText(text, icons, warn) {
 
 const plain = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
   .toLowerCase().trim().replace(/[\s-]+/g, '_');
-const ELEMENTY = ['tlo', 'prostokat', 'elipsa', 'tekst', 'obrazek', 'ikona'];
+const ELEMENTY = ['tlo', 'prostokat', 'elipsa', 'tekst', 'obrazek', 'ikona', 'linia'];
 const FLAGI = ['jedna_linia', 'pogrubienie', 'kursywa', 'podkreslenie', 'wersaliki'];
 
 function stripComment(line) {
@@ -676,6 +677,42 @@ function cell(row, k, ctx) {
 }
 
 // Rysuje jedną kartę (awers albo rewers) według komend szablonu.
+// LINIA = x1, y1, x2, y2, grubość=0.3, kolor=…, styl=ciągła|przerywana|kropkowana, początek=…, koniec=…
+// Zakończenia: brak, strzałka, strzałka_pełna, kropka, kreska. Rysowane jako geometria SVG w mm (bez <marker>,
+// które w Chromium potrafią zniknąć, gdy pierwsza definicja leży w ukrytej talii).
+const ZAKONCZENIA = { brak: 1, strzalka: 1, strzalka_pelna: 1, kropka: 1, kreska: 1 };
+function liniaSvg(c, tpl, ctx, colorOf) {
+  const o = c.opt;
+  const [x1, y1, x2, y2] = c.args.slice(0, 4).map(num);
+  if ([x1, y1, x2, y2].some(Number.isNaN)) { ctx.warn.add(`${c.where}: LINIA = x1, y1, x2, y2 (w mm)`); return ''; }
+  const g = Number.isNaN(num(o.grubosc)) ? 0.3 : num(o.grubosc);
+  const kol = colorOf(o.kolor || '#000000') || '#000';
+  const dl = Math.hypot(x2 - x1, y2 - y1) || 0.0001, ux = (x2 - x1) / dl, uy = (y2 - y1) / dl, px = -uy, py = ux;
+  const L = Math.max(1.6, g * 5), W = L * 0.45, f = (n) => +n.toFixed(3);
+  const zak = (nazwa) => { const z = plain(String(nazwa || 'brak')).toLowerCase().replace(/\s+/g, '_');
+    if (!ZAKONCZENIA[z]) { ctx.warn.add(`${c.where}: nieznane zakończenie linii „${nazwa}” – możliwe: brak, strzałka, strzałka_pełna, kropka, kreska`); return 'brak'; } return z; };
+  const pocz = zak(o.poczatek), kon = zak(o.koniec);
+  // Pełne zakończenia skracają linię, żeby nie wystawała spod grotu/kropki.
+  const skrot = (z) => z === 'strzalka_pelna' ? L * 0.9 : z === 'kropka' ? 0 : 0;
+  const a = [x1 + ux * skrot(pocz), y1 + uy * skrot(pocz)], b = [x2 - ux * skrot(kon), y2 - uy * skrot(kon)];
+  const styl = plain(o.styl || '');
+  const dash = styl === 'przerywana' ? ` stroke-dasharray="${f(Math.max(1, g * 4))} ${f(Math.max(0.8, g * 3))}"`
+    : styl === 'kropkowana' ? ` stroke-dasharray="0 ${f(Math.max(0.6, g * 2.5))}"` : '';
+  const cap = styl === 'kropkowana' ? 'round' : 'butt';
+  let s = `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${kol}" stroke-width="${f(g)}" stroke-linecap="${cap}"${dash}/>`;
+  const koniec = (z, X, Y, kx, ky) => {           // kx, ky: kierunek „na zewnątrz” linii w tym końcu
+    const qx = -ky, qy = kx;
+    if (z === 'strzalka') return `<polyline points="${f(X - kx * L + qx * W)},${f(Y - ky * L + qy * W)} ${f(X)},${f(Y)} ${f(X - kx * L - qx * W)},${f(Y - ky * L - qy * W)}" fill="none" stroke="${kol}" stroke-width="${f(g)}" stroke-linejoin="miter" stroke-linecap="round"/>`;
+    if (z === 'strzalka_pelna') return `<polygon points="${f(X)},${f(Y)} ${f(X - kx * L + qx * W)},${f(Y - ky * L + qy * W)} ${f(X - kx * L - qx * W)},${f(Y - ky * L - qy * W)}" fill="${kol}"/>`;
+    if (z === 'kropka') return `<circle cx="${f(X)}" cy="${f(Y)}" r="${f(Math.max(0.6, g * 1.6))}" fill="${kol}"/>`;
+    if (z === 'kreska') return `<line x1="${f(X + qx * W)}" y1="${f(Y + qy * W)}" x2="${f(X - qx * W)}" y2="${f(Y - qy * W)}" stroke="${kol}" stroke-width="${f(g)}"/>`;
+    return '';
+  };
+  s += koniec(pocz, x1, y1, -ux, -uy) + koniec(kon, x2, y2, ux, uy);
+  const kr = o.krycie ? ` opacity="${num(o.krycie)}"` : '';
+  return `<svg class="el linia" style="left:0;top:0;width:${tpl.w}mm;height:${tpl.h}mm;overflow:visible" viewBox="0 0 ${tpl.w} ${tpl.h}"${kr}>${s}</svg>`;
+}
+
 function renderCard(tpl, cmds, row, ctx) {
   // Wstawia wartości [Kolumna]; „empty” = tekst miał pola i wszystkie były puste.
   const field = (str) => {
@@ -725,6 +762,7 @@ function renderCard(tpl, cmds, row, ctx) {
       } else { const k = fillOf(c.args[0], o.kierunek); if (k) bg = `background:${k};`; }
       continue;
     }
+    if (c.kom === 'linia') { html += liniaSvg(c, tpl, ctx, colorOf); continue; }
     const [x, y, w, h] = c.args.slice(0, 4).map(num);
     if ([x, y, w, h].some(Number.isNaN)) { ctx.warn.add(`${c.where}: potrzebne 4 liczby – x, y, szerokość, wysokość (w mm)`); continue; }
     const box = `left:${x}mm;top:${y}mm;width:${w}mm;height:${h}mm;` + (o.obrot !== undefined && num(o.obrot) ? `transform:rotate(${num(o.obrot)}deg);` : '');
@@ -735,7 +773,8 @@ function renderCard(tpl, cmds, row, ctx) {
       let st = box + `background:${fill};`;
       if (c.kom === 'elipsa') st += 'border-radius:50%;';
       else if (o.zaokraglenie) st += `border-radius:${mm(o.zaokraglenie)};`;
-      if (o.obwodka) st += `border:${num(o.obwodka)}mm solid ${colorOf(o.kolor_obwodki || '#000000') || '#000'};`;
+      const stylObw = { przerywana: 'dashed', kropkowana: 'dotted' }[plain(o.styl_obwodki || '')] || 'solid';
+      if (o.obwodka) st += `border:${num(o.obwodka)}mm ${stylObw} ${colorOf(o.kolor_obwodki || '#000000') || '#000'};`;
       if (o.krycie) st += `opacity:${num(o.krycie)};`;
       html += `<div class="el ksztalt" style="${esc(st)}"></div>`;
     } else if (c.kom === 'tekst') {
@@ -1031,6 +1070,43 @@ async function zbudujTeraz() {
 
 // ── Raport projektu ─────────────────────────────────────────────────────────
 // Duplikaty ID, puste pola używanych kolumn, nieużywane kolumny, obrazki i ikony.
+// Obrazki (OBRAZEK i TŁO z pliku) z rozdzielczością poniżej 300 dpi w rozmiarze, w jakim stoją na karcie.
+// Grafiki SVG są wektorowe – pomijane. Wynik: lista „plik – N dpi (talie)”, od najgorszych.
+async function obrazkiNiskiejRozdzielczosci(prog = 300) {
+  const PX_MM = 96 / 25.4;
+  const naj = new Map();                               // plik → { dpi, talie }
+  const dodaj = (u, dpi, talia) => {
+    const plik = (URL_PLIK.get(u) || '').replace(/@[^@]*$/, '');
+    if (!plik || /\.svg$/i.test(plik) || !(dpi > 0)) return;
+    const x = naj.get(plik) || naj.set(plik, { dpi: Infinity, talie: new Set() }).get(plik);
+    if (dpi < prog) x.talie.add(talia);
+    x.dpi = Math.min(x.dpi, dpi);
+  };
+  const wymiary = new Map();
+  const rozmiar = (u) => wymiary.get(u) || wymiary.set(u, new Promise((r) => {
+    const i = new Image(); i.onload = () => r([i.naturalWidth, i.naturalHeight]); i.onerror = () => r([0, 0]); i.src = u;
+  })).get(u);
+  for (const k of $('podglad').querySelectorAll('.karta')) {
+    const talia = k.dataset.talia || '';
+    for (const img of k.querySelectorAll('.el.obrazek img')) {
+      const [nw, nh] = img.naturalWidth ? [img.naturalWidth, img.naturalHeight] : await rozmiar(img.src);
+      const box = img.parentElement, bw = box.offsetWidth / PX_MM, bh = box.offsetHeight / PX_MM;   // mm (bez obrotu)
+      if (!nw || !nh || !bw || !bh) continue;
+      const fit = img.style.objectFit;
+      const mmNaPx = fit === 'cover' ? Math.max(bw / nw, bh / nh) : fit === 'fill' ? null : Math.min(bw / nw, bh / nh);
+      dodaj(img.src, mmNaPx === null ? Math.min(nw / bw, nh / bh) * 25.4 : 25.4 / mmNaPx, talia);
+    }
+    const m = /url\(["']?(blob:[^"')]+)/.exec(k.style.backgroundImage || '');
+    if (m) {
+      const [nw, nh] = await rozmiar(m[1]);
+      const bw = k.offsetWidth / PX_MM, bh = k.offsetHeight / PX_MM;
+      if (nw && nh && bw && bh) dodaj(m[1], 25.4 / Math.max(bw / nw, bh / nh), talia);   // tło: cover
+    }
+  }
+  return [...naj.entries()].filter(([, x]) => x.dpi < prog).sort((a, b) => a[1].dpi - b[1].dpi)
+    .map(([p, x]) => `${esc(p)} – <b>${Math.round(x.dpi)} dpi</b> <span class="opis">(${esc([...x.talie].join(', '))})</span>`);
+}
+
 async function raportProjektu() {
   const sekcje = [];
   const lista = (tyt, el, pusto) => sekcje.push(`<h3>${esc(tyt)}</h3>` + (el.length
@@ -1069,6 +1145,9 @@ async function raportProjektu() {
     }
     lista(`Talia ${nazwa}`, el, '');
   }
+
+  // Rozdzielczość obrazków w rozmiarze na karcie (drukarnie chcą min. 300 dpi).
+  lista('Obrazki poniżej 300 dpi', await obrazkiNiskiejRozdzielczosci(), 'obrazki mają co najmniej 300 dpi w rozmiarze na karcie');
 
   // Ikony: znaczniki {x} użyte w szablonie i danych
   const uzyteZnaczniki = new Set([...wszystkieWartosci.matchAll(/\{([^{}]+)\}/g)].flatMap((m) => [iconKey(m[1]), plain(iconKey(m[1]))]));
@@ -1401,9 +1480,42 @@ function printCard(k, w, h) {
   return cell;
 }
 
-// o: { uklad: 'a4' | 'pojedyncze', rewersy, szkic, karty } – z okna Druk / PDF (domyślnie wszystkie karty, A4, z rewersami).
+// Karta ze spadem (dla drukarni): pole (w + 2s) × (h + 2s), rysunek karty przesunięty o spad.
+// Tło sięga do krawędzi spadu; kształty i obrazki (wypełnij/rozciągnij) dotykające krawędzi karty
+// są przedłużone o spad. Teksty, ikony, linie i obwódka karty zostają na swoim miejscu.
+// Bez zaokrąglenia rogów – rogi wycina drukarnia.
+function kartaZeSpadem(k, w, h, s) {
+  const c = k.cloneNode(true);
+  c.classList.remove('za-dlugi', 'wybrana', 'zmieniona', 'nowa');
+  c.style.width = mm(w + 2 * s); c.style.height = mm(h + 2 * s); c.style.borderRadius = '0';
+  const wnetrze = document.createElement('div');
+  wnetrze.style.cssText = `position:absolute;left:${mm(s)};top:${mm(s)};width:${mm(w)};height:${mm(h)};overflow:visible;`;
+  wnetrze.append(...c.childNodes);
+  c.appendChild(wnetrze);
+  const naMm = (v, cale) => (String(v).endsWith('%') ? parseFloat(v) * cale / 100 : parseFloat(v));
+  const E = 0.05;                                   // tolerancja „dotyka krawędzi” w mm
+  for (const el of wnetrze.querySelectorAll(':scope > .el.ksztalt, :scope > .el.obrazek')) {
+    if (el.style.transform) continue;                // obrócone – bez przedłużania
+    const img = el.querySelector('img');
+    if (img && !/cover|fill/.test(img.style.objectFit)) continue;   // „zmieść” zmieniłoby położenie obrazka
+    let x = naMm(el.style.left, w), y = naMm(el.style.top, h), ew = naMm(el.style.width, w), eh = naMm(el.style.height, h);
+    if ([x, y, ew, eh].some(Number.isNaN)) continue;
+    if (el.style.borderRadius && el.style.borderRadius !== '0px') continue;   // zaokrąglone / elipsy zostają
+    const lewo = x <= E, gora = y <= E, prawo = x + ew >= w - E, dol = y + eh >= h - E;
+    if (lewo) { ew += x + s; x = -s; }
+    if (gora) { eh += y + s; y = -s; }
+    if (prawo) ew = w + s - x;
+    if (dol) eh = h + s - y;
+    if (lewo || gora || prawo || dol) Object.assign(el.style, { left: mm(x), top: mm(y), width: mm(ew), height: mm(eh) });
+  }
+  return c;
+}
+
+// o: { uklad: 'a4' | 'pojedyncze' | 'drukarnia', ciecie, spad, rewersy, szkic, karty } – z okna Druk / PDF
+// (domyślnie wszystkie karty, A4, z rewersami).
 function buildPrint(o = {}) {
   const tryb = o.uklad || 'a4';
+  const ciecie = o.ciecie || 'znaczniki';      // znaczniki | nozyczki | oba
   const zRewersami = o.rewersy !== false;
   const druk = $('druk');
   druk.innerHTML = '';
@@ -1418,11 +1530,14 @@ function buildPrint(o = {}) {
   // Wymiary komórki na arkuszu: zawsze pionowo (krótszy bok = szerokość).
   const cellOf = (g) => [Math.min(g.w, g.h), Math.max(g.w, g.h)];
 
-  if (tryb === 'pojedyncze') {
+  if (tryb === 'pojedyncze' || tryb === 'drukarnia') {
+    // Drukarnia: strona = karta + spad z każdej strony, bez znaczników; awers i rewers na przemian, strona na kopię.
+    const s = tryb === 'drukarnia' ? Math.max(0, num(o.spad ?? 2) || 0) : 0;
     // Jeden format strony dla całego wydruku: największa karta (pionowo); mniejsze karty na środku.
-    const pw = Math.max(...[...groups.values()].map((g) => cellOf(g)[0]));
-    const ph = Math.max(...[...groups.values()].map((g) => cellOf(g)[1]));
+    const pw = Math.max(...[...groups.values()].map((g) => cellOf(g)[0])) + 2 * s;
+    const ph = Math.max(...[...groups.values()].map((g) => cellOf(g)[1])) + 2 * s;
     const page = (k, w, h) => {
+      if (s) { k = kartaZeSpadem(k, w, h, s); w += 2 * s; h += 2 * s; }
       const [cw, ch] = cellOf({ w, h });
       const a = document.createElement('div'); a.className = 'arkusz';
       a.style.cssText = `width:${pw}mm;height:${ph}mm;`;
@@ -1456,12 +1571,20 @@ function buildPrint(o = {}) {
       cards.slice(i, i + per).forEach((k) => u.appendChild(printCard(k, w, h)));
       sheet.appendChild(u);
       const line = (css) => { const z = document.createElement('div'); z.className = 'znacznik'; z.style.cssText = css; sheet.appendChild(z); };
-      for (let c = 0; c <= usedCols; c++) {
+      // Przerywane linie do cięcia nożyczkami: wzdłuż wszystkich krawędzi kart, przez całą siatkę.
+      if (ciecie !== 'znaczniki') {
+        const kreska = (css) => { const z = document.createElement('div'); z.className = 'linia-ciecia'; z.style.cssText = css; sheet.appendChild(z); };
+        for (let k = 0; k < n; k++) {             // obrys każdej karty (wspólne krawędzie nakładają się)
+          const cx = x0 + (k % usedCols) * cw, cy = y0 + Math.floor(k / usedCols) * ch;
+          kreska(`left:${mm(cx - 0.1)};top:${mm(cy - 0.1)};width:${mm(cw + 0.2)};height:${mm(ch + 0.2)};border:0.2mm dashed #9a948c`);
+        }
+      }
+      if (ciecie !== 'nozyczki') for (let c = 0; c <= usedCols; c++) {
         const x = x0 + c * cw;
         line(`left:${mm(x - 0.1)};top:${mm(y0 - odst - dl)};width:0.2mm;height:${mm(dl)}`);
         line(`left:${mm(x - 0.1)};top:${mm(y0 + used * ch + odst)};width:0.2mm;height:${mm(dl)}`);
       }
-      for (let r = 0; r <= used; r++) {
+      if (ciecie !== 'nozyczki') for (let r = 0; r <= used; r++) {
         const y = y0 + r * ch;
         line(`top:${mm(y - 0.1)};left:${mm(x0 - odst - dl)};height:0.2mm;width:${mm(dl)}`);
         line(`top:${mm(y - 0.1)};left:${mm(x0 + usedCols * cw + odst)};height:0.2mm;width:${mm(dl)}`);
@@ -1538,6 +1661,112 @@ async function eksportObrazkow(o = {}) {
 }
 window.eksportObrazkow = eksportObrazkow;
 async function jpegBlob(el) { return obrazKarty(el); }   // tryb testowy (podgląd JPG)
+
+// ── Katalog talii ────────────────────────────────────────────────────────────
+// PNG na talię: siatka zmniejszonych kart (każda karta raz, z liczbą kopii) z podpisami „ID Nazwa ×kopie”.
+// Strona ma najwyżej ok. 2000×2000 px – większe talie dzielą się na kilka plików (_1, _2…).
+// Czytelne dla człowieka i dla modelu językowego (pkt 30 kolejki). Karty za długie mają czerwoną ramkę.
+const KATALOG = { dpi: 110, maks: 2000, odstep: 24, podpis: 40, naglowek: 64, margines: 32 };
+const bezPolskich = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
+const slowoPliku = (t) => bezPolskich(t).split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'X';
+
+// o: { talie: [nazwy] (puste = wszystkie), id: [ID] (puste = wszystkie), pominTalie }.
+// Zwraca [{ nazwa, blob, talia, karty, zaDlugie }] – bez zapisu.
+async function katalogPng(o = {}) {
+  const tylkoTalie = new Set((o.talie || []).map(plain)), tylkoId = new Set((o.id || []).map((x) => plain(String(x))));
+  const pomin = new Set(o.pominTalie || []);
+  const wynik = [];
+  const filtr = $('filtr').value; $('filtr').value = ''; applyFilter();      // odfiltrowane talie też
+  try {
+    for (const section of $('podglad').querySelectorAll('.talia')) {
+      const talia = section.dataset.talia;
+      if (pomin.has(talia) || (tylkoTalie.size && !tylkoTalie.has(plain(talia)))) continue;
+      const wiersze = new Map();                                 // wiersz danych → { karta, kopie }
+      for (const k of section.querySelectorAll('.karta:not(.rewers)')) {
+        if (tylkoId.size && !tylkoId.has(plain(k.dataset.id || ''))) continue;
+        const w = wiersze.get(k.dataset.row);
+        if (w) w.kopie++; else wiersze.set(k.dataset.row, { karta: k, kopie: 1 });
+      }
+      const lista = [...wiersze.values()];
+      if (!lista.length) continue;
+      // Rozmiar miniatury i siatka strony.
+      const [wmm, hmm] = cardMm(lista[0].karta);
+      const tw = Math.round(wmm / 25.4 * KATALOG.dpi), th = Math.round(hmm / 25.4 * KATALOG.dpi);
+      const kom = tw + KATALOG.odstep, rz = th + KATALOG.podpis + KATALOG.odstep;
+      const kol = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines + KATALOG.odstep) / kom));
+      const wierszy = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines - KATALOG.naglowek + KATALOG.odstep) / rz));
+      const naStrone = kol * wierszy, stron = Math.ceil(lista.length / naStrone);
+      const zaDlugie = lista.filter((x) => x.karta.classList.contains('za-dlugi')).map((x) => x.karta.dataset.id);
+      for (let s = 0; s < stron; s++) {
+        const czesc = lista.slice(s * naStrone, (s + 1) * naStrone);
+        const k = Math.min(kol, czesc.length), r = Math.ceil(czesc.length / kol);
+        const c = document.createElement('canvas');
+        c.width = 2 * KATALOG.margines + k * kom - KATALOG.odstep;
+        c.height = 2 * KATALOG.margines + KATALOG.naglowek + r * rz - KATALOG.odstep;
+        const g = c.getContext('2d');
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+        const SANS = '-apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif';
+        g.fillStyle = '#1d1b19'; g.font = `600 30px ${SANS}`; g.textBaseline = 'top';
+        g.fillText(`${PROJEKT || ''} – ${talia}` + (stron > 1 ? ` (${s + 1}/${stron})` : ''), KATALOG.margines, KATALOG.margines);
+        g.fillStyle = '#6b6560'; g.font = `18px ${SANS}`;
+        g.fillText(`${lista.length} kart, ${lista.reduce((a, x) => a + x.kopie, 0)} z kopiami · ${wmm}×${hmm} mm`, KATALOG.margines, KATALOG.margines + 36);
+        for (let i = 0; i < czesc.length; i++) {
+          const { karta, kopie } = czesc[i];
+          status(`Katalog ${talia}: ${s * naStrone + i + 1}/${lista.length}…`);
+          const x = KATALOG.margines + (i % kol) * kom, y = KATALOG.margines + KATALOG.naglowek + Math.floor(i / kol) * rz;
+          const bmp = await createImageBitmap(await obrazKarty(karta, { dpi: KATALOG.dpi * 2, format: 'jpg' }));
+          g.imageSmoothingQuality = 'high';
+          g.drawImage(bmp, x, y, tw, th);
+          g.strokeStyle = '#c9c4bd'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, tw - 1, th - 1);
+          if (karta.classList.contains('za-dlugi')) { g.strokeStyle = '#d00'; g.lineWidth = 4; g.strokeRect(x - 2, y - 2, tw + 4, th + 4); }
+          // Podpis: „ID Nazwa” (z tytułu karty, bez nazwy talii) i liczba kopii; przycięty do szerokości miniatury.
+          let t = (karta.title || '').replace(talia + ' ', '') + (kopie > 1 ? ` ×${kopie}` : '');
+          g.fillStyle = karta.classList.contains('za-dlugi') ? '#c00' : '#1d1b19'; g.font = `600 17px ${SANS}`;
+          while (t.length > 1 && g.measureText(t).width > tw) t = t.slice(0, -2) + '…';
+          g.fillText(t, x, y + th + 8);
+        }
+        const nazwa = slowoPliku(PROJEKT) + '_' + slowoPliku(talia) + (stron > 1 ? '_' + (s + 1) : '') + '.png';
+        wynik.push({ nazwa, blob: await new Promise((ok) => c.toBlob(ok, 'image/png')), talia, karty: czesc.length, zaDlugie });
+      }
+    }
+  } finally { $('filtr').value = filtr; applyFilter(); }
+  return wynik;
+}
+
+// Zapis katalogu: cel 'katalog' = Export/katalog (Plik → Eksport → Katalog…),
+// cel 'zlecenie' = .generator/katalog (zlecenie z pliku .generator/zlecenia/katalog, np. od Claude).
+async function zapiszKatalog(o = {}, cel = 'katalog') {
+  return naWylacznosc(async () => {
+    const folder = await APP.eksportStart(cel);
+    if (!folder) { status('Katalog anulowany.'); return null; }
+    const strony = await katalogPng(o);
+    for (const s of strony) await APP.eksportPlik(s.nazwa, new Uint8Array(await s.blob.arrayBuffer()));
+    status(strony.length ? `Zapisano katalog: ${strony.length} plików PNG w ${folder}` : 'Katalog: brak kart do pokazania.');
+    if (cel === 'katalog') APP.eksportKoniec();
+    const talie = new Map();
+    for (const s of strony) {
+      const t = talie.get(s.talia) || talie.set(s.talia, { nazwa: s.talia, pliki: [], karty: 0, zaDlugie: s.zaDlugie }).get(s.talia);
+      t.pliki.push(s.nazwa); t.karty += s.karty;
+    }
+    return { folder, pliki: strony.map((s) => s.nazwa), talie: [...talie.values()] };
+  });
+}
+async function oknoKatalogu() {
+  const r = await otworzOkno('katalog');
+  if (!r) return;
+  try { return await zapiszKatalog(r.opcje, 'katalog'); }
+  catch (e) { status('Katalog nie powiódł się: ' + ((e && e.message) || e)); console.error(e); }
+}
+// Zlecenie z pliku (wywołuje aplikacja): wynik z Uwagami, kartami za długimi i stanem edytora.
+async function zlecenieKatalogu(o = {}) {
+  try {
+    const r = await zapiszKatalog(o, 'zlecenie');
+    return { ok: !!r, ...(r || {}), uwagi: ($('uwagi').innerText || '').split('\n').map((x) => x.trim()).filter((x) => x && x !== 'Uwagi:'),
+      zaDlugie: [...$('podglad').querySelectorAll('.karta.za-dlugi:not(.rewers)')].map((k) => k.title).filter((t, i, a) => a.indexOf(t) === i),
+      status: $('status').textContent, niezapisaneZmiany: !!(typeof ED !== 'undefined' && ED.zmiany) };
+  } catch (e) { return { ok: false, blad: String((e && e.message) || e) }; }
+}
+Object.assign(window, { katalogPng, zapiszKatalog, oknoKatalogu, zlecenieKatalogu });
 
 // ── Eksport do playingcards.io ───────────────────────────────────────────────
 // Tworzy nowy pokój (.pcio): każda talia to osobny stos (holder) z kartami zakrytymi,
@@ -1798,7 +2027,7 @@ async function zapiszPdf(o = {}) {
   if (!karty.length) { status('Brak kart do PDF – sprawdź wybór kart i talii.'); return; }
   buildPrint({ ...o, karty });
   const info = await APP.info();
-  const nazwa = (PROJEKT || info.nazwa || 'karty') + (o.uklad === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4')
+  const nazwa = (PROJEKT || info.nazwa || 'karty') + ({ pojedyncze: ' – karty pojedynczo', drukarnia: ' – drukarnia' }[o.uklad] || ' – karty A4')
     + (o.ktore === 'zaznaczone' ? ' – wybrane' : '') + (o.ktore === 'zmienione' ? ' – zmienione' : '') + (o.szkic ? ' – szkic' : '');
   status('Zapisywanie PDF…');
   try {
@@ -1819,9 +2048,12 @@ const OKNA = {
     domyslne: { dpi: 150, format: 'jpg', ktore: 'wszystkie', rewersy: true, pominTalie: [] },
     przyciski: [['ok', 'Eksportuj']],
     opis: 'Każda karta jako osobny plik w folderze Export projektu.' },
-  druk: { tytul: 'Druk i PDF', pola: ['uklad', 'rewersy', 'szkic', 'ktore', 'talie'],
-    domyslne: { uklad: 'a4', rewersy: true, szkic: false, ktore: 'wszystkie', pominTalie: [] },
+  druk: { tytul: 'Druk i PDF', pola: ['uklad', 'ciecie', 'spad', 'rewersy', 'szkic', 'ktore', 'talie'],
+    domyslne: { uklad: 'a4', ciecie: 'znaczniki', spad: 2, rewersy: true, szkic: false, ktore: 'wszystkie', pominTalie: [] },
     przyciski: [['drukuj', 'Drukuj…'], ['pdf', 'Zapisz PDF']] },
+  katalog: { tytul: 'Katalog talii', pola: ['talie'], domyslne: { pominTalie: [] },
+    przyciski: [['ok', 'Zapisz katalog']],
+    opis: 'Każda talia jako obrazek PNG z siatką zmniejszonych kart i podpisami (ID, nazwa, liczba kopii) – do przeglądu, instrukcji i dla testerów. Pliki w folderze Export/katalog projektu.' },
   pcio: { tytul: 'Pokój playingcards.io', pola: ['dpi', 'talie'],
     domyslne: { dpi: 150, pominTalie: [] },
     przyciski: [['ok', 'Zapisz pokój']],
@@ -1836,7 +2068,11 @@ function poleOkna(nazwa, rodzaj, u) {
     case 'dpi': return radio('Rozdzielczość', 'dpi', [[150, '150 dpi <span class="opis">– ekran, playtesty online (karta 63×88 mm ≈ 372×520 px)</span>'],
       [300, '300 dpi <span class="opis">– druk, drukarnie (≈ 744×1039 px)</span>']]);
     case 'format': return radio('Format', 'format', [['jpg', 'JPG <span class="opis">– mniejsze pliki, rogi białe</span>'], ['png', 'PNG <span class="opis">– przezroczyste zaokrąglone rogi</span>']]);
-    case 'uklad': return radio('Układ', 'uklad', [['a4', 'A4 ze znacznikami cięcia (karty 1:1)'], ['pojedyncze', 'Każda karta na osobnej stronie']]);
+    case 'uklad': return radio('Układ', 'uklad', [['a4', 'A4 ze znacznikami cięcia (karty 1:1)'], ['pojedyncze', 'Każda karta na osobnej stronie'],
+      ['drukarnia', 'Drukarnia <span class="opis">– strona na kopię: awers, rewers, awers…; ze spadem, bez znaczników</span>']]);
+    case 'ciecie': return radio('Linie cięcia <span class="opis">(układ A4)</span>', 'ciecie', [['znaczniki', 'Znaczniki na marginesie <span class="opis">– gilotyna, nóż</span>'],
+      ['nozyczki', 'Przerywane linie wzdłuż kart <span class="opis">– nożyczki</span>'], ['oba', 'Jedno i drugie']]);
+    case 'spad': return `<fieldset><legend>Spad <span class="opis">(układ Drukarnia)</span></legend><label><input type="number" name="spad" min="0" max="10" step="0.5" value="${esc(u.spad ?? 2)}" style="width:4em"> mm <span class="opis">– tło i elementy przy krawędzi wychodzą poza linię cięcia</span></label></fieldset>`;
     case 'rewersy': return pole('rewersy', rodzaj === 'druk' ? 'Rewersy <span class="opis">– po każdym arkuszu kart arkusz rewersów (druk dwustronny)</span>' : 'Rewersy talii <span class="opis">– osobne pliki</span>');
     case 'szkic': return pole('szkic', 'Szkic <span class="opis">– bez teł i obrazków, tekst czarny (oszczędza tusz)</span>');
     case 'ktore': {
@@ -1876,6 +2112,7 @@ function otworzOkno(rodzaj, domyslna) {
           const pola = [...form.querySelectorAll('[name=talia]')];
           o.pominTalie = pola.filter((x) => !x.checked).map((x) => x.value);
         } else if (['rewersy', 'szkic'].includes(p)) o[p] = !!form.querySelector(`[name=${p}]`)?.checked;
+        else if (p === 'spad') { const v = parseFloat(String(form.querySelector('[name=spad]')?.value ?? '').replace(',', '.')); o.spad = Number.isNaN(v) ? u.spad : Math.min(10, Math.max(0, v)); }
         else { const x = form.querySelector(`[name=${p}]:checked`); o[p] = x ? (p === 'dpi' ? +x.value : x.value) : u[p]; }
       }
       return o;
