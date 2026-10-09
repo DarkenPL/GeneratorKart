@@ -20,7 +20,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 ### Plik szablonu
 
 - W aplikacji otwierasz jeden plik szablonu (`.txt`). Bez sekcji `[TALIA …]` opisuje on jedną talię, z sekcjami – kilka talii, w kolejności z pliku.
-- **Ścieżki** (`DANE`, obrazki, `CZCIONKA_PLIK`, `STÓŁ`, `ikony.csv`) liczą się od **folderu projektu**: folderu, w którym leży szablon, albo folderu nad nim, gdy szablon leży w podfolderze `Szablony`.
+- **Ścieżki** (`DANE`, obrazki, `CZCIONKA_PLIK`, `ikony.csv`) liczą się od **folderu projektu**: folderu, w którym leży szablon, albo folderu nad nim, gdy szablon leży w podfolderze `Szablony`.
 - Edytuj jako **zwykły tekst** (TextEdit: Format → Zamień na zwykły tekst) albo w edytorze kodu. Plik zapisany jako RTF generator wykryje i poda, jak to naprawić.
 
 ## Talia i projekt
@@ -34,8 +34,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 | `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. |
 | `KARTA = 63, 88, zaokrąglenie=3, obwódka=0.7, kolor_obwódki=#222222` | Szerokość i wysokość karty w mm. Opcjonalnie zaokrąglone rogi i obwódka całej karty (rysowana na wierzchu). W sekcji `[REWERS]` ustawia tylko rogi i obwódkę rewersu; rozmiar jest zawsze jak awersu. |
 | `KOLOR = las, #7BA05B` | Nazwany kolor (paleta wspólna dla wszystkich szablonów). Nazwy można używać w danych i szablonie zamiast kodu, np. `TŁO = [Kolor] \| las`, a także jako ikony-prostokąta `{kolor-las}` (`{kolor-las-mix}` jest w połowie biały). |
-| `PCIO = 3f2a9c1e-…` | Identyfikator talii w pokoju playingcards.io, którą zastępuje eksport. Bez tej komendy talia jest pomijana w eksporcie. Patrz [playingcards.md](playingcards.md). |
-| `STÓŁ = stol.pcio` | Plik pokoju playingcards.io, do którego eksport wstawia talie. Bez tej komendy generator poprosi o plik. |
+| `PCIO`, `STÓŁ` | Nieużywane (dawny eksport do istniejącego pokoju playingcards.io). Teraz eksport tworzy nowy pokój bez dodatkowych komend – patrz [playingcards.md](playingcards.md). |
 
 ### Plik danych (CSV / XLSX)
 

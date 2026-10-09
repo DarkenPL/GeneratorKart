@@ -26,7 +26,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
 1. **Plik → Nowy projekt… (⌘N)** tworzy folder gry o podanej nazwie, z gotowym szablonem (`Szablony/gra.txt`), plikiem kart (`karty.csv`), ikonami, przykładowym obrazkiem i krótką instrukcją (`CZYTAJ.txt`), i od razu go otwiera. Wystarczy zmieniać pliki.
 
    **Plik → Otwórz szablon… (⌘O)** otwiera istniejący projekt: wskaż plik szablonu (`.txt`) swojej gry.
-   - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki, pokój playingcards.io.
+   - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki.
    - Ścieżki liczą się od folderu projektu: tego, w którym leży szablon, albo folderu nad `Szablony`, gdy szablon leży w takim podfolderze.
    - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → Generator kart**.
 2. Karty odświeżają się same po każdym zapisie szablonu, pliku z kartami albo obrazka.
@@ -51,6 +51,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    - Na zawsze zostają **punkty**: otwarcie projektu (10 ostatnich), stan sprzed przywrócenia i punkty nazwane przez Ciebie (pole „np. przed playtestem 3” → **Zapisz punkt**).
    - Przy każdej wersji: **Zmiany** (różnice linii względem obecnej wersji), **Pokaż karty** (podgląd kart z tamtej wersji; obrazki są obecne, bo nie są kopiowane) i **Przywróć…** (drugie kliknięcie potwierdza). Przed przywróceniem obecny stan trafia do historii, więc przywrócenie da się cofnąć.
    - Przykłady nie mają historii. Folder `.historia` możesz usunąć – historia zacznie się od nowa.
+   - **Z innych programów** (np. gdy Claude zmienia pliki gry): punkt z opisem można dodać z konsoli – `node historia-cli.js punkt <folder projektu> "opis"` (także `lista` i `przywroc <nr>`; plik `app/historia-cli.js` z repozytorium, wymaga Node 18+) – albo przez **skrzynkę**: folder `.historia/przychodzace/<nazwa>/` z kopiami plików (ścieżki jak w projekcie, np. `Szablony/gra.txt`) i plikiem `opis.txt`. Aplikacja w ciągu kilku sekund zamienia go w punkt historii z tym opisem i usuwa folder. Nazwa folderu w formie `2026-10-09T12-30-00` ustala datę punktu.
 8. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
 9. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
@@ -70,7 +71,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
   - Nazwa projektu pochodzi z komendy `PROJEKT = …` w szablonie, a bez niej z nazwy pliku szablonu. Numer karty to kolumna `ID` (gdy jej brak – numer wiersza), a numer kopii liczy się od 1 według kolumny `Ilość`.
   - Polskie znaki i spacje są pomijane (`Karty Wpływu` → `KartyWplywu`).
   - Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
-- **Plik `.pcio`** z eksportu do playingcards.io zapisuje się domyślnie w folderze projektu.
+- **Eksport do playingcards.io** zapisuje nowy pokój (`NazwaProjektu – playingcards.pcio`) w folderze projektu – każda talia jako osobny stos ([opis](playingcards.md)).
 - **Przykłady** są tylko do odczytu. Eksport JPG pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
 
 ## Dla deweloperów

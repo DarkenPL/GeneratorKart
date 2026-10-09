@@ -38,7 +38,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione” i historię wersji; zrzuty `-edytor.png`, `-historia.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione” i historię wersji ze skrzynką; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -54,8 +54,8 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
 Sekcje w kolejności w pliku:
 
 1. **CSS**: wspólne zasady rysowania (`.karta`, `.el.tekst`, `.el.obrazek`, `.el.ikony`, `.ikona-kolor`), interfejs, `@media print`.
-2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, jakość JPG, rozmiar obrazków pcio). Nic, co dotyczy konkretnej gry. Paleta kolorów i plik pokoju pcio są w szablonach (`KOLOR`, `STÓŁ`).
-3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
+2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, rozdzielczość i jakość JPG – też dla obrazków playingcards.io). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
+3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `build()` kolejkuje przebudowy (`KOLEJKA_BUDOWY` → `zbudujTeraz`), bo równoległe przebudowy unieważniały sobie adresy blob: obrazków; eksporty (JPG, playingcards.io) idą przez `naWylacznosc()`: czekają na trwające przebudowy, a nowe przebudowy czekają na koniec eksportu (`KONIEC_EKSPORTU`); `EKSPORT_TRWA` wstrzymuje też odświeżanie. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
 5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. Obrazki z folderu `Ikony/`/`Icons/` (listing JSON z serwera, `znajdzIkony`) rejestrują się same jako `{nazwa}`; `ikony.csv` je nadpisuje. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
 6. **Szablony**:
@@ -73,11 +73,7 @@ Sekcje w kolejności w pliku:
    - karty poziome są obracane o 90°. Przed obrotem karta musi wystawać w lewo, nie w prawo, inaczej Chrome zmniejsza cały wydruk;
    - siatka jest wyśrodkowana, znaczniki cięcia na marginesie, po każdym arkuszu pełny arkusz rewersów.
 9. **Eksport JPG** (do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
-10. **Eksport playingcards.io** (`exportPcio`):
-    - wczytuje `.pcio` (ZIP: `schemaVersion`, `widgets.json`, `userassets/`);
-    - dla każdej talii z `PCIO = id` podmienia `cardTypes`, `faceTemplate` i `backTemplate`;
-    - karty kładzie zakryte na stosie `deck.parent`, z przesunięciem wziętym z dawnej karty;
-    - zachowuje tylko używane `userassets`.
+10. **Eksport playingcards.io** (`exportPcio`): nowy pokój od zera – ZIP (`schemaVersion` 8, `widgets.json`, `userassets/`); na talię `holder` (label = nazwa talii, karta + ramka 4) z `cardDeck` (`parent` = holder, dłuższy bok karty 160, `faceTemplate` obraz dynamiczny, `backTemplate` obraz rewersu albo kolor + nazwa) i kartami zakrytymi w stosie. Holdery w rzędach (`PCIO` w kodzie: odstęp 40, szerokość stołu 1500). Bez przycisków. Zapis IPC `pcio:zapisz` do `<projekt>/<PROJEKT> – playingcards.pcio` (przykłady: okno zapisu). Komendy `PCIO`/`STÓŁ` dają tylko uwagę (dawny tryb podmiany usunięty).
 
 ## Testowanie (środowisko Claude)
 
@@ -92,7 +88,7 @@ Sekcje w kolejności w pliku:
 
 1. **Aplikacja na Maca**: pierwsza wersja zrobiona (`app/`). Dalej:
    - automatyczne aktualizacje,
-   - wersja na Windows,
+   - wersja na Windows (odłożona – decyzja właściciela 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na windows-latest, test na żywym Windows u kogoś),
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
@@ -120,12 +116,16 @@ Sekcje w kolejności w pliku:
 20. **Wizualne porównanie wersji** (zrobione częściowo, `claude/noc`): przycisk „Porównaj” – „przed” (HTML karty zapisany z ostatnim PDF, obrazki w obecnej wersji) i „teraz”. Porównanie z dowolną wersją z historii – razem z pkt 14.
 21. **Eksport do Tabletop Simulator** (zaplanowane): arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
 22. **Katalog kart do PDF** (zaplanowane): wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
-23. **Rozdzielczość eksportu** (zaplanowane): wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG).
+23. **Rozdzielczość eksportu** (zaplanowane): wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG). Eksport playingcards.io używa tych samych ustawień (`cardToJpeg` = `CONFIG.jpgDpi`, `CONFIG.jpgJakosc`), więc wybór ma działać w obu.
+24. **Skrzynka historii** (zrobione, `claude/historia-pcio`; `historia.sprawdzSkrzynke`, main co 3 s, `historia:zmiana` odświeża panel): zewnętrzne narzędzie (np. Claude) kładzie `.historia/przychodzace/<data>/` z kopiami plików i `opis.txt`; aplikacja przy najbliższym wczytaniu importuje to jako punkt z opisem (np. „Claude: przed …”) i usuwa folder. Działa też przy zamkniętej aplikacji, bez znajomości formatu `indeks.json`.
+25. **Wersja konsolowa (CLI)** (zaplanowane): `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (Electron z ukrytym oknem; na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia ≠ 0 przy błędach, `--json`), `pdf` (opcje jak w pasku: tryb, rewersy, szkic, tylko zmienione, wybrane ID), `jpg`, `png <ID…>` (zrzut wybranych kart do obejrzenia), `historia lista|punkt "opis"|przywroc <czas>` (czysty Node przez `historia.js`, bez Electrona). Cel: Claude edytuje pliki gry w folderze właściciela (powłoka Linux na Macu ma Node 22 i Xvfb), od razu sprawdza wynik i zostawia opisany punkt w historii. Zastępuje obecny tryb `--test-*` (testy CI przejdą na CLI).
+26. **`historia punkt` z konsoli** (zrobione, `claude/historia-pcio`; blokada `.historia/indeks.lock` – `zBlokada`, stara > 10 s zdejmowana; prostsza alternatywa dla pkt 24, pierwszy krok pkt 25): `app/historia-cli.js` (~50 linii) na `historia.js`: `punkt <folder projektu> "opis"` (szablony z `Szablony/` + pliki z `DANE`, kopie zmienionych, punkt z opisem, przerzedzanie), `lista`, `przywroc <czas>`. Blokada pliku indeksu (np. `.historia/indeks.lock` z timeoutem) przeciw jednoczesnemu zapisowi z aplikacją. Test w `scripts/test-historia.js`. Użycie przez Claude: skrypt kopiowany do katalogu tymczasowego w powłoce na Macu (Node 22), punkty „Claude: przed …” / „Claude: po …” wokół zmian w plikach gry.
+27. **Eksport playingcards.io – nowy pokój** (zrobione, `claude/historia-pcio`; **zastępuje** obecny tryb podmiany talii w istniejącym stole – decyzja właściciela): eksport tworzy od zera plik `.pcio` (ZIP: `schemaVersion` 8, `widgets.json`, `userassets/`). Każda talia = osobny holder (nazwa talii) z kartami zakrytymi (awers + rewers z generatora, kopie z `Ilość` jako osobne karty), proporcje z `KARTA`. Holdery w rzędzie/siatce z odstępami. **Bez przycisków** (tasowanie, zbieranie). Zapis do folderu projektu; import w playingcards.io: Edit → Import. Komendy `PCIO = id` i `STÓŁ` przestają być potrzebne – w szablonach zostają bez działania (Uwaga z informacją), dokumentacja `docs/playingcards.md` do przepisania. Właściciel sam ustawia resztę stołu.
 
 Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
 
 ### Roadmapa (niski priorytet)
 
-- **Generator stołów playingcards.io**: tworzenie pokoju `.pcio` od zera z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania), zamiast tylko podmiany talii w istniejącym stole. Obejmuje też wybór talii z istniejącego `.pcio` z listy (zamiast ręcznego `PCIO = id`). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText.
+- **Generator stołów playingcards.io** (pierwszy krok – prosty nowy pokój – to pkt 27): tworzenie pokoju `.pcio` od zera z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania), zamiast tylko podmiany talii w istniejącym stole. Obejmuje też wybór talii z istniejącego `.pcio` z listy (zamiast ręcznego `PCIO = id`). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

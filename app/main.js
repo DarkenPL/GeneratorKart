@@ -184,6 +184,20 @@ ipcMain.handle('eksport:plik', (e, nazwa, dane) => {
   fs.writeFileSync(path.join(folderEksportu, path.basename(String(nazwa))), Buffer.from(dane));
 });
 ipcMain.handle('eksport:koniec', () => { if (folderEksportu && !testowy) shell.openPath(folderEksportu); });
+// Eksport playingcards.io: plik .pcio w folderze projektu (przykłady – okno zapisu).
+ipcMain.handle('pcio:zapisz', async (e, nazwa, dane) => {
+  let plik;
+  const czysta = path.basename(String(nazwa || 'karty.pcio')).replace(/[\\/:*?"<>|]+/g, '_');
+  if (projekt && !jestPrzykladem(projekt)) plik = path.join(projekt, czysta);
+  else {
+    const r = await dialog.showSaveDialog(okno, { title: 'Zapisz pokój playingcards.io',
+      defaultPath: path.join(app.getPath('documents'), czysta), filters: [{ name: 'playingcards.io', extensions: ['pcio'] }] });
+    if (r.canceled || !r.filePath) return null;
+    plik = r.filePath;
+  }
+  fs.writeFileSync(plik, Buffer.from(dane));
+  return plik;
+});
 ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
   const katalog = projekt && !jestPrzykladem(projekt) ? projekt : app.getPath('documents');
   const r = await dialog.showSaveDialog(okno, {
@@ -216,6 +230,11 @@ ipcMain.handle('historia:zapisz', (e, pliki, punkt) =>
 ipcMain.handle('historia:lista', () => historiaDostepna() ? historia.wczytajIndeks(projekt) : null);
 ipcMain.handle('historia:stan', (e, czas) => historiaDostepna()
   ? historia.stan(projekt, Number(czas)).map((s) => ({ plik: s.plik, dane: new Uint8Array(s.dane) })) : []);
+// Skrzynka (.historia/przychodzace) – punkty od innych narzędzi, np. Claude; sprawdzana co 3 s.
+setInterval(() => {
+  if (!historiaDostepna() || !okno) return;
+  try { if (historia.sprawdzSkrzynke(projekt)) okno.webContents.send('historia:zmiana'); } catch (e) { /* spróbujemy za chwilę */ }
+}, 3000);
 ipcMain.handle('historia:przywroc', (e, czas) => {
   if (!historiaDostepna()) return { blad: 'Przykłady nie mają historii.' };
   if (zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
@@ -228,7 +247,8 @@ const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).
 function zbudujMenu() {
   const ost = ostatnie();
   const przyk = listaPrzykladow();
-  const szablon = [
+  // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
+  const menu = [
     { role: 'appMenu', label: 'Generator kart' },
     {
       label: 'Plik',
@@ -278,7 +298,7 @@ function zbudujMenu() {
     { role: 'windowMenu', label: 'Okno' },
     { role: 'help', label: 'Pomoc', submenu: [{ label: 'Dokumentacja', click: () => shell.openExternal(DOKUMENTACJA) }] },
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(szablon));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
 }
 
 // ── Okno ────────────────────────────────────────────────────────────────────
@@ -439,17 +459,37 @@ async function trybTestowy(folder, wynik) {
     const baner = await js("!document.getElementById('wersjaBaner').hidden && / kart /.test(document.getElementById('status').textContent)");
     await js(`przywrocWersje(${otwarcie ? otwarcie.czas : 0})`); await czekaj(3500);
     const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
+    // Skrzynka: punkt z opisem od zewnętrznego narzędzia trafia do historii sam.
+    const skr = path.join(projekt, historia.FOLDER, historia.SKRZYNKA, 'test');
+    const rel = path.relative(projekt, szablon);
+    fs.mkdirSync(path.dirname(path.join(skr, rel)), { recursive: true });
+    fs.writeFileSync(path.join(skr, rel), oryginal + '\n; ze skrzynki\n');
+    fs.writeFileSync(path.join(skr, 'opis.txt'), 'Claude: test skrzynki');
+    await czekaj(4000);
+    const zeSkrzynki = (await lista()).punkty.some((p) => p.etykieta === 'Claude: test skrzynki') && !fs.existsSync(skr);
     const punkty = (await lista()).punkty.map((p) => p.powod);
     await js('pokazHistorie(false)');
-    hist = { otwarcie: !!otwarcie, kopieSzablonu, wiersze, diff: diff.slice(0, 120), baner, przywrocony, punkty };
+    hist = { otwarcie: !!otwarcie, kopieSzablonu, wiersze, diff: diff.slice(0, 120), baner, przywrocony, punkty, zeSkrzynki };
     hist.ok = !!otwarcie && kopieSzablonu >= 2 && wiersze >= 2 && /zmiana z innego edytora/.test(diff) && baner && przywrocony
-      && punkty.includes('przed przywróceniem');
+      && punkty.includes('przed przywróceniem') && zeSkrzynki;
+  }
+  // Eksport playingcards.io (poza przykładami): nowy pokój – stos na talię, wszystkie karty.
+  let pcio = null;
+  if (!jestPrzykladem(szablon)) {
+    pcio = await wc.executeJavaScript(`exportPcio().then((r) => ({ ...r, talieWidok: document.querySelectorAll('#podglad .talia').length,
+      kartyWidok: document.querySelectorAll('#podglad .karta:not(.rewers)').length }), (e) => ({ blad: String((e && (e.message || e.type)) || e) }))`);
+    const zip = pcio && pcio.plik && fs.existsSync(pcio.plik) ? fs.readFileSync(pcio.plik) : null;
+    pcio.ok = !!zip && zip.slice(0, 2).toString() === 'PK' && pcio.holdery === pcio.talieWidok && pcio.karty === pcio.kartyWidok;
   }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
-  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pdf: wynik, ok }) + '\n');
+  // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
+  const menu = (Menu.getApplicationMenu()?.items || []).map((i) => i.label);
+  const plik = Menu.getApplicationMenu()?.items.find((i) => i.label === 'Plik');
+  const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
+  const ok = menuOk && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, menu, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
