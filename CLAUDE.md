@@ -88,7 +88,7 @@ Sekcje w kolejności w pliku:
 
 1. **Aplikacja na Maca**: pierwsza wersja zrobiona (`app/`). Dalej:
    - automatyczne aktualizacje,
-   - wersja na Windows,
+   - wersja na Windows (odłożona – decyzja właściciela 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na windows-latest, test na żywym Windows u kogoś),
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
