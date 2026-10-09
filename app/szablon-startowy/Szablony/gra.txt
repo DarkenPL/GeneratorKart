@@ -14,6 +14,7 @@
 
 ; ── Wspólne dla wszystkich talii ─────────────────────────────────
 PROJEKT  = "{{NAZWA_W_CUDZYSLOWIE}}"     ; nazwa gry w plikach JPG i PDF
+WERSJA   = v0.1                          ; wersja – widoczna w stopce karty ([_wersja])
 KARTA    = 63, 88                          ; rozmiar karty w mm (standard pokerowy)
 CZCIONKA = "EB Garamond, Georgia, serif", 10, kolor=#222222
 
@@ -42,6 +43,9 @@ OBRAZEK = 10, 16, 43, 33, [Obrazek], pion=dół
 TEKST = 6, 51, 51, 12, "**Efekt:** [Efekt]"           ; znika, gdy kolumna Efekt jest pusta
 TEKST = 6, 64, 51, 9,  [Nazwa], czcionka="Patrick Hand, cursive", rozmiar=14, wyrównanie=środek, pion=środek
 TEKST = 6, 74, 51, 8,  [Opis], rozmiar=8, kursywa, wyrównanie=środek
+
+; Stopka do testów: wersja i numer karty w talii (usuń przed drukiem finalnym)
+TEKST = 6, 82.3, 51, 2.2, "[_wersja] · [_numer]/[_liczba]", rozmiar=5, kolor=#999999, wyrównanie=prawo, jedna_linia
 
 ; ── Rewers (jeden dla całej talii) ────────────────────────────────
 [REWERS]

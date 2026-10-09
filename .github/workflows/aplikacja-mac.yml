@@ -44,6 +44,9 @@ jobs:
       - name: Zasoby (generator, przykłady, biblioteki, czcionki)
         run: npm run zasoby
 
+      - name: Test – historia wersji (moduł)
+        run: node scripts/test-historia.js
+
       - name: Budowanie (Apple Silicon)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

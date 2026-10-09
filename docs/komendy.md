@@ -28,6 +28,8 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 | Komenda | Opis |
 |---|---|
 | `PROJEKT = Złota Wyprawa` | Nazwa projektu (gry): w nazwach plików JPG i PDF. Bez tej komendy – nazwa pliku szablonu. Zwykle w części wspólnej szablonu. |
+| `WERSJA = v0.3` | Wersja projektu, do wstawienia na kartę polem `[_wersja]` (patrz [Pola wbudowane](#pola-wbudowane)). |
+| `STAŁA = margines, 4` | Stała: `[=margines]` w dowolnej komendzie zostaje zamienione na `4`. Wygodne dla powtarzanych liczb i kolorów (`STAŁA = złoty, #C9A227` → `kolor=[=złoty]`). Stała działa w całym pliku szablonu, także w taliach i rewersach. |
 | `NAZWA = Przedmioty` | Nazwa talii (podgląd, pliki JPG, eksport). Domyślnie nazwa z `[TALIA …]` albo z nazwy pliku. |
 | `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. |
 | `KARTA = 63, 88, zaokrąglenie=3, obwódka=0.7, kolor_obwódki=#222222` | Szerokość i wysokość karty w mm. Opcjonalnie zaokrąglone rogi i obwódka całej karty (rysowana na wierzchu). W sekcji `[REWERS]` ustawia tylko rogi i obwódkę rewersu; rozmiar jest zawsze jak awersu. |
@@ -39,13 +41,17 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 
 - Pierwszy wiersz zawiera nazwy kolumn.
 - Separator to `;` albo `,` (wykrywany sam). Kodowanie UTF-8.
-- W pliku XLSX czytany jest pierwszy arkusz.
+- W pliku XLSX czytany jest pierwszy arkusz. Inny arkusz wskażesz po `#`: `DANE = gra.xlsx#Wydarzenia` (nazwa bez względu na wielkość liter i polskie znaki). Dzięki temu kilka talii może mieć dane w jednym pliku.
 - Kolumna **`Ilość`** określa liczbę kopii karty: `0` pomija kartę, a brak kolumny oznacza 1.
 - Kolumna **`ID`** służy jako numer karty (podgląd, nazwy plików JPG), a **`Nazwa`** jako podpis karty w podglądzie i uwagach.
 - Nazwy tych trzech kolumn można pisać dowolnie: bez polskich znaków i bez względu na wielkość liter (`ilosc`, `Id`, `NAZWA`).
 - Nowa linia w komórce to nowa linia na karcie.
 
-### Ikony – `ikony.csv`
+### Ikony – folder `Ikony` i `ikony.csv`
+
+Najprościej: wrzuć obrazek do folderu **`Ikony`** projektu (albo `Icons`). Plik `Ikony/drewno.svg` od razu działa jako `{drewno}`. Obsługiwane są SVG, PNG, JPG, GIF i WEBP. Nazwę można pisać bez polskich znaków i bez względu na wielkość liter (plik `Złoto.svg` → `{złoto}` albo `{zloto}`).
+
+Plik `ikony.csv` jest potrzebny tylko wtedy, gdy chcesz nadać ikonie inną nazwę, emoji zastępcze albo wyłączyć odstęp. Wpis w `ikony.csv` ma pierwszeństwo przed plikiem z folderu.
 
 ```
 Znacznik;Znak;Odstęp;Plik;Opis
@@ -59,6 +65,24 @@ Znacznik;Znak;Odstęp;Plik;Opis
 | Odstęp | `tak` = mały odstęp, gdy zaraz po ikonie stoi kolejna. |
 | Plik | Ścieżka do obrazka (PNG, JPG, SVG). |
 | Opis | Dowolny, dla Ciebie. |
+
+### Pola wbudowane
+
+Wstawiasz je jak kolumny, ale z podkreślnikiem. Nie muszą istnieć w pliku danych.
+
+| Pole | Wartość |
+|---|---|
+| `[_numer]` | Numer kopii w talii: 1, 2, 3… (liczy każdą kopię z kolumny `Ilość`). |
+| `[_liczba]` | Liczba wszystkich kart (kopii) w talii. |
+| `[_kopia]` | Numer kopii tej samej karty: 1, 2… |
+| `[_id]` | Kolumna `ID` (albo numer wiersza). |
+| `[_wersja]` | Wartość komendy `WERSJA`. |
+| `[_talia]`, `[_projekt]` | Nazwa talii i projektu. |
+| `[_data]` | Dzisiejsza data, np. 9.10.2026. |
+
+Przykład stopki do testów: `TEKST = 6, 82, 51, 3, "[_wersja] · [_numer]/[_liczba]", rozmiar=5, kolor=#999999, wyrównanie=prawo`.
+
+Numery liczą się w kolejności wierszy pliku danych. Data to dzień wygenerowania kart.
 
 ## Sekcje
 
@@ -75,6 +99,7 @@ Tło całej karty.
 - `|` oznacza: jeśli pierwszy kolor jest pusty, weź następny.
 - Kolor można podać jako `#RRGGBB`, `#RRGGBBAA` (z przezroczystością), nazwę z palety (`KOLOR`) albo `brak`.
 - Zamiast koloru można podać obrazek: `TŁO = Art/tlo.png`.
+- **Gradient:** kolory rozdzielone `>`, np. `TŁO = #ffffff > [Kolor]` (od góry do dołu). Kierunek w stopniach: `kierunek=90` – od lewej do prawej, `kierunek=135` – po skosie. Kolorów może być więcej niż dwa.
 
 ### `PROSTOKĄT = x, y, szer, wys, kolor=#ffffff`
 Opcje:
@@ -82,7 +107,9 @@ Opcje:
 - `zaokrąglenie` – w mm albo w `%`,
 - `obwódka` – grubość w mm,
 - `kolor_obwódki`,
-- `krycie` – od 0 do 1.
+- `krycie` – od 0 do 1,
+- `kolor` może być gradientem: `kolor=#000000 > #00000000, kierunek=90` (zanikający pasek),
+- `obrót` – jak niżej.
 
 ### `ELIPSA = x, y, szer, wys, kolor=…`
 Jak `PROSTOKĄT`, ale okrągła.
@@ -99,12 +126,17 @@ Jak `PROSTOKĄT`, ale okrągła.
 | `interlinia=1.15` | odstęp między liniami |
 | `ikony=0.9` | wysokość ikon względem tekstu (`1.8` = 2× większe) |
 | `min=0.6` | najmniejsza skala, gdy tekst się nie mieści |
+| `obrys=0.3`, `kolor_obrysu=#000000` | obrys liter (grubość w mm) – czytelny tekst na obrazku albo gradiencie |
+| `cień` albo `cień=#00000099` | cień pod tekstem (domyślnie półprzezroczysty czarny) |
 | `grupa=nazwa` | pola z tą samą grupą zmniejszają się razem (na wszystkich kartach talii o tyle samo) i nie mogą na siebie nachodzić, np. koszt z lewej i punkty z prawej w jednym wierszu |
 
 Flagi: `pogrubienie`, `kursywa`, `podkreślenie`, `wersaliki`, `jedna_linia`.
 
 - Za długi tekst zmniejsza się sam. Jeśli nadal się nie mieści, karta dostaje w podglądzie czerwoną ramkę, a w Uwagach pojawia się wpis.
 - Jeśli **wszystkie** `[Kolumny]` w treści są puste, element nie jest rysowany. Na przykład `"**Efekt:** [Efekt]"` znika, gdy Efekt jest pusty.
+
+### Obrót – `obrót=90`
+Opcja wszystkich elementów (`TEKST`, `OBRAZEK`, `IKONA`, `PROSTOKĄT`, `ELIPSA`): obrót w stopniach zgodnie z ruchem wskazówek zegara, wokół środka pola. Pole podajesz tak jak bez obrotu, np. pionowy napis wzdłuż prawej krawędzi: `TEKST = 35, 40, 40, 8, "Rzadka", obrót=90`. Ujemne wartości obracają w lewo.
 
 ### `OBRAZEK = x, y, szer, wys, [Obrazek], pion=dół`
 Plik obrazka podany w kolumnie albo wprost, np. `Art/lis.png`. Obsługiwane formaty to PNG, JPG, SVG, GIF i WEBP.
