@@ -316,15 +316,17 @@ async function loadFromServer({ tylkoNowe = false } = {}) {
   if (!tylkoNowe) zapiszHistorie();
 }
 
+// Odcisk plików projektu. Listy są sortowane: pliki wczytują się równolegle, więc kolejność w serverPaths
+// bywa za każdym razem inna – bez sortowania każde przeładowanie zmieniało odcisk i odświeżanie kręciło się w kółko.
 async function serverStamp() {
-  const heads = await Promise.all(serverPaths.map(async (rel) => {
+  const heads = await Promise.all([...serverPaths].sort().map(async (rel) => {
     try {
       const r = await fetch(encodePath(rel), { method: 'HEAD', cache: 'no-store' });
       return rel + (r.ok ? (r.headers.get('Last-Modified') || '') + r.headers.get('Content-Length') : 'x');
     } catch (e) { return rel + '?'; }
   }));
   // Pliki wskazane w szablonie, których jeszcze nie było, też sprawdzamy.
-  const extra = await Promise.all(serverWanted.map(async (n) => {
+  const extra = await Promise.all([...serverWanted].sort().map(async (n) => {
     try { const r = await fetch(encodePath(n), { method: 'HEAD', cache: 'no-store' }); return r.ok ? n : ''; } catch (e) { return ''; }
   }));
   const ikony = JSON.stringify(await znajdzIkony());              // nowy plik w Ikony/ też odświeża karty
@@ -336,12 +338,16 @@ window.ustawAuto = (b) => { AUTO_ODSWIEZANIE = !!b; };
 window.odswiezKarty = () => loadFromServer();
 $('filtr').onchange = applyFilter;
 
-// Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików.
+// Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików (jedno sprawdzenie naraz).
+let SPRAWDZANIE = false;
 setInterval(async () => {
-  if (!AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
-  const stamp = await serverStamp();
-  if (lastStamp && stamp !== lastStamp) await loadFromServer();
-  lastStamp = stamp;
+  if (SPRAWDZANIE || !AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
+  SPRAWDZANIE = true;
+  try {
+    const stamp = await serverStamp();
+    if (lastStamp && stamp !== lastStamp) await loadFromServer();
+    lastStamp = lastStamp && stamp !== lastStamp ? await serverStamp() : stamp;
+  } finally { SPRAWDZANIE = false; }
 }, 1500);
 
 // ── CSV / XLSX ───────────────────────────────────────────────────────────────
