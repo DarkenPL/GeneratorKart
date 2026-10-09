@@ -31,6 +31,7 @@
       "main.js",
       "preload.js",
       "serwer.js",
+      "historia.js",
       "package.json"
     ],
     "extraResources": [

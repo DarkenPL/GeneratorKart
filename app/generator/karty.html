@@ -77,6 +77,15 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .siatka .karta.zmieniona { box-shadow: 0 0 0 3px #e8912d; }
 .siatka .karta.nowa { box-shadow: 0 0 0 3px #3aa55d; }
 .legenda-zm { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin: 0 2px 0 6px; }
+.historia .wiersz { padding: 5px 0; border-top: 1px solid #d6e2f0; }
+.historia .wiersz button { font-size: 12px; padding: 1px 8px; margin-left: 4px; }
+.historia .opis { color: #555; font-size: 12px; }
+.historia .punkt { background: #fff2c9; border-radius: 3px; padding: 0 5px; margin-left: 4px; }
+.historia pre.diff { background: #fff; border: 1px solid #d6e2f0; padding: 6px 8px; font-size: 11.5px; max-height: 320px; overflow: auto; margin: 4px 0; }
+.diff .dod { background: #e3f6e6; color: #1d6b31; display: block; }
+.diff .usu { background: #fde8e4; color: #a12a1a; display: block; }
+.diff .kon { color: #888; display: block; }
+.wersja-baner { margin: 12px 16px 0; padding: 8px 14px; background: #ffe7b8; border: 1px solid #e8b75c; border-radius: 6px; font-size: 13px; }
 .porownanie .para { display: inline-flex; gap: 10px; align-items: flex-start; margin: 6px 18px 12px 0; vertical-align: top; }
 .porownanie .para > div { text-align: center; font-size: 11px; color: #555; }
 .porownanie .para .karta { margin-top: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
@@ -177,6 +186,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
   <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
   <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
   <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
+  <button id="historiaPrzycisk" disabled title="Historia wersji szablonu i plików danych">Historia</button>
   <button id="raportPrzycisk" disabled title="Duplikaty ID, puste pola, nieużywane kolumny, obrazki i ikony">Raport</button>
   <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
   <input type="file" id="pcioPlik" accept=".pcio,.zip" hidden>
@@ -185,6 +195,8 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
 <div class="uwagi" id="uwagi"></div>
 <div class="raport" id="raport" hidden></div>
 <div class="raport porownanie" id="porownanie" hidden></div>
+<div class="raport historia" id="historia" hidden></div>
+<div class="wersja-baner" id="wersjaBaner" hidden></div>
 
 <div id="edytor" hidden>
   <div class="ed-pasek"><b id="edNazwa">Szablon</b><span id="edStan"></span><button id="edZapisz" disabled title="⌘S">Zapisz</button></div>
@@ -300,6 +312,7 @@ async function loadFromServer({ tylkoNowe = false } = {}) {
   serverWanted = [...refs].filter((r) => !next.has(norm(r)));
   files = next; serverPaths = paths;
   await build();
+  if (!tylkoNowe) zapiszHistorie();
 }
 
 async function serverStamp() {
@@ -322,7 +335,7 @@ $('filtr').onchange = applyFilter;
 
 // Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików.
 setInterval(async () => {
-  if (!$('auto').checked || document.hidden || !serverPaths.length) return;
+  if (!$('auto').checked || document.hidden || !serverPaths.length || PODGLAD_WERSJI) return;
   const stamp = await serverStamp();
   if (lastStamp && stamp !== lastStamp) await loadFromServer();
   lastStamp = stamp;
@@ -943,7 +956,7 @@ async function build() {
     applyFilter();
 
     $('start').style.display = 'none';
-    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf', 'raportPrzycisk'].forEach((id) => $(id).disabled = false);
+    ['odswiez', 'drukuj', 'png', 'pcio', 'pdf', 'raportPrzycisk', 'historiaPrzycisk'].forEach((id) => $(id).disabled = false);
     status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
   }
   // Uwagi z numerem wiersza szablonu (i brakujące kolumny) trafiają też do edytora.
@@ -1113,6 +1126,134 @@ function pokazPorownanie(pokaz = $('porownanie').hidden) {
   $('porownajZamknij').onclick = () => pokazPorownanie(false);
 }
 $('porownaj').onclick = () => pokazPorownanie();
+
+// ── Historia wersji ─────────────────────────────────────────────────────────
+// Kopie robi aplikacja (historia.js) po każdym wczytaniu plików z dysku – tylko gdy treść się zmieniła.
+let HIST_OTWARCIE = true;        // pierwsze wczytanie po otwarciu projektu = punkt „otwarcie”
+let PODGLAD_WERSJI = null;       // czas oglądanej wersji (wtedy bez automatycznego odświeżania)
+const plikiHistorii = () => serverPaths.filter((p) => p === SZABLON || /\.(csv|xlsx)$/i.test(p));
+async function zapiszHistorie(punkt = null) {
+  if (!APP || !APP.historiaZapisz || PODGLAD_WERSJI) return;
+  if (HIST_OTWARCIE) { punkt = punkt || { powod: 'otwarcie' }; HIST_OTWARCIE = false; }
+  try { await APP.historiaZapisz(plikiHistorii(), punkt); } catch (e) { return; }
+  if (!$('historia').hidden) pokazHistorie(true);
+}
+const dataCzas = (t) => new Date(t).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const OPIS_PUNKTU = { otwarcie: 'otwarcie projektu', 'przed przywróceniem': 'stan sprzed przywrócenia', punkt: '' };
+// Tekst pliku do porównania: CSV i szablon jako tekst, XLSX jako wiersze „a ; b ; c”.
+async function liniePliku(plik, dane) {
+  const f = new File([dane], plik.split('/').pop());
+  if (/\.xlsx$/i.test(plik)) {
+    const rows = await readTable(f);
+    if (!rows.length) return [];
+    return [Object.keys(rows[0]).join(' ; '), ...rows.map((r) => Object.values(r).join(' ; '))];
+  }
+  return (await f.text()).replace(/\r\n?/g, '\n').split('\n');
+}
+// Różnice linii (LCS); kontekst 2 linie.
+function roznice(a, b) {
+  if (a.length * b.length > 4e6) return '<span class="kon">(plik za duży do porównania linia po linii)</span>';
+  const n = a.length, m = b.length, L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const ops = []; let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { ops.push([' ', a[i]]); i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { ops.push(['+', b[j]]); j++; }
+    else { ops.push(['-', a[i]]); i++; }
+  }
+  const pokaz = ops.map((o, k) => o[0] !== ' ' || ops.slice(Math.max(0, k - 2), k + 3).some((x) => x[0] !== ' '));
+  let html = '', przerwa = false;
+  ops.forEach((o, k) => {
+    if (!pokaz[k]) { if (!przerwa && html) html += '<span class="kon">…</span>'; przerwa = true; return; }
+    przerwa = false;
+    html += `<span class="${o[0] === '+' ? 'dod' : o[0] === '-' ? 'usu' : 'kon'}">${o[0]} ${esc(o[1])}</span>`;
+  });
+  return html || '<span class="kon">bez różnic</span>';
+}
+async function pokazHistorie(pokaz = $('historia').hidden) {
+  const p = $('historia');
+  p.hidden = !pokaz;
+  if (!pokaz) return;
+  const zamknij = '<button class="zamknij" id="historiaZamknij">Zamknij</button>';
+  const idx = APP && APP.historiaLista ? await APP.historiaLista() : null;
+  if (!idx) {
+    p.innerHTML = zamknij + '<h3>Historia wersji</h3><div>Przykłady nie mają historii wersji. Utwórz <b>Nowy projekt…</b> albo skopiuj folder przykładu.</div>';
+  } else {
+    const chwile = new Map();
+    const chwila = (t) => chwile.get(t) || chwile.set(t, { czas: t, pliki: [], punkty: [] }).get(t);
+    for (const v of idx.wersje) chwila(v.czas).pliki.push(v.plik);
+    for (const pk of idx.punkty) chwila(pk.czas).punkty.push(pk);
+    const lista = [...chwile.values()].sort((a, b) => b.czas - a.czas);
+    p.innerHTML = zamknij + '<h3>Historia wersji</h3>' +
+      '<div class="opis">Kopia szablonu i plików z kartami powstaje przy każdej zapisanej zmianie (w folderze <code>.historia</code> projektu). Starsze kopie są przerzedzane: z ostatniej godziny co 5 min, z doby co godzinę, z miesiąca co dzień, starsze co tydzień. Punkty zostają zawsze.</div>' +
+      '<div style="margin:6px 0"><input id="histNazwa" placeholder="np. przed playtestem 3" size="28"> <button id="histPunkt">Zapisz punkt</button></div>' +
+      lista.map((c, n) => `<div class="wiersz" data-czas="${c.czas}"><b>${esc(dataCzas(c.czas))}</b>` +
+        c.punkty.map((pk) => `<span class="punkt">${esc(pk.etykieta || OPIS_PUNKTU[pk.powod] || pk.powod)}</span>`).join('') +
+        (c.pliki.length ? ` <span class="opis">zmienione: ${esc(c.pliki.map((x) => x.split('/').pop()).join(', '))}</span>` : '') +
+        (n === 0 ? ' <span class="opis">(obecna)</span>' : `<button data-akcja="zmiany">Zmiany</button><button data-akcja="karty">Pokaż karty</button><button data-akcja="przywroc">Przywróć…</button>`) +
+        '<div class="szczegoly"></div></div>').join('');
+    $('histPunkt').onclick = async () => {
+      const etykieta = $('histNazwa').value.trim();
+      if (!etykieta) { $('histNazwa').focus(); return; }
+      await APP.historiaZapisz(plikiHistorii(), { powod: 'punkt', etykieta });
+      pokazHistorie(true);
+    };
+    for (const b of p.querySelectorAll('[data-akcja]')) b.onclick = () => akcjaHistorii(b, +b.closest('.wiersz').dataset.czas);
+  }
+  $('historiaZamknij').onclick = () => pokazHistorie(false);
+}
+async function akcjaHistorii(btn, czas) {
+  const akcja = btn.dataset.akcja, sz = btn.closest('.wiersz').querySelector('.szczegoly');
+  if (akcja === 'zmiany') {
+    if (sz.innerHTML) { sz.innerHTML = ''; return; }
+    const stan = await APP.historiaStan(czas);
+    let html = '';
+    for (const { plik, dane } of stan) {
+      const obecny = files.get(norm(plik));
+      const a = await liniePliku(plik, dane), b = obecny ? await liniePliku(plik, await obecny.arrayBuffer()) : [];
+      if (a.join('\n') === b.join('\n')) continue;
+      html += `<div><b>${esc(plik)}</b> – ta wersja (−) → obecna (+)</div><pre class="diff">${roznice(a, b)}</pre>`;
+    }
+    sz.innerHTML = html || '<div class="ok">✓ ta wersja nie różni się od obecnej</div>';
+  } else if (akcja === 'karty') {
+    await podgladWersji(czas);
+  } else if (akcja === 'przywroc') {
+    if (!btn.dataset.pewny) { btn.dataset.pewny = '1'; btn.textContent = 'Na pewno? Przywróć'; return; }
+    await przywrocWersje(czas);
+  }
+}
+async function podgladWersji(czas) {
+  if (ED.zmiany) { status('Najpierw zapisz albo cofnij zmiany w edytorze szablonu.'); return; }
+  const stan = await APP.historiaStan(czas);
+  przelaczEdytor(false);
+  PODGLAD_WERSJI = czas;
+  for (const { plik, dane } of stan) files.set(norm(plik), new File([dane], plik.split('/').pop(), { lastModified: czas }));
+  const b = $('wersjaBaner');
+  b.hidden = false;
+  b.innerHTML = `<b>Podgląd wersji z ${esc(dataCzas(czas))}</b> – karty z ówczesnego szablonu i danych (obrazki obecne). ` +
+    '<button id="wersjaWroc">Wróć do obecnej</button> <button id="wersjaPrzywroc">Przywróć tę wersję</button>';
+  $('wersjaWroc').onclick = () => wrocDoObecnej();
+  $('wersjaPrzywroc').onclick = () => przywrocWersje(czas);
+  await build();
+}
+async function wrocDoObecnej() {
+  PODGLAD_WERSJI = null;
+  $('wersjaBaner').hidden = true;
+  await loadFromServer();
+}
+async function przywrocWersje(czas) {
+  const r = await APP.historiaPrzywroc(czas);
+  if (r.blad) { status(r.blad); return; }
+  status(r.zmienione.length ? `Przywrócono wersję z ${dataCzas(czas)}: ${r.zmienione.join(', ')}` : 'Ta wersja nie różni się od obecnej.');
+  PODGLAD_WERSJI = null;
+  $('wersjaBaner').hidden = true;
+  await loadFromServer();
+}
+window.pokazHistorie = pokazHistorie;
+window.podgladWersji = podgladWersji;
+window.wrocDoObecnej = wrocDoObecnej;
+window.przywrocWersje = przywrocWersje;
+$('historiaPrzycisk').onclick = () => pokazHistorie();
 
 function applyFilter() {
   const f = $('filtr').value;

@@ -6,6 +6,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('e
 const path = require('path');
 const fs = require('fs');
 const { utworzSerwer } = require('./serwer');
+const historia = require('./historia');
 
 const ZASOBY = app.isPackaged ? path.join(process.resourcesPath, 'zasoby') : path.join(__dirname, 'zasoby');
 const PRZYKLADY = path.join(ZASOBY, 'przyklady');
@@ -208,6 +209,19 @@ ipcMain.handle('druk:zapiszOdciski', (e, dane) => {
   return true;
 });
 
+// ── Historia wersji (folder .historia w projekcie; przykłady – bez historii) ─
+const historiaDostepna = () => projekt && !jestPrzykladem(projekt);
+ipcMain.handle('historia:zapisz', (e, pliki, punkt) =>
+  historiaDostepna() ? historia.zapisz(projekt, (pliki || []).map(String), punkt || null) : 0);
+ipcMain.handle('historia:lista', () => historiaDostepna() ? historia.wczytajIndeks(projekt) : null);
+ipcMain.handle('historia:stan', (e, czas) => historiaDostepna()
+  ? historia.stan(projekt, Number(czas)).map((s) => ({ plik: s.plik, dane: new Uint8Array(s.dane) })) : []);
+ipcMain.handle('historia:przywroc', (e, czas) => {
+  if (!historiaDostepna()) return { blad: 'Przykłady nie mają historii.' };
+  if (zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
+  return { zmienione: historia.przywroc(projekt, Number(czas)) };
+});
+
 // ── Menu ────────────────────────────────────────────────────────────────────
 const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).catch(() => {});
 
@@ -238,6 +252,7 @@ function zbudujMenu() {
         { type: 'separator' },
         { label: 'Zapisz szablon', accelerator: 'CmdOrCtrl+S', enabled: !!szablon && !jestPrzykladem(szablon), click: wStronie('window.zapiszSzablon && zapiszSzablon()') },
         { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!projekt, click: wStronie('window.zapiszPdf && zapiszPdf()') },
+        { label: 'Historia wersji…', enabled: !!projekt, click: wStronie('window.pokazHistorie && pokazHistorie(true)') },
         { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("document.getElementById('drukuj').click()") },
         { label: 'Eksport JPG do folderu Export', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie("document.getElementById('png').click()") },
         { label: 'Eksport do playingcards.io…', enabled: !!projekt, click: wStronie("document.getElementById('pcio').click()") },
@@ -405,11 +420,35 @@ async function trybTestowy(folder, wynik) {
     zmienione.ok = poZapisie.widoczne && poZapisie.zm === 0 && poZapisie.nowe === 0 && poZmianie.zm > 0
       && porownanie >= Math.min(poZmianie.zm, 40) && doDruku === poZmianie.zm && poPowrocie.zm === 0;
   }
+  // Historia wersji (--test-edytor): punkt „otwarcie”, kopia po zmianie z zewnątrz, podgląd i przywrócenie.
+  let hist = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const oryginal = fs.readFileSync(szablon, 'utf8');
+    const lista = () => js('window.generatorApp.historiaLista()');
+    const przed = await lista();
+    const otwarcie = przed.punkty.find((p) => p.powod === 'otwarcie');
+    fs.writeFileSync(szablon, oryginal + '\n; zmiana z innego edytora\n'); await czekaj(3000);
+    const po = await lista();
+    const kopieSzablonu = po.wersje.filter((v) => szablon.endsWith(v.plik)).length;
+    await js('pokazHistorie(true)');
+    const wiersze = await js("document.querySelectorAll('#historia .wiersz').length");
+    const diff = await js(`(async () => { const b = document.querySelector('#historia .wiersz:last-child [data-akcja="zmiany"]'); await akcjaHistorii(b, +b.closest('.wiersz').dataset.czas); return document.querySelector('#historia .wiersz:last-child .szczegoly').innerText; })()`);
+    await js(`podgladWersji(${otwarcie ? otwarcie.czas : 0})`);
+    const baner = await js("!document.getElementById('wersjaBaner').hidden && / kart /.test(document.getElementById('status').textContent)");
+    await js(`przywrocWersje(${otwarcie ? otwarcie.czas : 0})`); await czekaj(2500);
+    const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
+    const punkty = (await lista()).punkty.map((p) => p.powod);
+    await js('pokazHistorie(false)');
+    hist = { otwarcie: !!otwarcie, kopieSzablonu, wiersze, diff: diff.slice(0, 120), baner, przywrocony, punkty };
+    hist.ok = !!otwarcie && kopieSzablonu >= 2 && wiersze >= 2 && /zmiana z innego edytora/.test(diff) && baner && przywrocony
+      && punkty.includes('przed przywróceniem');
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, pdf: wynik, ok }) + '\n');
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
