@@ -46,8 +46,13 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    - **Tylko zmienione** – PDF i druk obejmują tylko zmienione i nowe karty (można to łączyć z zaznaczaniem). Nazwa PDF dostaje „– zmienione”.
    - **Porównaj** – pokazuje każdą zmienioną kartę „przed” (z ostatniego PDF) i „teraz”.
    - Zmianą jest wszystko, co widać na karcie: tekst z danych, szablon, obrazek. Karty z częściowego wydruku są zapamiętywane pojedynczo, więc „zmienione” znaczy „zmienione od ostatniego wydruku tej karty”. Systemowe okno drukowania (⌘P) nie zapamiętuje kart, bo nie wiadomo, czy wydruk się udał.
-7. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
-8. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
+7. **Historia wersji** (przycisk **Historia** albo **Plik → Historia wersji…**): aplikacja sama zapisuje kopię szablonu i plików z kartami (CSV, XLSX) przy każdej zmianie – z edytora i z innych programów – w ukrytym folderze `.historia` projektu.
+   - Kopia powstaje tylko wtedy, gdy plik naprawdę się zmienił. Starsze kopie są przerzedzane: z ostatniej godziny zostaje jedna na 5 minut, z ostatniej doby jedna na godzinę, z miesiąca jedna na dzień, starsze jedna na tydzień.
+   - Na zawsze zostają **punkty**: otwarcie projektu (10 ostatnich), stan sprzed przywrócenia i punkty nazwane przez Ciebie (pole „np. przed playtestem 3” → **Zapisz punkt**).
+   - Przy każdej wersji: **Zmiany** (różnice linii względem obecnej wersji), **Pokaż karty** (podgląd kart z tamtej wersji; obrazki są obecne, bo nie są kopiowane) i **Przywróć…** (drugie kliknięcie potwierdza). Przed przywróceniem obecny stan trafia do historii, więc przywrócenie da się cofnąć.
+   - Przykłady nie mają historii. Folder `.historia` możesz usunąć – historia zacznie się od nowa.
+8. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
+9. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
 |---|---|

@@ -407,13 +407,13 @@ async function trybTestowy(folder, wynik) {
     const poZapisie = await liczby();
     await js('przelaczEdytor(true)');
     // Dopisany element tylko w pierwszej talii (część wspólna dotknęłaby wszystkich) – na końcu pliku = ostatnia talia.
-    await wpisz(oryginal + '\n[AWERS]\nPROSTOKĄT = 1, 1, 3, 3, kolor=#ff00ff\n'); await czekaj(2000);
+    await wpisz(oryginal + '\n[AWERS]\nPROSTOKĄT = 1, 1, 3, 3, kolor=#ff00ff\n'); await czekaj(3500);
     const poZmianie = await liczby();
     const porownanie = await js("pokazPorownanie(true); document.querySelectorAll('#porownanie .para').length");
     await js('pokazPorownanie(false)');
     await js("document.getElementById('tylkoZmienione').checked = true; buildPrint(); document.getElementById('tylkoZmienione').checked = false");
     const doDruku = await js("document.querySelectorAll('#druk .karta:not(.rewers)').length");
-    await wpisz(oryginal); await czekaj(2000);
+    await wpisz(oryginal); await czekaj(3500);
     const poPowrocie = await liczby();
     await js('przelaczEdytor(true)');
     zmienione = { poZapisie, poZmianie, porownanie, doDruku, poPowrocie };
@@ -428,15 +428,16 @@ async function trybTestowy(folder, wynik) {
     const lista = () => js('window.generatorApp.historiaLista()');
     const przed = await lista();
     const otwarcie = przed.punkty.find((p) => p.powod === 'otwarcie');
-    fs.writeFileSync(szablon, oryginal + '\n; zmiana z innego edytora\n'); await czekaj(3000);
+    fs.writeFileSync(szablon, oryginal + '\n; zmiana z innego edytora\n'); await czekaj(4500);
     const po = await lista();
     const kopieSzablonu = po.wersje.filter((v) => szablon.endsWith(v.plik)).length;
     await js('pokazHistorie(true)');
     const wiersze = await js("document.querySelectorAll('#historia .wiersz').length");
-    const diff = await js(`(async () => { const b = document.querySelector('#historia .wiersz:last-child [data-akcja="zmiany"]'); await akcjaHistorii(b, +b.closest('.wiersz').dataset.czas); return document.querySelector('#historia .wiersz:last-child .szczegoly').innerText; })()`);
+    const diff = await js(`(async () => { const b = document.querySelector('#historia .wiersz:last-child [data-akcja="zmiany"]'); const sz = b.closest('.wiersz').querySelector('.szczegoly'); await akcjaHistorii(b, +b.closest('.wiersz').dataset.czas); return sz.innerText; })()`);
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-historia.png', (await okno.capturePage()).toPNG());
     await js(`podgladWersji(${otwarcie ? otwarcie.czas : 0})`);
     const baner = await js("!document.getElementById('wersjaBaner').hidden && / kart /.test(document.getElementById('status').textContent)");
-    await js(`przywrocWersje(${otwarcie ? otwarcie.czas : 0})`); await czekaj(2500);
+    await js(`przywrocWersje(${otwarcie ? otwarcie.czas : 0})`); await czekaj(3500);
     const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
     const punkty = (await lista()).punkty.map((p) => p.powod);
     await js('pokazHistorie(false)');

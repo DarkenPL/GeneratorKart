@@ -106,7 +106,7 @@ label { display: inline-flex; gap: 6px; align-items: center; }
   display: flex; flex-direction: column; background: #fbfaf8; border-right: 1px solid #d8d3cb;
 }
 #edytor[hidden] { display: none; }
-body.z-edytorem #podglad, body.z-edytorem .uwagi, body.z-edytorem .start { margin-left: calc(max(var(--ed-w), 360px) + 16px); }
+body.z-edytorem #podglad, body.z-edytorem .uwagi, body.z-edytorem .start, body.z-edytorem .raport, body.z-edytorem .wersja-baner { margin-left: calc(max(var(--ed-w), 360px) + 16px); }
 .ed-pasek { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #e3ded6; font-size: 13px; }
 .ed-pasek b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ed-pasek #edStan { color: #6b655d; flex: 1; }
@@ -1189,7 +1189,7 @@ async function pokazHistorie(pokaz = $('historia').hidden) {
       '<div style="margin:6px 0"><input id="histNazwa" placeholder="np. przed playtestem 3" size="28"> <button id="histPunkt">Zapisz punkt</button></div>' +
       lista.map((c, n) => `<div class="wiersz" data-czas="${c.czas}"><b>${esc(dataCzas(c.czas))}</b>` +
         c.punkty.map((pk) => `<span class="punkt">${esc(pk.etykieta || OPIS_PUNKTU[pk.powod] || pk.powod)}</span>`).join('') +
-        (c.pliki.length ? ` <span class="opis">zmienione: ${esc(c.pliki.map((x) => x.split('/').pop()).join(', '))}</span>` : '') +
+        (c.pliki.length ? ` <span class="opis">kopie: ${esc(c.pliki.map((x) => x.split('/').pop()).join(', '))}</span>` : '') +
         (n === 0 ? ' <span class="opis">(obecna)</span>' : `<button data-akcja="zmiany">Zmiany</button><button data-akcja="karty">Pokaż karty</button><button data-akcja="przywroc">Przywróć…</button>`) +
         '<div class="szczegoly"></div></div>').join('');
     $('histPunkt').onclick = async () => {
