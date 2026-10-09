@@ -8,7 +8,7 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 - Język: polski (interfejs, komunikaty, komentarze w kodzie, dokumentacja).
 - **Tylko aplikacja na Maca (Apple Silicon).** Wersja przeglądarkowa i `Uruchom generator.command` zostały usunięte (decyzja właściciela). Silnik i interfejs to jeden plik `app/generator/karty.html` bez kroku budowania.
 - Nowe ikony do przykładów: tylko na wolnej licencji, z wpisem w `CREDITS.md` (game-icons.net = CC BY 3.0, podać autora i link do ikony).
-- **Wersje:** każda aktualizacja (PR do `main`) podnosi wersję o najmniejszą podwersję w `app/package.json` (0.4.1 → 0.4.2 …) i dopisuje ją w „Zrobione”. Większy skok tylko na prośbę właściciela.
+- **Wersje:** każda aktualizacja (PR do `main`) podnosi wersję o najmniejszą podwersję w `app/package.json` i `package-lock.json` (0.4.1 → 0.4.2 …) i dopisuje ją w „Zrobione”. Po scaleniu workflow sam publikuje wydanie `v<wersja>` – bez podniesienia wersji wydania nie będzie. Większy skok tylko na prośbę właściciela.
 - **Gałęzie:** PR zawsze do `main` (nie łańcuchem do innej gałęzi – po scaleniu bazowej gałęzi GitHub nie przestawił bazy i PR #11 trafił do `claude/noc`). Po scaleniu gałąź można usunąć.
 - Zmiany wyglądu kart istniejących projektów muszą być zgodne wstecz. Przed zmianą silnika porównaj zrzuty kart przed/po (różnice tylko w wygładzaniu krawędzi).
 
@@ -44,7 +44,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
-  - push do `main` → wydanie `najnowsza` (`--latest`); README linkuje `releases/latest/download/Generator-kart.dmg`;
+  - push do `main` → wydanie `v<wersja z app/package.json>` z DMG, `--generate-notes`, `--latest` (tylko gdy takiego wydania jeszcze nie ma; inaczej ostrzeżenie); dawne wydanie `najnowsza` jest usuwane. README linkuje `releases/latest/download/Generator-kart.dmg`;
   - tag `v*` albo wydanie opublikowane w GitHubie → dołączony DMG.
   - Dependabot (`.github/dependabot.yml`): npm w `app/` co tydzień (Electron osobną grupą), GitHub Actions co miesiąc. html-to-image, JSZip i xlsx są wykluczone, bo ich wersje muszą zgadzać się z adresami CDN w `karty.html`.
   - Sesja Claude nie może tworzyć tagów ani wydań (blokada po stronie GitHuba) – robi to workflow albo właściciel.
@@ -57,7 +57,7 @@ Sekcje w kolejności w pliku:
 
 1. **CSS**: wspólne zasady rysowania (`.karta`, `.el.tekst`, `.el.obrazek`, `.el.ikony`, `.ikona-kolor`), interfejs, `@media print`.
 2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, domyślna rozdzielczość i jakość JPG). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
-3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `build()` kolejkuje przebudowy (`KOLEJKA_BUDOWY` → `zbudujTeraz`), bo równoległe przebudowy unieważniały sobie adresy blob: obrazków; eksporty (JPG, playingcards.io) idą przez `naWylacznosc()`: czekają na trwające przebudowy, a nowe przebudowy czekają na koniec eksportu (`KONIEC_EKSPORTU`); `EKSPORT_TRWA` wstrzymuje też odświeżanie. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
+3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `build()` kolejkuje przebudowy (`KOLEJKA_BUDOWY` → `zbudujTeraz`), bo równoległe przebudowy unieważniały sobie adresy blob: obrazków; eksporty (JPG, playingcards.io) idą przez `naWylacznosc()`: czekają na trwające przebudowy, a nowe przebudowy czekają na koniec eksportu (`KONIEC_EKSPORTU`); `EKSPORT_TRWA` wstrzymuje też odświeżanie. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące); odcisk liczony z posortowanych ścieżek – kolejność pobrań jest losowa.
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
 5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. Obrazki z folderu `Ikony/`/`Icons/` (listing JSON z serwera, `znajdzIkony`) rejestrują się same jako `{nazwa}`; `ikony.csv` je nadpisuje. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
 6. **Szablony**:
@@ -139,5 +139,7 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
   - Opcje zamiast pól paska: `kartyEksportu({ktore, pominTalie})`, `buildPrint({uklad, rewersy, szkic, karty})`, `zapiszPdf(o)`, `drukuj(o)`, `eksportObrazkow({dpi, format, ktore, pominTalie, rewersy})`, `exportPcio({dpi, pominTalie})`. Talie wybiera okno (filtr podglądu nie ogranicza eksportu).
   - 23. `obrazKarty(el, {dpi, format})`: JPG na białym tle, PNG z przezroczystymi rogami; 150/300 dpi; ta sama funkcja dla playingcards.io. Numer kopii w nazwie pliku z `data-kopia`.
   - Test (`--test-edytor`, poza przykładami): PNG 300 dpi przez okno, zapamiętanie ustawień, okno druku; zrzut `-okno.png`.
+- **v0.4.3** – wydania z numerem wersji tworzone automatycznie po każdym scaleniu do `main` (zamiast nadpisywanego wydania „najnowsza”).
+- **v0.4.4** – poprawka: pętla odświeżania (napis „odświeżono” zmieniał się co 1,5 s po pierwszym przeładowaniu, np. po edycji). `serverPaths` ma kolejność zakończenia równoległych pobrań, więc odcisk w `serverStamp()` zależał od kolejności; teraz listy są sortowane, a sprawdzenia nie nakładają się (`SPRAWDZANIE`). Test: `serverStamp()` po odwróceniu `serverPaths` bez zmian i stały napis po edycji (`edytor.spokoj`).
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

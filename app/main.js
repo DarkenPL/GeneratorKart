@@ -422,8 +422,13 @@ async function trybTestowy(folder, wynik) {
     const zapisany = fs.readFileSync(szablon, 'utf8') === zmieniony && !zmiany;
     await wpisz(oryginal); await js('zapiszSzablon()'); await czekaj(1500);
     const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
-    edytor = { kolory, blad, zmianyPrzed, szer, zapisany, przywrocony,
-      ok: kolory > 0 && /blad/.test(blad) && /nieznana komenda/.test(blad) && zmianyPrzed && (oryginal === zmieniony || szer === 70) && zapisany && przywrocony };
+    // Bez pętli odświeżania: odcisk plików nie zależy od kolejności wczytania, a po edycji napis „odświeżono” stoi.
+    const odcisk = await js('(async () => { const a = await serverStamp(); serverPaths.reverse(); const b = await serverStamp(); serverPaths.reverse(); return a === b; })()');
+    await czekaj(3000);
+    const czas1 = await js("document.getElementById('status').textContent"); await czekaj(6000);
+    const spokoj = odcisk && czas1 === await js("document.getElementById('status').textContent");
+    edytor = { kolory, blad, zmianyPrzed, szer, zapisany, przywrocony, spokoj,
+      ok: spokoj && kolory > 0 && /blad/.test(blad) && /nieznana komenda/.test(blad) && zmianyPrzed && (oryginal === zmieniony || szer === 70) && zapisany && przywrocony };
     await js('przelaczEdytor(true)');
     fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-edytor.png', (await okno.capturePage()).toPNG());
   }
