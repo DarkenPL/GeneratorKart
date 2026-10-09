@@ -66,6 +66,16 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .siatka { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 16px 16px; align-items: flex-start; }
 .siatka .karta { box-shadow: 0 1px 4px rgba(0,0,0,.18); border-radius: 2mm; }
 .siatka .karta.za-dlugi { outline: 2px dashed #d00; outline-offset: 3px; }
+.siatka .karta:not(.rewers) { cursor: pointer; }
+.siatka .karta.wybrana { outline: 3px solid #2f6fd6; outline-offset: 3px; }
+#wybor { font-size: 12px; background: #e3edfb; border-radius: 4px; padding: 2px 4px 2px 8px; }
+/* Tryb szkicu (tylko wydruk): bez teł i obrazków, tekst czarny, ikony w szarościach. */
+#druk.szkic .karta { background: #fff !important; }
+#druk.szkic .el.ksztalt { background: none !important; border: 0.2mm solid #999 !important; }
+#druk.szkic .el.obrazek { border: 0.2mm dashed #bbb; }
+#druk.szkic .el.obrazek img { display: none; }
+#druk.szkic .el.tekst, #druk.szkic .el.tekst * { color: #000 !important; }
+#druk.szkic img { filter: grayscale(1); }
 #druk { display: none; }
 
 /* ── Edytor szablonu (panel po lewej) ── */
@@ -149,6 +159,8 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
     <option value="pojedyncze">Druk: każda karta na osobnej stronie</option>
   </select>
   <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
+  <label title="Druk i PDF bez teł i obrazków, tekst czarny – oszczędza tusz przy prototypach"><input type="checkbox" id="szkic"> Szkic</label>
+  <span id="wybor" hidden title="Kliknij kartę, żeby ją zaznaczyć (Shift – zakres). Druk i PDF obejmą tylko zaznaczone.">Do druku: <b id="wyborLiczba"></b> zaznaczone <button id="wyborCzysc">Wyczyść</button></span>
   <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
   <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
   <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
@@ -898,6 +910,7 @@ async function build() {
     view.innerHTML = '';
   } else {
     view.innerHTML = html;
+    oznaczKopie(view);
     await waitForImages(view);
     for (const l of new Set(fitAll(view))) warn.add(l + ': tekst nie mieści się nawet po zmniejszeniu (czerwona ramka)');
 
@@ -950,6 +963,51 @@ function backOf(talia) {
 }
 function status(t) { $('status').textContent = t; }
 
+// ── Zaznaczanie kart do druku ────────────────────────────────────────────────
+// Klucz karty: talia | wiersz danych | numer kopii – przetrwa odświeżenie podglądu.
+const WYBRANE = new Set();
+let ostatniKlik = null;
+const kluczKarty = (k) => k.dataset.talia + '|' + k.dataset.row + '|' + k.dataset.kopia;
+function oznaczKopie(view) {
+  const licz = {};
+  for (const k of view.querySelectorAll('.karta:not(.rewers)')) {
+    const r = k.dataset.talia + '|' + k.dataset.row;
+    k.dataset.kopia = licz[r] = (licz[r] || 0) + 1;
+    k.classList.toggle('wybrana', WYBRANE.has(kluczKarty(k)));
+  }
+  pokazWybor();
+}
+function pokazWybor() {
+  const n = [...$('podglad').querySelectorAll('.karta.wybrana')].length;
+  $('wybor').hidden = !n; $('wyborLiczba').textContent = n;
+}
+$('podglad').addEventListener('click', (e) => {
+  const k = e.target.closest('.siatka .karta:not(.rewers)');
+  if (!k) return;
+  const wlacz = !k.classList.contains('wybrana');
+  let zakres = [k];
+  if (e.shiftKey && ostatniKlik && ostatniKlik.isConnected) {
+    const wszystkie = visibleCards(), a = wszystkie.indexOf(ostatniKlik), b = wszystkie.indexOf(k);
+    if (a >= 0 && b >= 0) zakres = wszystkie.slice(Math.min(a, b), Math.max(a, b) + 1);
+  }
+  for (const x of zakres) { x.classList.toggle('wybrana', wlacz); WYBRANE[wlacz ? 'add' : 'delete'](kluczKarty(x)); }
+  ostatniKlik = k;
+  pokazWybor();
+});
+$('wyborCzysc').onclick = () => {
+  WYBRANE.clear();
+  for (const k of $('podglad').querySelectorAll('.karta.wybrana')) k.classList.remove('wybrana');
+  pokazWybor();
+};
+// Karty do druku: zaznaczone (jeśli są) spośród widocznych talii, inaczej wszystkie widoczne.
+function kartyDoDruku() {
+  const w = visibleCards();
+  const z = w.filter((k) => k.classList.contains('wybrana'));
+  return z.length ? z : w;
+}
+window.wybierzKarty = (n) => { visibleCards().slice(0, n).forEach((k) => { k.classList.add('wybrana'); WYBRANE.add(kluczKarty(k)); }); pokazWybor(); };
+window.wyczyscWybor = () => $('wyborCzysc').onclick();
+
 // ── Druk ─────────────────────────────────────────────────────────────────────
 
 const mm = (v) => v + 'mm';
@@ -986,8 +1044,9 @@ function buildPrint() {
   const zRewersami = $('rewersy').checked;
   const druk = $('druk');
   druk.innerHTML = '';
+  druk.classList.toggle('szkic', $('szkic').checked);
   const groups = new Map();                       // talia + rozmiar karty → karty
-  for (const k of visibleCards()) {
+  for (const k of kartyDoDruku()) {
     const [w, h] = cardMm(k);
     const key = k.dataset.talia + '|' + w + 'x' + h;     // każda talia na osobnych arkuszach
     if (!groups.has(key)) groups.set(key, { w, h, cards: [], back: backOf(k.dataset.talia) });
@@ -1410,7 +1469,8 @@ async function zapiszPdf() {
   if ($('pdf').disabled) return;
   buildPrint();
   const info = await APP.info();
-  const nazwa = (PROJEKT || info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4');
+  const nazwa = (PROJEKT || info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4')
+    + ($('podglad').querySelector('.karta.wybrana') ? ' – wybrane' : '') + ($('szkic').checked ? ' – szkic' : '');
   status('Zapisywanie PDF…');
   try {
     const plik = await APP.zapiszPdf(nazwa);

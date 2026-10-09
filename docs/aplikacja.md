@@ -40,7 +40,9 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    - przykłady są w edytorze tylko do odczytu.
 
    Szablon nadal możesz edytować w dowolnym innym edytorze tekstu.
-4. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
+4. **Druk wybranych kart:** kliknij kartę w podglądzie, żeby ją zaznaczyć (niebieska ramka), Shift+klik zaznacza zakres. Gdy coś jest zaznaczone, PDF i druk obejmują tylko zaznaczone karty (z rewersami), a w pasku widać ich liczbę i przycisk **Wyczyść**. Zaznaczenie zostaje po odświeżeniu kart. Eksport JPG zawsze obejmuje wszystkie karty.
+5. **Szkic** (pole w pasku): PDF i druk bez teł i obrazków, z czarnym tekstem i ikonami w szarościach – oszczędza tusz przy prototypach. Podgląd na ekranie się nie zmienia.
+6. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
 |---|---|

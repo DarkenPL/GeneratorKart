@@ -38,7 +38,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy:** `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart i szkic): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -101,8 +101,8 @@ Sekcje w kolejności w pliku:
 
 6. **Numer i wersja na karcie** (zrobione, gałąź `claude/noc`): komenda `WERSJA`, pola wbudowane `[_numer]`, `[_kopia]`, `[_liczba]`, `[_id]`, `[_wersja]`, `[_talia]`, `[_projekt]`, `[_data]`; stopka w szablonie startowym.
 7. **Drukuj tylko zmienione karty** (zaplanowane): aplikacja pamięta odcisk (hash) każdej karty z ostatniego PDF i drukuje tylko zmienione od tamtej pory.
-8. **Druk wybranych kart** (zaplanowane): zaznaczanie kart w podglądzie i PDF/druk tylko z nich.
-9. **Tryb szkicu** (zaplanowane): wydruk czarno-biały bez teł (oszczędność tuszu przy prototypach).
+8. **Druk wybranych kart** (zrobione, `claude/noc`): klik/Shift+klik w podglądzie (`WYBRANE`, klucz talia|wiersz|kopia, `oznaczKopie`), `kartyDoDruku()` w `buildPrint`; JPG bez zmian.
+9. **Tryb szkicu** (zrobione, `claude/noc`): pole „Szkic”, klasa `#druk.szkic` (CSS: bez teł i obrazków, tekst czarny, img w szarościach; bez `filter` na karcie, żeby PDF nie rasteryzował tekstu).
 10. **Ikony bez `ikony.csv`** (zrobione, `claude/noc`): każdy obrazek z `Ikony/` (albo `Icons/`) działa jako `{nazwa_pliku}` (też bez polskich znaków); wpis w `ikony.csv` ma pierwszeństwo.
 11. **Stałe w szablonie** (zrobione, `claude/noc`): `STAŁA = margines, 3.5` i `[=margines]` w argumentach dowolnej komendy, w całym pliku (kolejność bez znaczenia). Bez działań na liczbach – ewentualnie później.
 12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.

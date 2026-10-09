@@ -353,11 +353,24 @@ async function trybTestowy(folder, wynik) {
     await js('przelaczEdytor(true)');
     fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-edytor.png', (await okno.capturePage()).toPNG());
   }
+  // Druk wybranych kart i tryb szkicu (--test-edytor): 2 zaznaczone karty → 2 karty w wydruku, białe tło.
+  let wybor = null;
+  if (process.argv.includes('--test-edytor')) {
+    wybor = await wc.executeJavaScript(`(() => {
+      wybierzKarty(2); document.getElementById('szkic').checked = true; buildPrint();
+      const karty = document.querySelectorAll('#druk .karta:not(.rewers)').length;
+      const tlo = getComputedStyle(document.querySelector('#druk .karta')).backgroundColor;
+      const pasek = document.getElementById('wybor').hidden;
+      wyczyscWybor(); document.getElementById('szkic').checked = false;
+      return { karty, tlo, pasek };
+    })()`);
+    wybor.ok = wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek;
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, pdf: wynik, ok }) + '\n');
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
