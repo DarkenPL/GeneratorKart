@@ -8,6 +8,8 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 - Język: polski (interfejs, komunikaty, komentarze w kodzie, dokumentacja).
 - **Tylko aplikacja na Maca (Apple Silicon).** Wersja przeglądarkowa i `Uruchom generator.command` zostały usunięte (decyzja właściciela). Silnik i interfejs to jeden plik `app/generator/karty.html` bez kroku budowania.
 - Nowe ikony do przykładów: tylko na wolnej licencji, z wpisem w `CREDITS.md` (game-icons.net = CC BY 3.0, podać autora i link do ikony).
+- **Wersje:** każda aktualizacja (PR do `main`) podnosi wersję o najmniejszą podwersję w `app/package.json` (0.4.1 → 0.4.2 …) i dopisuje ją w „Zrobione”. Większy skok tylko na prośbę właściciela.
+- **Gałęzie:** PR zawsze do `main` (nie łańcuchem do innej gałęzi – po scaleniu bazowej gałęzi GitHub nie przestawił bazy i PR #11 trafił do `claude/noc`). Po scaleniu gałąź można usunąć.
 - Zmiany wyglądu kart istniejących projektów muszą być zgodne wstecz. Przed zmianą silnika porównaj zrzuty kart przed/po (różnice tylko w wygładzaniu krawędzi).
 
 ## Struktura
@@ -35,10 +37,10 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - Podgląd na żywo: `podgladNaZywo()` podmienia szablon w `files` i woła `build()`; nowe pliki z szablonu dociąga `loadFromServer({ tylkoNowe: true })`.
   - Stan: `ED.dysk` to ostatnia wersja z dysku. `edytorZDysku()` przy każdym wczytaniu decyduje: brak zmian → tekst z dysku; niezapisane zmiany → tekst edytora i baner konfliktu, gdy dysk się zmienił.
   - Zapis: IPC `edytor:zapisz`. `edytor:zmiany` ustawia `setDocumentEdited`. Main pyta o zapis (`czyMoznaPorzucic`) przy zamknięciu okna, ⌘Q, otwieraniu innego szablonu i nowym projekcie.
-  - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
+  - ⌘S = zapisz szablon, ⇧⌘S = okno PDF, ⌘P = okno druku, ⌘E = okno eksportu obrazków, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione” i historię wersji ze skrzynką; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione”, historię wersji ze skrzynką i okna eksportu; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`, `-okno.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -54,7 +56,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
 Sekcje w kolejności w pliku:
 
 1. **CSS**: wspólne zasady rysowania (`.karta`, `.el.tekst`, `.el.obrazek`, `.el.ikony`, `.ikona-kolor`), interfejs, `@media print`.
-2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, rozdzielczość i jakość JPG – też dla obrazków playingcards.io). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
+2. **CONFIG**: tylko ustawienia ogólne (folder szablonów, plik ikon, domyślna rozdzielczość i jakość JPG). Nic, co dotyczy konkretnej gry. Paleta kolorów jest w szablonach (`KOLOR`).
 3. **Wczytywanie plików**: `?szablon=` wskazuje szablon. `build()` kolejkuje przebudowy (`KOLEJKA_BUDOWY` → `zbudujTeraz`), bo równoległe przebudowy unieważniały sobie adresy blob: obrazków; eksporty (JPG, playingcards.io) idą przez `naWylacznosc()`: czekają na trwające przebudowy, a nowe przebudowy czekają na koniec eksportu (`KONIEC_EKSPORTU`); `EKSPORT_TRWA` wstrzymuje też odświeżanie. `loadFromServer` pobiera (`fetch`) szablon, potem pliki z `DANE`, literalne pliki z szablonu i `ikony.csv`, a na końcu obrazki z danych. Zmiany wykrywa polling HEAD/Last-Modified co 1,5 s (także pliki wskazane, a jeszcze nieistniejące).
 4. **CSV/XLSX**: własny parser CSV (`;`/`,`, BOM, cudzysłowy); XLSX przez SheetJS z CDN.
 5. **Ikony**: `ikony.csv` (Znacznik;Znak;Odstęp;Plik;Opis). `renderText()` zamienia `{znacznik}` na `<img>`. Gdy pliku brak, wstawia emoji ze Znak. Obrazki z folderu `Ikony/`/`Icons/` (listing JSON z serwera, `znajdzIkony`) rejestrują się same jako `{nazwa}`; `ikony.csv` je nadpisuje. `{kolor-X}`/`{kolor-X-mix}` (dawniej `{osiag-X}`) to prostokąt w kolorze z palety, rysowany CSS.
@@ -68,11 +70,11 @@ Sekcje w kolejności w pliku:
    - Pola wbudowane `[_x]` czyta `cell()` z `ctx.wbudowane`; gdy szablon używa `[_numer]`/`[_kopia]`, każda kopia jest renderowana osobno.
    - `jeśli=` porównuje wartości bez względu na wielkość liter, a liczby liczbowo (001 = 1).
 7. **Dopasowanie tekstu** (`fitAll`): pole zmniejsza się co 0,04 do `min`. Pola z `grupa=` skalują się razem: wspólna minimalna skala dla całej talii, krok 0,02, a kolizja to odstęp poniżej 2 mm. Pole, które się nie mieści, dostaje klasę `.za-dlugi` (czerwona ramka i uwaga).
-8. **Druk** (`buildPrint`):
+8. **Druk** (`buildPrint(o)` – opcje z okna Druk i PDF):
    - jeden format strony dla całego wydruku (A4 pionowo albo rozmiar karty), bo Safari nie obsługuje nazwanych `@page` i zmniejszał wydruk z mieszanymi formatami;
    - karty poziome są obracane o 90°. Przed obrotem karta musi wystawać w lewo, nie w prawo, inaczej Chrome zmniejsza cały wydruk;
    - siatka jest wyśrodkowana, znaczniki cięcia na marginesie, po każdym arkuszu pełny arkusz rewersów.
-9. **Eksport JPG** (do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
+9. **Eksport obrazków** (`eksportObrazkow(o)`, JPG/PNG, 150/300 dpi; do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg|png`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
 10. **Eksport playingcards.io** (`exportPcio`): nowy pokój od zera – ZIP (`schemaVersion` 8, `widgets.json`, `userassets/`); na talię `holder` (label = nazwa talii, karta + ramka 4) z `cardDeck` (`parent` = holder, dłuższy bok karty 160, `faceTemplate` obraz dynamiczny, `backTemplate` obraz rewersu albo kolor + nazwa) i kartami zakrytymi w stosie. Holdery w rzędach (`PCIO` w kodzie: odstęp 40, szerokość stołu 1500). Bez przycisków. Zapis IPC `pcio:zapisz` do `<projekt>/<PROJEKT> – playingcards.pcio` (przykłady: okno zapisu). Komendy `PCIO`/`STÓŁ` dają tylko uwagę (dawny tryb podmiany usunięty).
 
 ## Testowanie (środowisko Claude)
@@ -84,48 +86,58 @@ Sekcje w kolejności w pliku:
 - Błędy JS strony w trybie testowym: `--enable-logging=file --log-file=/tmp/el.log`, potem `grep CONSOLE`. Uwaga: funkcja globalna to też `window.nazwa` – `window.x = () => x()` daje nieskończoną rekurencję (test wisi).
 - Przed oddaniem zmiany przejrzyj wszystkie przykłady: zero Uwag i zero błędów strony.
 
-## Pomysły / do zrobienia
+## Kolejka (do zrobienia)
 
-1. **Aplikacja na Maca**: pierwsza wersja zrobiona (`app/`). Dalej:
+Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione punkty przechodzą do „Zrobione”, nowe dostają kolejny numer.
+
+1. **Aplikacja – dalszy rozwój** (pomysły):
    - automatyczne aktualizacje,
-   - wersja na Windows (odłożona – decyzja właściciela 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na windows-latest, test na żywym Windows u kogoś),
+   - wersja na Windows – **odłożona** (decyzja 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na `windows-latest`, test na żywym Windows),
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
-2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
+2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu) – pomysł.
 3. Edytor – etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu; ewentualnie podpowiadanie komend i nazw kolumn.
-4. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
-5. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
-
-6. **Numer i wersja na karcie** (zrobione, gałąź `claude/noc`): komenda `WERSJA`, pola wbudowane `[_numer]`, `[_kopia]`, `[_liczba]`, `[_id]`, `[_wersja]`, `[_talia]`, `[_projekt]`, `[_data]`; stopka w szablonie startowym.
-7. **Drukuj tylko zmienione karty** (zrobione, `claude/noc`): odcisk = `skrot()` (cyrb53) z `htmlKarty()` po `fitAll` (blob: → `plik:ścieżka@mtime:rozmiar`); klucz `talia|ID|kopia`. Zapis po `zapiszPdf` (IPC `druk:odciski`/`druk:zapiszOdciski`, plik `userData/odciski/<sha1 szablonu>.json`, scalany – częściowy wydruk aktualizuje tylko swoje karty). Klasy `.zmieniona`/`.nowa` (box-shadow, zdejmowany w eksporcie JPG), pole „Tylko zmienione” w `kartyDoDruku()`.
-8. **Druk wybranych kart** (zrobione, `claude/noc`): klik/Shift+klik w podglądzie (`WYBRANE`, klucz talia|wiersz|kopia, `oznaczKopie`), `kartyDoDruku()` w `buildPrint`; JPG bez zmian.
-9. **Tryb szkicu** (zrobione, `claude/noc`): pole „Szkic”, klasa `#druk.szkic` (CSS: bez teł i obrazków, tekst czarny, img w szarościach; bez `filter` na karcie, żeby PDF nie rasteryzował tekstu).
-10. **Ikony bez `ikony.csv`** (zrobione, `claude/noc`): każdy obrazek z `Ikony/` (albo `Icons/`) działa jako `{nazwa_pliku}` (też bez polskich znaków); wpis w `ikony.csv` ma pierwszeństwo.
-11. **Stałe w szablonie** (zrobione, `claude/noc`): `STAŁA = margines, 3.5` i `[=margines]` w argumentach dowolnej komendy, w całym pliku (kolejność bez znaczenia). Bez działań na liczbach – ewentualnie później.
-12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
-13. **Raport projektu** (zrobione, `claude/noc`): przycisk „Raport”, `raportProjektu()` na danych z ostatniego `build` (`RAPORT`): duplikaty ID, puste pola używanych kolumn, nieużywane kolumny, ikony (bez znacznika i bez użycia pliku) i obrazki w folderach, do których odwołuje się projekt, oraz `Ikony/`.
-14. **Historia wersji** (zrobione, `claude/noc`): `app/historia.js` (zapis, przerzedzanie, stan z chwili, przywrócenie; test `node scripts/test-historia.js` w CI). Renderer po każdym `loadFromServer` (bez `tylkoNowe`) woła `historia:zapisz` z szablonem i plikami CSV/XLSX; pierwsze wczytanie = punkt „otwarcie” (zostaje 10). Panel „Historia” (`pokazHistorie`): różnice LCS (`roznice`, XLSX jako wiersze), `podgladWersji` (podmienia `files`, `PODGLAD_WERSJI` wstrzymuje odświeżanie), `przywrocWersje` (odmowa przy niezapisanych zmianach edytora). Indeks: `.historia/indeks.json` (`wersje[]`, `punkty[]`), kopie w `.historia/pliki/`. Założenia projektu:
-    - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
-    - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).
-    - Plik → Historia wersji…: lista z datami, różnice linii względem obecnej, „Przywróć” (obecna wersja trafia najpierw do historii), „Pokaż karty z tej wersji”. Obrazków nie kopiujemy.
-15. **Obrót elementów** (zrobione, `claude/noc`): `obrót=` dokleja `transform:rotate()` do `box` każdego elementu (wokół środka; `fitAll` mierzy bez obrotu).
-16. **Obrys i cień tekstu** (zrobione, `claude/noc`): `obrys=` → `-webkit-text-stroke` (×2, bo `paint-order: stroke fill` chowa połowę), `kolor_obrysu`; `cień` / `cień=kolor` → `text-shadow`.
-17. **Gradienty** (zrobione, `claude/noc`): `fillOf()` w `renderCard` – kolory rozdzielone `>` → `linear-gradient(kierunek)`, w `TŁO` i `kolor=` kształtów; `kierunek=` w stopniach (domyślnie 180).
-18. **Wiele arkuszy XLSX** (zrobione, `claude/noc`): `plikDanych()` dzieli `gra.xlsx#Arkusz`, `znajdzDane()` zwraca `{name, arkusz}`, `readTable(file, arkusz)` (`'*'` = wszystkie arkusze – do szukania obrazków).
-19. **Statystyki talii** (zaplanowane): rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
-20. **Wizualne porównanie wersji** (zrobione częściowo, `claude/noc`): przycisk „Porównaj” – „przed” (HTML karty zapisany z ostatnim PDF, obrazki w obecnej wersji) i „teraz”. Porównanie z dowolną wersją z historii – razem z pkt 14.
-21. **Eksport do Tabletop Simulator** (zaplanowane): arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
-22. **Katalog kart do PDF** (zaplanowane): wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
-23. **Rozdzielczość eksportu** (zaplanowane): wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG). Eksport playingcards.io używa tych samych ustawień (`cardToJpeg` = `CONFIG.jpgDpi`, `CONFIG.jpgJakosc`), więc wybór ma działać w obu.
-24. **Skrzynka historii** (zrobione, `claude/historia-pcio`; `historia.sprawdzSkrzynke`, main co 3 s, `historia:zmiana` odświeża panel): zewnętrzne narzędzie (np. Claude) kładzie `.historia/przychodzace/<data>/` z kopiami plików i `opis.txt`; aplikacja przy najbliższym wczytaniu importuje to jako punkt z opisem (np. „Claude: przed …”) i usuwa folder. Działa też przy zamkniętej aplikacji, bez znajomości formatu `indeks.json`.
-25. **Wersja konsolowa (CLI)** (zaplanowane): `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (Electron z ukrytym oknem; na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia ≠ 0 przy błędach, `--json`), `pdf` (opcje jak w pasku: tryb, rewersy, szkic, tylko zmienione, wybrane ID), `jpg`, `png <ID…>` (zrzut wybranych kart do obejrzenia), `historia lista|punkt "opis"|przywroc <czas>` (czysty Node przez `historia.js`, bez Electrona). Cel: Claude edytuje pliki gry w folderze właściciela (powłoka Linux na Macu ma Node 22 i Xvfb), od razu sprawdza wynik i zostawia opisany punkt w historii. Zastępuje obecny tryb `--test-*` (testy CI przejdą na CLI).
-26. **`historia punkt` z konsoli** (zrobione, `claude/historia-pcio`; blokada `.historia/indeks.lock` – `zBlokada`, stara > 10 s zdejmowana; prostsza alternatywa dla pkt 24, pierwszy krok pkt 25): `app/historia-cli.js` (~50 linii) na `historia.js`: `punkt <folder projektu> "opis"` (szablony z `Szablony/` + pliki z `DANE`, kopie zmienionych, punkt z opisem, przerzedzanie), `lista`, `przywroc <czas>`. Blokada pliku indeksu (np. `.historia/indeks.lock` z timeoutem) przeciw jednoczesnemu zapisowi z aplikacją. Test w `scripts/test-historia.js`. Użycie przez Claude: skrypt kopiowany do katalogu tymczasowego w powłoce na Macu (Node 22), punkty „Claude: przed …” / „Claude: po …” wokół zmian w plikach gry.
-27. **Eksport playingcards.io – nowy pokój** (zrobione, `claude/historia-pcio`; **zastępuje** obecny tryb podmiany talii w istniejącym stole – decyzja właściciela): eksport tworzy od zera plik `.pcio` (ZIP: `schemaVersion` 8, `widgets.json`, `userassets/`). Każda talia = osobny holder (nazwa talii) z kartami zakrytymi (awers + rewers z generatora, kopie z `Ilość` jako osobne karty), proporcje z `KARTA`. Holdery w rzędzie/siatce z odstępami. **Bez przycisków** (tasowanie, zbieranie). Zapis do folderu projektu; import w playingcards.io: Edit → Import. Komendy `PCIO = id` i `STÓŁ` przestają być potrzebne – w szablonach zostają bez działania (Uwaga z informacją), dokumentacja `docs/playingcards.md` do przepisania. Właściciel sam ustawia resztę stołu.
-
-Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
+4. **Spad do druku**: komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF. **Czeka na próbny wydruk u właściciela** (razem z pkt 5).
+5. **Przesunięcie rewersów**: korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
+12. **Arkusz Google jako dane**: `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
+19. **Statystyki talii**: rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
+20. **Porównanie z dowolną wersją z historii** (reszta pkt 20; „przed/teraz” od ostatniego PDF jest zrobione).
+21. **Eksport do Tabletop Simulator**: arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
+22. **Katalog kart do PDF**: wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
+25. **Pełna wersja konsolowa (CLI)** – odłożona: `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia, `--json`), `pdf`, `jpg`, `png <ID…>`. Część z historią zrobiona (pkt 26). Uwaga: w powłoce Linux na Macu właściciela (Ubuntu 22.04 arm64, Node 22, Xvfb, bez roota) Electron nie wystartuje – brak GTK3 i `libXss`, ports.ubuntu.com zablokowane; alternatywa: Chromium bez GTK z npm (np. `@sparticuz/chromium`) + `puppeteer-core`, albo renderowanie w środowisku Claude na kopii plików.
 
 ### Roadmapa (niski priorytet)
 
-- **Generator stołów playingcards.io** (pierwszy krok – prosty nowy pokój – to pkt 27): tworzenie pokoju `.pcio` od zera z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania), zamiast tylko podmiany talii w istniejącym stole. Obejmuje też wybór talii z istniejącego `.pcio` z listy (zamiast ręcznego `PCIO = id`). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText.
+- **Generator stołów playingcards.io**: pełny stół z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania). Pierwszy krok – nowy pokój z taliami na stosach – zrobiony (pkt 27). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText (przykłady pól w pokoju właściciela).
+
+## Zrobione
+
+- **v0.2.0** – podejście 1: kolumny specjalne bez względu na pisownię, rewers w podglądzie, nazwy plików JPG, DMG, Dependabot.
+- **v0.3.0** – podejście 3: Nowy projekt… (szablon startowy).
+- **v0.4.0** – podejście 4: edytor szablonu, etap 1 (kolorowanie, błędy, podgląd na żywo, zapis).
+- **v0.4.1** – nocne zmiany (PR #10) i PR #13:
+  - 6. Numer i wersja na karcie: `WERSJA`, pola wbudowane `[_numer]`, `[_kopia]`, `[_liczba]`, `[_id]`, `[_wersja]`, `[_talia]`, `[_projekt]`, `[_data]`; stopka w szablonie startowym.
+  - 7. Druk tylko zmienionych kart: odcisk `skrot()` (cyrb53) z `htmlKarty()` po `fitAll` (blob: → `plik:ścieżka@mtime:rozmiar`), klucz `talia|ID|kopia`; zapis po `zapiszPdf` (IPC `druk:odciski`/`druk:zapiszOdciski`, `userData/odciski/<sha1 szablonu>.json`, scalany); klasy `.zmieniona`/`.nowa` (box-shadow, zdejmowany w JPG); pole „Tylko zmienione” w `kartyDoDruku()`.
+  - 8. Druk wybranych kart: klik/Shift+klik (`WYBRANE`, klucz talia|wiersz|kopia, `oznaczKopie`), `kartyDoDruku()` w `buildPrint`; JPG bez zmian.
+  - 9. Tryb szkicu: `#druk.szkic` (bez teł i obrazków, tekst czarny, img w szarościach; bez `filter` na karcie – PDF nie rasteryzuje tekstu).
+  - 10. Ikony z folderu `Ikony/`/`Icons/` bez `ikony.csv` (`{nazwa_pliku}`, też bez polskich znaków); `ikony.csv` ma pierwszeństwo.
+  - 11. Stałe: `STAŁA = nazwa, wartość`, `[=nazwa]` w argumentach (w całym pliku); bez działań na liczbach.
+  - 13. Raport projektu: `raportProjektu()` na `RAPORT` z ostatniego `build` – duplikaty ID, puste pola używanych kolumn, nieużywane kolumny, ikony i obrazki.
+  - 14. Historia wersji: `app/historia.js` (zapis tylko przy zmianie treści, przerzedzanie: godzina – 1/5 min, doba – 1/godz., miesiąc – 1/dzień, starsze – 1/tydz.; punkty: otwarcie (10 ostatnich), przed przywróceniem, nazwane – zostają zawsze). Renderer po `loadFromServer` (bez `tylkoNowe`) woła `historia:zapisz`. Panel `pokazHistorie`: różnice LCS (`roznice`, XLSX jako wiersze), `podgladWersji` (`PODGLAD_WERSJI` wstrzymuje odświeżanie), `przywrocWersje` (odmowa przy niezapisanym edytorze). `.historia/indeks.json` (`wersje[]`, `punkty[]`), kopie w `.historia/pliki/`. Obrazków nie kopiujemy.
+  - 15. Obrót elementów: `obrót=` → `transform:rotate()` w `box` (`fitAll` mierzy bez obrotu).
+  - 16. Obrys i cień tekstu: `obrys=` → `-webkit-text-stroke` ×2 z `paint-order: stroke fill`; `cień` / `cień=kolor` → `text-shadow`.
+  - 17. Gradienty: `fillOf()` – kolory rozdzielone `>` → `linear-gradient(kierunek)` w `TŁO` i `kolor=` kształtów.
+  - 18. Arkusze XLSX: `gra.xlsx#Arkusz` (`plikDanych()`, `znajdzDane()`, `readTable(file, arkusz)`; `'*'` = wszystkie arkusze).
+  - 20 (część). „Porównaj”: karta „przed” (HTML z ostatniego PDF) i „teraz”.
+  - 24. Skrzynka historii: `.historia/przychodzace/<nazwa>/` (kopie plików + `opis.txt`) → punkt z opisem; `historia.sprawdzSkrzynke` w main co 3 s, `historia:zmiana` odświeża panel.
+  - 26. Historia z konsoli: `app/historia-cli.js` (`punkt <folder> "opis"`, `lista`, `przywroc <nr>`); blokada `.historia/indeks.lock` (`zBlokada`, stara > 10 s zdejmowana). Użycie przez Claude: skrypt kopiowany do katalogu tymczasowego w powłoce na Macu (Node 22), punkty „Claude: przed …” / „Claude: po …” wokół zmian w plikach gry.
+  - 27. Eksport playingcards.io jako nowy pokój (zastąpił podmianę talii; szczegóły w „Architektura”, pkt 10).
+  - Poprawki: menu aplikacji (przesłonięta zmienna `szablon` – w v0.4.0 menu było domyślne, bez skrótów), kolejka przebudów i eksporty na wyłączność.
+- **v0.4.2** – okna druku i eksportu (pkt 28 i 23):
+  - 28. Pasek: `[Edytor] [Historia] [Raport]  Talia ▾ … [Eksport obrazków…]` + wiersz stanu (`.stan`: `#status`, `#zmiany` z Porównaj, `#wybor`). Druk, PDF i playingcards.io tylko w menu Plik (Drukuj… ⌘P, Zapisz PDF… ⇧⌘S, Eksport ▸ Obrazki ⌘E / playingcards.io); menu Widok: Raport, Odśwież (⌘R), „Odświeżaj automatycznie” (checkbox, `ustawienia().auto`, strona: `AUTO_ODSWIEZANIE`).
+  - Okna: `<dialog id="okno">`, `otworzOkno(rodzaj, domyślnaAkcja)` → `{akcja, opcje}` | null; rodzaje w `OKNA` (`obrazki`, `druk`, `pcio`), pola w `poleOkna()`. Ustawienia osobno dla szablonu: `USTAWIENIA_OKIEN` ↔ IPC `eksport:ustawienia` / `eksport:zapiszUstawienia` (`userData/eksport/<sha1 szablonu>.json`). Zapamiętany niedostępny wybór (np. „zaznaczone” przy 0) → „wszystkie”.
+  - Opcje zamiast pól paska: `kartyEksportu({ktore, pominTalie})`, `buildPrint({uklad, rewersy, szkic, karty})`, `zapiszPdf(o)`, `drukuj(o)`, `eksportObrazkow({dpi, format, ktore, pominTalie, rewersy})`, `exportPcio({dpi, pominTalie})`. Talie wybiera okno (filtr podglądu nie ogranicza eksportu).
+  - 23. `obrazKarty(el, {dpi, format})`: JPG na białym tle, PNG z przezroczystymi rogami; 150/300 dpi; ta sama funkcja dla playingcards.io. Numer kopii w nazwie pliku z `data-kopia`.
+  - Test (`--test-edytor`, poza przykładami): PNG 300 dpi przez okno, zapamiętanie ustawień, okno druku; zrzut `-okno.png`.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
