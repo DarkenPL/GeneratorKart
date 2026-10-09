@@ -228,7 +228,8 @@ const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).
 function zbudujMenu() {
   const ost = ostatnie();
   const przyk = listaPrzykladow();
-  const szablon = [
+  // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
+  const menu = [
     { role: 'appMenu', label: 'Generator kart' },
     {
       label: 'Plik',
@@ -278,7 +279,7 @@ function zbudujMenu() {
     { role: 'windowMenu', label: 'Okno' },
     { role: 'help', label: 'Pomoc', submenu: [{ label: 'Dokumentacja', click: () => shell.openExternal(DOKUMENTACJA) }] },
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(szablon));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
 }
 
 // ── Okno ────────────────────────────────────────────────────────────────────
