@@ -6,7 +6,7 @@
 
 Aplikacja działa na Macach z procesorem Apple (M1–M4). Jaki masz procesor, sprawdzisz w  → **Ten Mac** (pozycja „Układ”).
 
-Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja robocza z pull requestu jest w zakładce **Actions** → uruchomienie „Aplikacja macOS” → **Artifacts**.
+Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda wersja dostaje własne wydanie (`v0.4.3`, `v0.4.4`…) w zakładce **Releases** – starsze wersje zostają do pobrania. Wersja robocza z pull requestu jest w zakładce **Actions** → uruchomienie „Aplikacja macOS” → **Artifacts**.
 
 ## Instalacja i pierwsze uruchomienie
 
@@ -92,11 +92,10 @@ npm run dist       # budowanie .app (na macOS)
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
 - Tryb testowy: `Generator kart [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
-- `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` aktualizuje wydanie „Najnowsza wersja”.
+- `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` tworzy wydanie `v<wersja>` z DMG (wersja z `app/package.json`).
 
-### Wydanie z numerem wersji
+### Wydania
 
-1. Ustaw `version` w `app/package.json`.
-2. Na GitHubie: **Releases → Draft a new release**, tag np. `v0.2.0` (**Create new tag**), **Publish release**.
+Każda zmiana w `main` podnosi wersję w `app/package.json` (0.4.3 → 0.4.4 …). Po scaleniu workflow sam tworzy wydanie `v<wersja>` z plikiem DMG, opisem (lista scalonych PR-ów) i oznaczeniem „najnowsze”, więc link do pobrania w README wskazuje ostatnią wersję. Gdy wersja nie została podniesiona, wydanie nie powstaje (ostrzeżenie w Actions).
 
-Workflow dołączy do wydania plik DMG po kilku minutach.
+Ręcznie opublikowane wydanie albo wypchnięty tag `v*` też dostaną DMG – workflow dołączy plik po kilku minutach.
