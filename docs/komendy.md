@@ -106,12 +106,28 @@ Opcje:
 - `zaokrąglenie` – w mm albo w `%`,
 - `obwódka` – grubość w mm,
 - `kolor_obwódki`,
+- `styl_obwódki` – `przerywana` albo `kropkowana` (domyślnie ciągła),
 - `krycie` – od 0 do 1,
 - `kolor` może być gradientem: `kolor=#000000 > #00000000, kierunek=90` (zanikający pasek),
 - `obrót` – jak niżej.
 
 ### `ELIPSA = x, y, szer, wys, kolor=…`
 Jak `PROSTOKĄT`, ale okrągła.
+
+### `LINIA = x1, y1, x2, y2, grubość=0.3, kolor=#000000`
+Odcinek od punktu (x1, y1) do (x2, y2), w mm od lewego górnego rogu karty. Opcje:
+- `grubość` – w mm (domyślnie 0,3),
+- `kolor` – także z kolumny, np. `kolor=[Kolor]`,
+- `styl` – `ciągła` (domyślnie), `przerywana` albo `kropkowana`,
+- `początek`, `koniec` – zakończenia: `brak` (domyślnie), `strzałka` (dwie kreski), `strzałka_pełna` (wypełniony trójkąt), `kropka`, `kreska` (poprzeczna). Wielkość zakończenia rośnie z grubością linii,
+- `krycie` – od 0 do 1,
+- `jeśli=` – jak przy innych elementach.
+
+```
+LINIA = 8, 70, 55, 70, grubość=0.4, styl=przerywana
+LINIA = 10, 40, 50, 25, grubość=0.6, kolor=#8b2c2c, koniec=strzałka_pełna
+LINIA = 10, 50, 50, 50, początek=kropka, koniec=strzałka
+```
 
 ### `TEKST = x, y, szer, wys, "treść z [Kolumnami]", opcje…`
 

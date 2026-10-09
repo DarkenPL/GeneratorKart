@@ -43,7 +43,11 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
 4. **Pasek** nad kartami: **Edytor**, **Historia**, **Raport**, wybór talii w podglądzie i **Eksport obrazków…**. Pod nim wiersz stanu: liczba kart, karty zmienione od ostatniego PDF i zaznaczone karty. Pozostałe polecenia są w menu **Plik** (druk, PDF, eksport do playingcards.io) i **Widok** (odświeżanie, raport).
 5. **Okna druku i eksportu.** Eksport obrazków (⌘E), druk (⌘P), zapis PDF (⇧⌘S) i pokój playingcards.io otwierają okno z opcjami. Okno **pamięta ostatnie ustawienia osobno dla każdego projektu**. Enter zatwierdza, Esc anuluje.
    - **Obrazki:** rozdzielczość 150 dpi (ekran, playtesty online) albo 300 dpi (druk, drukarnie), format JPG albo PNG (przezroczyste zaokrąglone rogi), które karty, talie, rewersy jako osobne pliki.
-   - **Druk i PDF:** układ (A4 ze znacznikami cięcia albo każda karta na osobnej stronie), rewersy, **szkic** (bez teł i obrazków, czarny tekst – oszczędza tusz), które karty, talie; przyciski **Drukuj…** i **Zapisz PDF**.
+   - **Druk i PDF:** układ, linie cięcia, spad, rewersy, **szkic** (bez teł i obrazków, czarny tekst – oszczędza tusz), które karty, talie; przyciski **Drukuj…** i **Zapisz PDF**.
+     - Układy: **A4** (karty 1:1 w siatce, po każdym arkuszu arkusz rewersów), **każda karta na osobnej stronie** i **Drukarnia**.
+     - **Linie cięcia** (układ A4): znaczniki na marginesie (gilotyna, nóż), przerywane szare linie wzdłuż krawędzi każdej karty (nożyczki) albo jedno i drugie. Arkusz rewersów nie ma linii.
+     - **Drukarnia** (PDF dla drukarni, np. Printnet): jedna strona na kopię karty, kolejno awers, rewers, awers, rewers…; strona większa od karty o **spad** z każdej strony (domyślnie 2 mm – karta 63×88 mm daje stronę 67×92 mm); bez znaczników cięcia i bez zaokrąglonych rogów (rogi wycina drukarnia). Tło karty sięga do krawędzi strony; prostokąty i obrazki (`dopasuj=wypełnij` albo `rozciągnij`) dotykające krawędzi karty są przedłużone o spad. Teksty, ikony, linie i obwódka karty zostają na miejscu, więc trzymaj je min. 3 mm od krawędzi. PDF jest w RGB – drukarnia przelicza go do CMYK.
+     - Drukarnie chcą obrazków min. **300 dpi** w rozmiarze na karcie – Raport pokazuje obrazki o mniejszej rozdzielczości.
    - **playingcards.io:** rozdzielczość i talie ([opis](playingcards.md)).
    - **Które karty:** wszystkie, tylko zaznaczone albo tylko zmienione od ostatniego PDF.
 6. **Zaznaczanie i zmienione karty:**
@@ -56,7 +60,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
    - Przy każdej wersji: **Zmiany** (różnice linii względem obecnej wersji), **Pokaż karty** (podgląd kart z tamtej wersji; obrazki są obecne, bo nie są kopiowane) i **Przywróć…** (drugie kliknięcie potwierdza). Przed przywróceniem obecny stan trafia do historii, więc przywrócenie da się cofnąć.
    - Przykłady nie mają historii. Folder `.historia` możesz usunąć – historia zacznie się od nowa.
    - **Z innych programów** (np. gdy Claude zmienia pliki gry): punkt z opisem można dodać z konsoli – `node historia-cli.js punkt <folder projektu> "opis"` (także `lista` i `przywroc <nr>`; plik `app/historia-cli.js` z repozytorium, wymaga Node 18+) – albo przez **skrzynkę**: folder `.historia/przychodzace/<nazwa>/` z kopiami plików (ścieżki jak w projekcie, np. `Szablony/gra.txt`) i plikiem `opis.txt`. Aplikacja w ciągu kilku sekund zamienia go w punkt historii z tym opisem i usuwa folder. Nazwa folderu w formie `2026-10-09T12-30-00` ustala datę punktu.
-8. **Raport** (przycisk w pasku albo **Widok → Raport projektu**) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
+8. **Raport** (przycisk w pasku albo **Widok → Raport projektu**) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), obrazki poniżej 300 dpi w rozmiarze na karcie (pliki SVG są pomijane), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
 9. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
@@ -76,6 +80,8 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
   - Polskie znaki i spacje są pomijane (`Karty Wpływu` → `KartyWplywu`).
   - Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
 - **Eksport do playingcards.io** zapisuje nowy pokój (`NazwaProjektu – playingcards.pcio`) w folderze projektu – każda talia jako osobny stos ([opis](playingcards.md)).
+- **Katalog talii** (**Plik → Eksport → Katalog talii (PNG)…**): dla każdej talii obrazek PNG z siatką zmniejszonych kart i podpisami (ID, nazwa, liczba kopii) – do przeglądu całej talii, instrukcji i dla testerów. Pliki `NazwaProjektu_NazwaTalii.png` w `Export/katalog`; obrazek ma najwyżej ok. 2000×2000 px, więc duże talie dzielą się na kilka plików (`_1`, `_2`…). Karty z za długim tekstem mają czerwoną ramkę.
+  - **Zlecenie z pliku** (np. od Claude, bez klikania): plik `.generator/zlecenia/katalog` w folderze projektu. Może być pusty albo zawierać wiersze `talie = Stereotypy, Mecenasi` i `id = 001, 017`. Otwarta aplikacja w ciągu kilku sekund robi katalog do `.generator/katalog/`, usuwa plik zlecenia i zapisuje `.generator/zlecenia/wynik.json` (pliki, talie, Uwagi, karty za długie, czy edytor ma niezapisane zmiany). Działa tylko poza przykładami.
 - **Przykłady** są tylko do odczytu. Eksport obrazków pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
 
 ## Dla deweloperów

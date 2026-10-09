@@ -74,8 +74,14 @@ Sekcje w kolejności w pliku:
    - jeden format strony dla całego wydruku (A4 pionowo albo rozmiar karty), bo Safari nie obsługuje nazwanych `@page` i zmniejszał wydruk z mieszanymi formatami;
    - karty poziome są obracane o 90°. Przed obrotem karta musi wystawać w lewo, nie w prawo, inaczej Chrome zmniejsza cały wydruk;
    - siatka jest wyśrodkowana, znaczniki cięcia na marginesie, po każdym arkuszu pełny arkusz rewersów.
+   - `o.ciecie`: `znaczniki` (na marginesie) | `nozyczki` (`.linia-ciecia` – przerywana ramka 0,2 mm wokół każdej karty) | `oba`; arkusz rewersów bez linii;
+   - układ `drukarnia`: jak `pojedyncze` (strona na kopię, awers/rewers na przemian), strona = karta + 2×`o.spad` (domyślnie 2 mm), bez znaczników. `kartaZeSpadem(k, w, h, s)`: klon karty powiększony o spad, zawartość w wewnętrznym divie przesuniętym o spad, bez `border-radius`; prostokąty i obrazki cover/fill dotykające krawędzi (tolerancja 0,05 mm, bez obrotu i zaokrągleń) są przedłużane o spad. RGB (CMYK – pkt 34).
 9. **Eksport obrazków** (`eksportObrazkow(o)`, JPG/PNG, 150/300 dpi; do `Export/` przez aplikację; nazwy `Projekt_Talia_ID_kopia.jpg|png`, rewers `Projekt_Talia_rewers.jpg`, projekt z `PROJEKT =` albo nazwy pliku szablonu): html-to-image `toCanvas`, potem rysowanie na białym tle (żeby zaokrąglone rogi nie wychodziły czarne) i `toBlob('image/jpeg')`. Uwaga: `toBlob` z html-to-image zawsze daje PNG, a opcja `backgroundColor` nadpisywała tło karty.
 10. **Eksport playingcards.io** (`exportPcio`): nowy pokój od zera – ZIP (`schemaVersion` 8, `widgets.json`, `userassets/`); na talię `holder` (label = nazwa talii, karta + ramka 4) z `cardDeck` (`parent` = holder, dłuższy bok karty 160, `faceTemplate` obraz dynamiczny, `backTemplate` obraz rewersu albo kolor + nazwa) i kartami zakrytymi w stosie. Holdery w rzędach (`PCIO` w kodzie: odstęp 40, szerokość stołu 1500). Bez przycisków. Zapis IPC `pcio:zapisz` do `<projekt>/<PROJEKT> – playingcards.pcio` (przykłady: okno zapisu). Komendy `PCIO`/`STÓŁ` dają tylko uwagę (dawny tryb podmiany usunięty).
+
+11. **Katalog talii** (`katalogPng(o)` → `zapiszKatalog(o, cel)`): PNG na talię, każda karta raz (wg `data-row`, podpis „ID Nazwa ×kopie” z `title`), miniatury przez `obrazKarty` (`KATALOG.dpi` 110, render 2×), strona ≤ ~2000×2000 px (więcej kart → `_1`, `_2`…), czerwona ramka przy `.za-dlugi`; filtr podglądu zdejmowany na czas eksportu. Cel `katalog` → `Export/katalog/` (Plik → Eksport → Katalog talii, okno `katalog`); cel `zlecenie` → `.generator/katalog/` (czyszczony). **Zlecenia:** main co 3 s (`sprawdzZlecenia`) szuka pliku `.generator/zlecenia/katalog` (opcjonalnie `talie = …`, `id = …`), woła `zlecenieKatalogu(opcje)`, usuwa zlecenie, potem zapisuje `.generator/zlecenia/wynik.json` (`ok`, `pliki`, `talie[{nazwa, pliki, karty, zaDlugie}]`, `uwagi`, `zaDlugie`, `niezapisaneZmiany`). Użycie przez Claude: utworzyć plik zlecenia w powłoce na Macu, czekać na `wynik.json`, obejrzeć PNG (stage do kontenera).
+12. **Raport – rozdzielczość obrazków** (`obrazkiNiskiejRozdzielczosci`): `OBRAZEK` (wg `object-fit`) i `TŁO` z pliku (cover), SVG pomijane, próg 300 dpi.
+13. **`LINIA`** (`liniaSvg`): SVG na całą kartę (`overflow:visible`), groty rysowane geometrią (nie `<marker>` – znikały, gdy pierwsza definicja była w ukrytej talii); `styl_obwódki` dla `PROSTOKĄT`/`ELIPSA`.
 
 ## Testowanie (środowisko Claude)
 
@@ -97,14 +103,16 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu) – pomysł.
 3. Edytor – etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu; ewentualnie podpowiadanie komend i nazw kolumn.
-4. **Spad do druku**: komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF. **Czeka na próbny wydruk u właściciela** (razem z pkt 5).
-5. **Przesunięcie rewersów**: korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
+4. **Spad w druku A4** (reszta pkt 4): spad jest już w układzie „Drukarnia” (pkt 33, `kartaZeSpadem`); w A4 i „osobnych stronach” – do decyzji (komenda `SPAD` albo pole w oknie). **Czeka na próbny wydruk u właściciela** (razem z pkt 5).
+5. **Przesunięcie rewersów**: korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki; drukarka właściciela odwraca wzdłuż dłuższej krawędzi).
 12. **Arkusz Google jako dane**: `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
 19. **Statystyki talii**: rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
 20. **Porównanie z dowolną wersją z historii** (reszta pkt 20; „przed/teraz” od ostatniego PDF jest zrobione).
 21. **Eksport do Tabletop Simulator**: arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
-22. **Katalog kart do PDF**: wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
+22. **Katalog kart do PDF** (reszta): wiele zmniejszonych kart na stronie A4 z podpisami – do instrukcji i dla testerów; katalog PNG jest zrobiony (pkt 30, `katalogPng`).
 25. **Pełna wersja konsolowa (CLI)** – odłożona: `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia, `--json`), `pdf`, `jpg`, `png <ID…>`. Część z historią zrobiona (pkt 26). Uwaga: w powłoce Linux na Macu właściciela (Ubuntu 22.04 arm64, Node 22, Xvfb, bez roota) Electron nie wystartuje – brak GTK3 i `libXss`, ports.ubuntu.com zablokowane; alternatywa: Chromium bez GTK z npm (np. `@sparticuz/chromium`) + `puppeteer-core`, albo renderowanie w środowisku Claude na kopii plików.
+29. **Rewersy zależne od karty** – **odłożone** (decyzja 10.10.2026). Plan: `[Kolumny]` i `jeśli=` w sekcji `[REWERS]` (rewers bez kolumn = wspólny jak dziś); podgląd z przełącznikiem rewersów, osobne pliki rewersów w eksporcie obrazków, w playingcards.io rewers dynamiczny (`cardTypes[…]['image-back']`), wykrywanie zmian także po rewersie. Druk A4: arkusz rewersów jako lustro arkusza awersów – drukarka właściciela odwraca kartkę **wzdłuż dłuższej krawędzi** (kolumny w odwrotnej kolejności). Sposób określania rewersu (kolumny w `[REWERS]` czy kolumna z obrazkiem) – do ustalenia.
+34. **CMYK w PDF dla drukarni** (reszta pkt 33, „na razie się nie przejmujemy” – 10.10.2026): `printToPDF` daje tylko RGB; konwersja przez Ghostscript (AGPL – nie dołączamy; opcja, gdy zainstalowany z Homebrew).
 
 ### Roadmapa (niski priorytet)
 
@@ -141,5 +149,12 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
   - Test (`--test-edytor`, poza przykładami): PNG 300 dpi przez okno, zapamiętanie ustawień, okno druku; zrzut `-okno.png`.
 - **v0.4.3** – wydania z numerem wersji tworzone automatycznie po każdym scaleniu do `main` (zamiast nadpisywanego wydania „najnowsza”).
 - **v0.4.4** – poprawka: pętla odświeżania (napis „odświeżono” zmieniał się co 1,5 s po pierwszym przeładowaniu, np. po edycji). `serverPaths` ma kolejność zakończenia równoległych pobrań, więc odcisk w `serverStamp()` zależał od kolejności; teraz listy są sortowane, a sprawdzenia nie nakładają się (`SPRAWDZANIE`). Test: `serverStamp()` po odwróceniu `serverPaths` bez zmian i stały napis po edycji (`edytor.spokoj`).
+- **v0.4.5** – kolejka: decyzje z 10.10.2026 (pkt 29–33). Odrzucone (nie proponować ponownie): eksport IDML, przepisanie na Rust, wersja webowa; `CLAUDE.md` dla prototypów w szablonie startowym (PR #18 zamknięty – właściciel chciał tylko pliku lokalnie).
+- **v0.4.6** – druk i katalog (pkt 31, 32, 30, 33 + spad z pkt 4 w układzie Drukarnia):
+  - 31. `LINIA = x1, y1, x2, y2` (grubość, kolor, styl ciągła/przerywana/kropkowana, początek/koniec: brak, strzałka, strzałka_pełna, kropka, kreska); `styl_obwódki` w `PROSTOKĄT`/`ELIPSA`.
+  - 32. Linie cięcia nożyczkami w oknie Druk i PDF (znaczniki / przerywane linie / oba).
+  - 30. Katalog talii A (menu) + B (zlecenie z pliku, `wynik.json`).
+  - 33. Układ „Drukarnia”: strona na kopię, awers/rewers na przemian, spad (domyślnie 2 mm), bez znaczników; Raport: obrazki poniżej 300 dpi. CMYK odłożony (pkt 34).
+  - Test (`--test-edytor`): linie cięcia, układ drukarnia (liczba i rozmiar stron, raport); poza przykładami katalog A i zlecenie B.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('generatorApp', {
   zapiszPcio: (nazwa, dane) => ipcRenderer.invoke('pcio:zapisz', nazwa, dane),
   eksportUstawienia: () => ipcRenderer.invoke('eksport:ustawienia'),
   zapiszEksportUstawienia: (dane) => ipcRenderer.invoke('eksport:zapiszUstawienia', dane),
-  eksportStart: () => ipcRenderer.invoke('eksport:start'),
+  eksportStart: (cel) => ipcRenderer.invoke('eksport:start', cel),
   eksportPlik: (nazwa, dane) => ipcRenderer.invoke('eksport:plik', nazwa, dane),
   eksportKoniec: () => ipcRenderer.invoke('eksport:koniec'),
 });

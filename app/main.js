@@ -167,15 +167,21 @@ ipcMain.handle('projekt:pokaz', () => { if (projekt) shell.openPath(projekt); })
 // ── Eksport JPG do folderu Export ───────────────────────────────────────────
 // Przykłady są tylko do odczytu – wtedy pytamy, gdzie zapisać.
 let folderEksportu = null;
-ipcMain.handle('eksport:start', async () => {
-  if (projekt && !jestPrzykladem(projekt)) folderEksportu = path.join(projekt, 'Export');
+// cel: undefined = Export, 'katalog' = Export/katalog, 'zlecenie' = .generator/katalog (czyszczony).
+ipcMain.handle('eksport:start', async (e, cel) => {
+  const pod = cel === 'katalog' ? ['katalog'] : [];
+  if (cel === 'zlecenie') {
+    if (!projekt || jestPrzykladem(projekt)) return null;
+    folderEksportu = path.join(projekt, '.generator', 'katalog');   // nie w zlecenia/ – tam plik zlecenia „katalog”
+    fs.rmSync(folderEksportu, { recursive: true, force: true });
+  } else if (projekt && !jestPrzykladem(projekt)) folderEksportu = path.join(projekt, 'Export', ...pod);
   else {
     const r = await dialog.showOpenDialog(okno, {
       title: 'Gdzie zapisać obrazki?', buttonLabel: 'Wybierz', properties: ['openDirectory', 'createDirectory'],
       defaultPath: app.getPath('documents'),
     });
     if (r.canceled || !r.filePaths[0]) return null;
-    folderEksportu = path.join(r.filePaths[0], 'Export');
+    folderEksportu = path.join(r.filePaths[0], 'Export', ...pod);
   }
   fs.mkdirSync(folderEksportu, { recursive: true });
   return folderEksportu;
@@ -248,6 +254,41 @@ setInterval(() => {
   if (!historiaDostepna() || !okno) return;
   try { if (historia.sprawdzSkrzynke(projekt)) okno.webContents.send('historia:zmiana'); } catch (e) { /* spróbujemy za chwilę */ }
 }, 3000);
+// Zlecenia z rozmowy (np. od Claude): plik .generator/zlecenia/katalog w folderze projektu.
+// Treść (opcjonalnie): wiersze „talie = A, B” i „id = 1, 7”. Otwarta aplikacja robi katalog PNG
+// do .generator/katalog/, zapisuje wynik.json (pliki, Uwagi, karty za długie) i usuwa zlecenie.
+const FOLDER_ZLECEN = ['.generator', 'zlecenia'];
+let zlecenieTrwa = false;
+function czytajZlecenie(tekst) {
+  const o = {};
+  for (const w of String(tekst).split(/\r?\n/)) {
+    const m = /^\s*(talie|talia|id)\s*[=:]\s*(.*)$/i.exec(w);
+    if (!m) continue;
+    const lista = m[2].split(',').map((x) => x.trim()).filter(Boolean);
+    if (/^id$/i.test(m[1])) o.id = lista; else o.talie = lista;
+  }
+  return o;
+}
+async function sprawdzZlecenia() {
+  if (zlecenieTrwa || !historiaDostepna() || !okno) return;
+  const plik = path.join(projekt, ...FOLDER_ZLECEN, 'katalog');
+  let tekst;
+  try { if (!fs.statSync(plik).isFile()) return; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return; }
+  zlecenieTrwa = true;
+  const wynikPlik = path.join(projekt, ...FOLDER_ZLECEN, 'wynik.json');
+  try {
+    fs.rmSync(wynikPlik, { force: true });
+    const opcje = czytajZlecenie(tekst);
+    const w = await okno.webContents.executeJavaScript(`window.zlecenieKatalogu ? zlecenieKatalogu(${JSON.stringify(opcje)}) : { ok: false, blad: 'strona nie jest gotowa' }`);
+    const wynik = { zlecenie: 'katalog', opcje, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), ...w };
+    if (wynik.folder) wynik.folder = path.relative(projekt, wynik.folder);
+    fs.rmSync(plik, { force: true });                     // najpierw zlecenie – wynik.json = koniec pracy
+    fs.writeFileSync(wynikPlik, JSON.stringify(wynik, null, 1));
+  } catch (e) {
+    try { fs.rmSync(plik, { force: true }); fs.writeFileSync(wynikPlik, JSON.stringify({ zlecenie: 'katalog', ok: false, blad: String(e.message || e) }, null, 1)); } catch (e2) { /* trudno */ }
+  } finally { zlecenieTrwa = false; }
+}
+setInterval(sprawdzZlecenia, 3000);
 ipcMain.handle('historia:przywroc', (e, czas) => {
   if (!historiaDostepna()) return { blad: 'Przykłady nie mają historii.' };
   if (zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
@@ -293,6 +334,7 @@ function zbudujMenu() {
           submenu: [
             { label: 'Obrazki kart (JPG / PNG)…', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie('window.oknoObrazkow && oknoObrazkow()') },
             { label: 'Pokój playingcards.io…', enabled: !!projekt, click: wStronie('window.oknoPcio && oknoPcio()') },
+            { label: 'Katalog talii (PNG)…', enabled: !!projekt, click: wStronie('window.oknoKatalogu && oknoKatalogu()') },
           ],
         },
         { type: 'separator' },
@@ -441,10 +483,17 @@ async function trybTestowy(folder, wynik) {
       const tlo = getComputedStyle(document.querySelector('#druk .karta')).backgroundColor;
       const pasek = document.getElementById('wybor').hidden;
       wyczyscWybor();
-      return { karty, tlo, pasek };
+      // Linie cięcia nożyczkami: przerywana ramka wokół każdej karty, bez znaczników na marginesie.
+      buildPrint({ uklad: 'a4', ciecie: 'nozyczki', rewersy: false });
+      const nozyczki = { linie: document.querySelectorAll('#druk .linia-ciecia').length, karty: document.querySelectorAll('#druk .karta:not(.rewers)').length,
+        znaczniki: document.querySelectorAll('#druk .znacznik').length };
+      buildPrint({ uklad: 'a4', ciecie: 'oba', rewersy: false });
+      nozyczki.oba = document.querySelectorAll('#druk .znacznik').length > 0 && document.querySelectorAll('#druk .linia-ciecia').length === nozyczki.linie;
+      return { karty, tlo, pasek, nozyczki };
     })()`);
     wybor.raport = await wc.executeJavaScript(`raportProjektu().then((h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText; })`).catch((e) => 'BŁĄD ' + e.message);
-    wybor.ok = /Talia /.test(wybor.raport) && wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek;
+    wybor.ok = /Talia /.test(wybor.raport) && wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek
+      && wybor.nozyczki.linie === wybor.nozyczki.karty && wybor.nozyczki.znaczniki === 0 && wybor.nozyczki.oba;
   }
   // Druk tylko zmienionych (--test-edytor): zapamiętanie odcisków → 0 zmian; zmiana szablonu → zmienione wszystkie.
   let zmienione = null;
@@ -536,6 +585,42 @@ async function trybTestowy(folder, wynik) {
     okna.ok = png.length === kartyWidok && szer >= 700 && zapamietane.format === 'png' && zapamietane.dpi === '300' && !zapamietane.rewersy
       && plik && plik.obrazki && plik.obrazki.format === 'png' && druk.pola === 4 && druk.domyslny === 'Drukuj…';
   }
+  // Drukarnia (--test-edytor): strona na kopię (awers, rewers…), strona = karta + 2 × spad.
+  let drukarnia = null;
+  if (process.argv.includes('--test-edytor')) {
+    drukarnia = await wc.executeJavaScript(`(() => {
+      const karty = kartyEksportu({});
+      const rewersy = karty.filter((k) => backOf(k.dataset.talia)).length;
+      buildPrint({ uklad: 'drukarnia', spad: 2, karty });
+      const strony = document.querySelectorAll('#druk .arkusz');
+      const [w, h] = cardMm(karty[0]);
+      return { strony: strony.length, oczekiwane: karty.length + rewersy, rozmiar: strony[0].style.width + ' ' + strony[0].style.height,
+        karta: Math.min(w, h) + 4 + 'mm ' + (Math.max(w, h) + 4) + 'mm', znaczniki: document.querySelectorAll('#druk .znacznik').length,
+        raport: /Obrazki poniżej 300 dpi/.test(document.getElementById('raport').innerHTML) };
+    })()`);
+    drukarnia.raport = /Obrazki poniżej 300 dpi/.test(await wc.executeJavaScript('raportProjektu()'));
+    drukarnia.ok = drukarnia.strony === drukarnia.oczekiwane && drukarnia.rozmiar === drukarnia.karta && drukarnia.znaczniki === 0 && drukarnia.raport;
+  }
+  // Katalog (--test-edytor, poza przykładami): A – Export/katalog; B – zlecenie z pliku → wynik.json.
+  let katalog = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const a = await js("zapiszKatalog({}, 'katalog')");
+    const kat = path.join(projekt, 'Export', 'katalog');
+    const pngA = a && a.pliki ? a.pliki.filter((n) => fs.existsSync(path.join(kat, n))) : [];
+    const szer = pngA.length ? fs.readFileSync(path.join(kat, pngA[0])).readUInt32BE(16) : 0;
+    const talia = a && a.talie && a.talie[0] ? a.talie[0].nazwa : '';
+    const zl = path.join(projekt, ...FOLDER_ZLECEN);
+    fs.mkdirSync(zl, { recursive: true });
+    fs.writeFileSync(path.join(zl, 'katalog'), `talie = ${talia}\n`);
+    let w = null;
+    for (let i = 0; i < 60 && !w; i++) { await czekaj(500); try { w = JSON.parse(fs.readFileSync(path.join(zl, 'wynik.json'), 'utf8')); } catch (e) { /* jeszcze nie */ } }
+    const pngB = w && w.pliki ? w.pliki.filter((n) => fs.existsSync(path.join(projekt, '.generator', 'katalog', n))).length : 0;
+    katalog = { a: pngA.length, szer, talia, b: w && { ok: w.ok, pliki: w.pliki, talie: (w.talie || []).map((t) => t.nazwa), uwagi: w.uwagi }, pngB,
+      zlecenieUsuniete: !fs.existsSync(path.join(zl, 'katalog')) };
+    katalog.ok = pngA.length > 0 && szer > 300 && szer <= 2000 && !!w && w.ok && pngB === w.pliki.length && pngB > 0
+      && katalog.b.talie.length === 1 && katalog.b.talie[0] === talia && katalog.zlecenieUsuniete;
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
@@ -543,8 +628,9 @@ async function trybTestowy(folder, wynik) {
   const plik = Menu.getApplicationMenu()?.items.find((i) => i.label === 'Plik');
   const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
   const ok = menuOk && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, menu, pdf: wynik, ok }) + '\n');
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
+    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, menu, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
