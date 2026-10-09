@@ -112,10 +112,10 @@ Sekcje w kolejności w pliku:
     - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
     - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).
     - Plik → Historia wersji…: lista z datami, różnice linii względem obecnej, „Przywróć” (obecna wersja trafia najpierw do historii), „Pokaż karty z tej wersji”. Obrazków nie kopiujemy.
-15. **Obrót elementów** (zaplanowane): opcja `obrót=90` (stopnie) w `TEKST`, `OBRAZEK`, `IKONA`, `PROSTOKĄT`; obrót wokół środka pola.
-16. **Obrys i cień tekstu** (zaplanowane): np. `obrys=0.3, kolor_obrysu=#000`, `cień=…` – czytelny tekst na obrazkach.
-17. **Gradienty** (zaplanowane): w `TŁO` i `PROSTOKĄT`, np. `#fff > #c0504d` (kierunek opcją).
-18. **Wiele arkuszy XLSX** (zaplanowane): `DANE = gra.xlsx#Arkusz` (bez `#` – pierwszy arkusz, jak dziś).
+15. **Obrót elementów** (zrobione, `claude/noc`): `obrót=` dokleja `transform:rotate()` do `box` każdego elementu (wokół środka; `fitAll` mierzy bez obrotu).
+16. **Obrys i cień tekstu** (zrobione, `claude/noc`): `obrys=` → `-webkit-text-stroke` (×2, bo `paint-order: stroke fill` chowa połowę), `kolor_obrysu`; `cień` / `cień=kolor` → `text-shadow`.
+17. **Gradienty** (zrobione, `claude/noc`): `fillOf()` w `renderCard` – kolory rozdzielone `>` → `linear-gradient(kierunek)`, w `TŁO` i `kolor=` kształtów; `kierunek=` w stopniach (domyślnie 180).
+18. **Wiele arkuszy XLSX** (zrobione, `claude/noc`): `plikDanych()` dzieli `gra.xlsx#Arkusz`, `znajdzDane()` zwraca `{name, arkusz}`, `readTable(file, arkusz)` (`'*'` = wszystkie arkusze – do szukania obrazków).
 19. **Statystyki talii** (zaplanowane): rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
 20. **Wizualne porównanie wersji** (zrobione częściowo, `claude/noc`): przycisk „Porównaj” – „przed” (HTML karty zapisany z ostatnim PDF, obrazki w obecnej wersji) i „teraz”. Porównanie z dowolną wersją z historii – razem z pkt 14.
 21. **Eksport do Tabletop Simulator** (zaplanowane): arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
