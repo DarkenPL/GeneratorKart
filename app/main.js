@@ -194,6 +194,20 @@ ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
   return r.filePath;
 });
 
+// ── Odciski kart z ostatniego PDF (druk tylko zmienionych, porównanie) ──────
+// Jeden plik JSON na szablon w danych aplikacji – folder projektu zostaje czysty, działa też dla przykładów.
+const plikOdciskow = () => szablon && path.join(app.getPath('userData'), 'odciski',
+  require('crypto').createHash('sha1').update(szablon).digest('hex').slice(0, 16) + '.json');
+ipcMain.handle('druk:odciski', () => {
+  try { return JSON.parse(fs.readFileSync(plikOdciskow(), 'utf8')); } catch (e) { return null; }
+});
+ipcMain.handle('druk:zapiszOdciski', (e, dane) => {
+  const p = plikOdciskow(); if (!p) return false;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(dane));
+  return true;
+});
+
 // ── Menu ────────────────────────────────────────────────────────────────────
 const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).catch(() => {});
 
@@ -367,11 +381,35 @@ async function trybTestowy(folder, wynik) {
     wybor.raport = await wc.executeJavaScript(`raportProjektu().then((h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText; })`).catch((e) => 'BŁĄD ' + e.message);
     wybor.ok = /Talia /.test(wybor.raport) && wybor.karty === 2 && wybor.tlo === 'rgb(255, 255, 255)' && !wybor.pasek;
   }
+  // Druk tylko zmienionych (--test-edytor): zapamiętanie odcisków → 0 zmian; zmiana szablonu → zmienione wszystkie.
+  let zmienione = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const oryginal = fs.readFileSync(szablon, 'utf8');
+    const wpisz = (t) => js(`(() => { const p = document.getElementById('edPole'); p.value = ${JSON.stringify(t)}; p.dispatchEvent(new Event('input')); })()`);
+    const liczby = () => js("({ zm: +document.getElementById('zmLiczba').textContent, nowe: +document.getElementById('noweLiczba').textContent, widoczne: !document.getElementById('zmiany').hidden })");
+    await js('zapamietajDruk(visibleCards())');
+    const poZapisie = await liczby();
+    await js('przelaczEdytor(true)');
+    // Dopisany element tylko w pierwszej talii (część wspólna dotknęłaby wszystkich) – na końcu pliku = ostatnia talia.
+    await wpisz(oryginal + '\n[AWERS]\nPROSTOKĄT = 1, 1, 3, 3, kolor=#ff00ff\n'); await czekaj(2000);
+    const poZmianie = await liczby();
+    const porownanie = await js("pokazPorownanie(true); document.querySelectorAll('#porownanie .para').length");
+    await js('pokazPorownanie(false)');
+    await js("document.getElementById('tylkoZmienione').checked = true; buildPrint(); document.getElementById('tylkoZmienione').checked = false");
+    const doDruku = await js("document.querySelectorAll('#druk .karta:not(.rewers)').length");
+    await wpisz(oryginal); await czekaj(2000);
+    const poPowrocie = await liczby();
+    await js('przelaczEdytor(true)');
+    zmienione = { poZapisie, poZmianie, porownanie, doDruku, poPowrocie };
+    zmienione.ok = poZapisie.widoczne && poZapisie.zm === 0 && poZapisie.nowe === 0 && poZmianie.zm > 0
+      && porownanie >= Math.min(poZmianie.zm, 40) && doDruku === poZmianie.zm && poPowrocie.zm === 0;
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
-    && (!edytor || edytor.ok) && (!wybor || wybor.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, pdf: wynik, ok }) + '\n');
+    && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, wybor, zmienione, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 

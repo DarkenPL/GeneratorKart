@@ -38,7 +38,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart i szkic): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport i „tylko zmienione”): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -85,6 +85,7 @@ Sekcje w kolejności w pliku:
 - Dokładność druku 1:1: `pdftoppm -r 300` i pomiar znaczników cięcia (odstępy 63,0 / 88,0 mm).
 - Zrzuty pojedynczych kart (porównanie przed/po zmianie silnika): Playwright (Chromium w `/opt/pw-browsers`) na `http://127.0.0.1:<port>/karty.html?szablon=…` z serwerem `node -e "require('./app/serwer').utworzSerwer({zasoby:'app/zasoby',projekt:()=>'<folder>'}).listen(8766)"`. CDN jest zablokowany: podmieniaj biblioteki przez `page.route` na pliki z `app/node_modules`.
 - Pobieranie artefaktów i wydań GitHuba z tego środowiska nie działa (blob storage zablokowany).
+- Błędy JS strony w trybie testowym: `--enable-logging=file --log-file=/tmp/el.log`, potem `grep CONSOLE`. Uwaga: funkcja globalna to też `window.nazwa` – `window.x = () => x()` daje nieskończoną rekurencję (test wisi).
 - Przed oddaniem zmiany przejrzyj wszystkie przykłady: zero Uwag i zero błędów strony.
 
 ## Pomysły / do zrobienia
@@ -100,7 +101,7 @@ Sekcje w kolejności w pliku:
 5. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
 
 6. **Numer i wersja na karcie** (zrobione, gałąź `claude/noc`): komenda `WERSJA`, pola wbudowane `[_numer]`, `[_kopia]`, `[_liczba]`, `[_id]`, `[_wersja]`, `[_talia]`, `[_projekt]`, `[_data]`; stopka w szablonie startowym.
-7. **Drukuj tylko zmienione karty** (zaplanowane): aplikacja pamięta odcisk (hash) każdej karty z ostatniego PDF i drukuje tylko zmienione od tamtej pory.
+7. **Drukuj tylko zmienione karty** (zrobione, `claude/noc`): odcisk = `skrot()` (cyrb53) z `htmlKarty()` po `fitAll` (blob: → `plik:ścieżka@mtime:rozmiar`); klucz `talia|ID|kopia`. Zapis po `zapiszPdf` (IPC `druk:odciski`/`druk:zapiszOdciski`, plik `userData/odciski/<sha1 szablonu>.json`, scalany – częściowy wydruk aktualizuje tylko swoje karty). Klasy `.zmieniona`/`.nowa` (box-shadow, zdejmowany w eksporcie JPG), pole „Tylko zmienione” w `kartyDoDruku()`.
 8. **Druk wybranych kart** (zrobione, `claude/noc`): klik/Shift+klik w podglądzie (`WYBRANE`, klucz talia|wiersz|kopia, `oznaczKopie`), `kartyDoDruku()` w `buildPrint`; JPG bez zmian.
 9. **Tryb szkicu** (zrobione, `claude/noc`): pole „Szkic”, klasa `#druk.szkic` (CSS: bez teł i obrazków, tekst czarny, img w szarościach; bez `filter` na karcie, żeby PDF nie rasteryzował tekstu).
 10. **Ikony bez `ikony.csv`** (zrobione, `claude/noc`): każdy obrazek z `Ikony/` (albo `Icons/`) działa jako `{nazwa_pliku}` (też bez polskich znaków); wpis w `ikony.csv` ma pierwszeństwo.
@@ -116,7 +117,7 @@ Sekcje w kolejności w pliku:
 17. **Gradienty** (zaplanowane): w `TŁO` i `PROSTOKĄT`, np. `#fff > #c0504d` (kierunek opcją).
 18. **Wiele arkuszy XLSX** (zaplanowane): `DANE = gra.xlsx#Arkusz` (bez `#` – pierwszy arkusz, jak dziś).
 19. **Statystyki talii** (zaplanowane): rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
-20. **Wizualne porównanie wersji** (zaplanowane): podświetlenie kart zmienionych od ostatniego PDF (ten sam odcisk co w „druku zmienionych”, pkt 7) i podgląd przed/po (z historią wersji, pkt 14).
+20. **Wizualne porównanie wersji** (zrobione częściowo, `claude/noc`): przycisk „Porównaj” – „przed” (HTML karty zapisany z ostatnim PDF, obrazki w obecnej wersji) i „teraz”. Porównanie z dowolną wersją z historii – razem z pkt 14.
 21. **Eksport do Tabletop Simulator** (zaplanowane): arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
 22. **Katalog kart do PDF** (zaplanowane): wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
 23. **Rozdzielczość eksportu** (zaplanowane): wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG).

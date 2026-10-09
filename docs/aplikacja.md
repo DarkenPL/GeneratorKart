@@ -42,8 +42,12 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`. Wersja ro
    Szablon nadal możesz edytować w dowolnym innym edytorze tekstu.
 4. **Druk wybranych kart:** kliknij kartę w podglądzie, żeby ją zaznaczyć (niebieska ramka), Shift+klik zaznacza zakres. Gdy coś jest zaznaczone, PDF i druk obejmują tylko zaznaczone karty (z rewersami), a w pasku widać ich liczbę i przycisk **Wyczyść**. Zaznaczenie zostaje po odświeżeniu kart. Eksport JPG zawsze obejmuje wszystkie karty.
 5. **Szkic** (pole w pasku): PDF i druk bez teł i obrazków, z czarnym tekstem i ikonami w szarościach – oszczędza tusz przy prototypach. Podgląd na ekranie się nie zmienia.
-6. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
-7. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
+6. **Zmienione karty:** po każdym zapisie PDF aplikacja zapamiętuje wygląd wydrukowanych kart. Potem karty zmienione od tamtej pory mają **pomarańczową** obwódkę, a nowe **zieloną**; w pasku widać ich liczbę.
+   - **Tylko zmienione** – PDF i druk obejmują tylko zmienione i nowe karty (można to łączyć z zaznaczaniem). Nazwa PDF dostaje „– zmienione”.
+   - **Porównaj** – pokazuje każdą zmienioną kartę „przed” (z ostatniego PDF) i „teraz”.
+   - Zmianą jest wszystko, co widać na karcie: tekst z danych, szablon, obrazek. Karty z częściowego wydruku są zapamiętywane pojedynczo, więc „zmienione” znaczy „zmienione od ostatniego wydruku tej karty”. Systemowe okno drukowania (⌘P) nie zapamiętuje kart, bo nie wiadomo, czy wydruk się udał.
+7. **Raport** (przycisk w pasku) sprawdza projekt: powtórzone ID, puste pola w kolumnach używanych w szablonie, kolumny, których szablon nie używa, karty pominięte (`Ilość = 0`), ikony bez użycia i obrazki w folderach projektu, do których nic się nie odwołuje. Raport odświeża się razem z kartami.
+8. Aplikacja pamięta ostatnie szablony (**Plik → Ostatnie projekty**) i przy starcie otwiera ostatni.
 
 | Skrót | Działanie |
 |---|---|

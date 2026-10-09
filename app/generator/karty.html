@@ -74,6 +74,12 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .siatka .karta.za-dlugi { outline: 2px dashed #d00; outline-offset: 3px; }
 .siatka .karta:not(.rewers) { cursor: pointer; }
 .siatka .karta.wybrana { outline: 3px solid #2f6fd6; outline-offset: 3px; }
+.siatka .karta.zmieniona { box-shadow: 0 0 0 3px #e8912d; }
+.siatka .karta.nowa { box-shadow: 0 0 0 3px #3aa55d; }
+.legenda-zm { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin: 0 2px 0 6px; }
+.porownanie .para { display: inline-flex; gap: 10px; align-items: flex-start; margin: 6px 18px 12px 0; vertical-align: top; }
+.porownanie .para > div { text-align: center; font-size: 11px; color: #555; }
+.porownanie .para .karta { margin-top: 3px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
 #wybor { font-size: 12px; background: #e3edfb; border-radius: 4px; padding: 2px 4px 2px 8px; }
 /* Tryb szkicu (tylko wydruk): bez teł i obrazków, tekst czarny, ikony w szarościach. */
 #druk.szkic .karta { background: #fff !important; }
@@ -166,6 +172,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
   </select>
   <label title="Druk: po każdym arkuszu kart arkusz rewersów (do druku dwustronnego)"><input type="checkbox" id="rewersy" checked> Rewersy</label>
   <label title="Druk i PDF bez teł i obrazków, tekst czarny – oszczędza tusz przy prototypach"><input type="checkbox" id="szkic"> Szkic</label>
+  <span id="zmiany" hidden title="Karty zmienione (pomarańczowa obwódka) albo nowe (zielona) od ostatniego zapisanego PDF"><label><input type="checkbox" id="tylkoZmienione"> Tylko zmienione</label><span class="legenda-zm" style="background:#e8912d"></span><b id="zmLiczba"></b><span class="legenda-zm" style="background:#3aa55d"></span><b id="noweLiczba"></b> <button id="porownaj">Porównaj</button></span>
   <span id="wybor" hidden title="Kliknij kartę, żeby ją zaznaczyć (Shift – zakres). Druk i PDF obejmą tylko zaznaczone.">Do druku: <b id="wyborLiczba"></b> zaznaczone <button id="wyborCzysc">Wyczyść</button></span>
   <button id="pdf" disabled title="Zapisuje PDF w dokładnym rozmiarze (A4 albo rozmiar karty)">Zapisz PDF</button>
   <button id="drukuj" disabled title="Systemowe okno drukowania">Drukuj…</button>
@@ -177,6 +184,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
 </div>
 <div class="uwagi" id="uwagi"></div>
 <div class="raport" id="raport" hidden></div>
+<div class="raport porownanie" id="porownanie" hidden></div>
 
 <div id="edytor" hidden>
   <div class="ed-pasek"><b id="edNazwa">Szablon</b><span id="edStan"></span><button id="edZapisz" disabled title="⌘S">Zapisz</button></div>
@@ -368,7 +376,9 @@ function fileUrl(rel) {
   if (!f) return null;
   // SVG wyświetla się tylko z właściwym typem pliku (PNG/JPG przeglądarka rozpozna sama).
   const svg = /\.svg$/i.test(rel) && f.type !== 'image/svg+xml';
-  const u = URL.createObjectURL(svg ? new Blob([f], { type: 'image/svg+xml' }) : f); urls.push(u); return u;
+  const u = URL.createObjectURL(svg ? new Blob([f], { type: 'image/svg+xml' }) : f); urls.push(u);
+  URL_PLIK.set(u, rel + '@' + f.lastModified + ':' + f.size);      // do odcisku karty (zmiana obrazka = zmiana karty)
+  return u;
 }
 
 // Ikony z folderów Ikony/ i Icons/ – każdy plik obrazka to znacznik {nazwa_pliku} (bez ikony.csv).
@@ -826,7 +836,7 @@ let TALIE = [];               // wczytane szablony talii
 const googleFonts = new Set();
 
 async function build() {
-  urls.forEach(URL.revokeObjectURL); urls = [];
+  urls.forEach(URL.revokeObjectURL); urls = []; URL_PLIK.clear();
   const warn = new Set();
   const icons = await loadIcons(warn);
   const view = $('podglad');
@@ -924,6 +934,7 @@ async function build() {
     oznaczKopie(view);
     await waitForImages(view);
     for (const l of new Set(fitAll(view))) warn.add(l + ': tekst nie mieści się nawet po zmniejszeniu (czerwona ramka)');
+    await oznaczZmiany(view);
 
     const sel = $('filtr'), current = sel.value;
     sel.innerHTML = '<option value="">Wszystkie talie</option>' +
@@ -1037,6 +1048,72 @@ async function pokazRaport(pokaz = $('raport').hidden) {
 window.raportProjektu = raportProjektu;
 $('raportPrzycisk').onclick = () => pokazRaport();
 
+// ── Zmienione karty: odciski z ostatniego PDF ───────────────────────────────
+// Odcisk = skrót HTML-a karty po dopasowaniu tekstu; obrazki jako ścieżka + data i rozmiar pliku.
+let ODCISKI = null;              // { data, karty: { 'talia|id|kopia': { h, html } } } – z aplikacji (dane użytkownika)
+const URL_PLIK = new Map();      // blob: → 'ścieżka@data:rozmiar'
+const kluczDruku = (k) => k.dataset.talia + '|' + k.dataset.id + '|' + (k.dataset.kopia || '');
+function htmlKarty(k) {
+  const c = k.cloneNode(true);
+  c.classList.remove('wybrana', 'zmieniona', 'nowa', 'za-dlugi');
+  delete c.dataset.odcisk;
+  return c.outerHTML.replace(/blob:[^"')\s]+/g, (u) => 'plik:' + (URL_PLIK.get(u) || '?'));
+}
+function skrot(t) {                                     // cyrb53 – szybki skrót tekstu
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+async function oznaczZmiany(view) {
+  ODCISKI = APP && APP.odciski ? await APP.odciski().catch(() => null) : null;
+  let zm = 0, nowe = 0;
+  for (const k of view.querySelectorAll('.siatka .karta')) {
+    const h = skrot(htmlKarty(k)); k.dataset.odcisk = h;
+    const stary = ODCISKI && ODCISKI.karty[kluczDruku(k)];
+    const jestNowa = !!ODCISKI && !stary, zmieniona = !!stary && stary.h !== h;
+    k.classList.toggle('nowa', jestNowa); k.classList.toggle('zmieniona', zmieniona);
+    if (!k.classList.contains('rewers')) { zm += zmieniona; nowe += jestNowa; }
+  }
+  $('zmiany').hidden = !ODCISKI;
+  if (ODCISKI) {
+    $('zmLiczba').textContent = zm; $('noweLiczba').textContent = nowe;
+    $('zmiany').title = `Od ostatniego PDF (${new Date(ODCISKI.data).toLocaleString('pl-PL')}): zmienione ${zm} (pomarańczowa obwódka), nowe ${nowe} (zielona).`;
+  }
+  if (!$('porownanie').hidden) pokazPorownanie(true);
+  return { zm, nowe };
+}
+// Po zapisie PDF: zapamiętujemy odciski kart z tego wydruku (i rewersów ich talii).
+async function zapamietajDruk(karty = kartyDoDruku()) {
+  if (!APP || !APP.zapiszOdciski) return;
+  const dane = ODCISKI || { karty: {} };
+  dane.data = new Date().toISOString();
+  const talie = new Set(karty.map((k) => k.dataset.talia));
+  const rewersy = [...$('podglad').querySelectorAll('.siatka .karta.rewers')].filter((k) => talie.has(k.dataset.talia));
+  for (const k of [...karty, ...rewersy]) dane.karty[kluczDruku(k)] = { h: k.dataset.odcisk, html: htmlKarty(k) };
+  await APP.zapiszOdciski(dane);
+  await oznaczZmiany($('podglad'));
+}
+window.zapamietajDruk = zapamietajDruk;
+// Przed / teraz dla kart zmienionych od ostatniego PDF.
+function pokazPorownanie(pokaz = $('porownanie').hidden) {
+  const p = $('porownanie');
+  p.hidden = !pokaz;
+  if (!pokaz) return;
+  const zmienione = visibleSections().flatMap((s) => [...s.querySelectorAll('.karta.zmieniona')]);
+  const przedHtml = (html) => html.replace(/plik:([^@"']+)@[^"')\s]*/g, (x, rel) => fileUrl(rel) || '');
+  const MAX = 40;
+  p.innerHTML = '<button class="zamknij" id="porownajZamknij">Zamknij</button>' +
+    `<h3>Zmienione od ostatniego PDF (${new Date(ODCISKI.data).toLocaleString('pl-PL')}): ${zmienione.length}</h3>` +
+    (zmienione.length ? '' : '<div class="ok">✓ brak zmienionych kart</div>') +
+    zmienione.slice(0, MAX).map((k) => `<div class="para"><div>przed<br>${przedHtml(ODCISKI.karty[kluczDruku(k)].html)}</div>` +
+      `<div>teraz – ${esc(k.title)}<br>${htmlKarty(k)}</div></div>`).join('') +
+    (zmienione.length > MAX ? `<div>… i ${zmienione.length - MAX} kolejnych</div>` : '');
+  $('porownajZamknij').onclick = () => pokazPorownanie(false);
+}
+$('porownaj').onclick = () => pokazPorownanie();
+
 function applyFilter() {
   const f = $('filtr').value;
   for (const s of $('podglad').querySelectorAll('.talia')) s.style.display = (!f || s.dataset.talia === f) ? '' : 'none';
@@ -1089,9 +1166,10 @@ $('wyborCzysc').onclick = () => {
   for (const k of $('podglad').querySelectorAll('.karta.wybrana')) k.classList.remove('wybrana');
   pokazWybor();
 };
-// Karty do druku: zaznaczone (jeśli są) spośród widocznych talii, inaczej wszystkie widoczne.
+// Karty do druku: widoczne talie → (opcjonalnie) tylko zmienione → zaznaczone, jeśli są.
 function kartyDoDruku() {
-  const w = visibleCards();
+  let w = visibleCards();
+  if ($('tylkoZmienione').checked && !$('zmiany').hidden) w = w.filter((k) => k.classList.contains('zmieniona') || k.classList.contains('nowa'));
   const z = w.filter((k) => k.classList.contains('wybrana'));
   return z.length ? z : w;
 }
@@ -1206,7 +1284,10 @@ function buildPrint() {
   $('styl-strony').textContent = `@page { size: ${PW}mm ${PH}mm; margin: 0; }`;
 }
 
-$('drukuj').onclick = () => { buildPrint(); window.print(); };
+$('drukuj').onclick = () => {
+  if (!kartyDoDruku().length) { status('Brak kart do druku (Tylko zmienione: nic się nie zmieniło).'); return; }
+  buildPrint(); window.print();
+};
 
 // ── Eksport JPG ──────────────────────────────────────────────────────────────
 
@@ -1557,14 +1638,18 @@ const APP = window.generatorApp || null;
 // Zapis PDF wprost do pliku (tylko w aplikacji) – wydruk w dokładnym rozmiarze, bez okna drukowania.
 async function zapiszPdf() {
   if ($('pdf').disabled) return;
+  if (!kartyDoDruku().length) { status('Brak kart do druku (Tylko zmienione: nic się nie zmieniło).'); return; }
+  const karty = kartyDoDruku();
   buildPrint();
   const info = await APP.info();
   const nazwa = (PROJEKT || info.nazwa || 'karty') + ($('tryb').value === 'pojedyncze' ? ' – karty pojedynczo' : ' – karty A4')
-    + ($('podglad').querySelector('.karta.wybrana') ? ' – wybrane' : '') + ($('szkic').checked ? ' – szkic' : '');
+    + ($('podglad').querySelector('.karta.wybrana') ? ' – wybrane' : '') + ($('szkic').checked ? ' – szkic' : '')
+    + ($('tylkoZmienione').checked && !$('zmiany').hidden ? ' – zmienione' : '');
   status('Zapisywanie PDF…');
   try {
     const plik = await APP.zapiszPdf(nazwa);
     status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
+    if (plik) await zapamietajDruk(karty);
   } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
 }
 window.zapiszPdf = zapiszPdf;

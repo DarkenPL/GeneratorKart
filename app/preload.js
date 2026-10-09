@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('generatorApp', {
   zapiszPdf: (nazwa) => ipcRenderer.invoke('pdf:zapisz', nazwa),
   zapiszSzablon: (tekst) => ipcRenderer.invoke('edytor:zapisz', tekst),
   edytorZmiany: (czy) => ipcRenderer.invoke('edytor:zmiany', !!czy),
+  odciski: () => ipcRenderer.invoke('druk:odciski'),
+  zapiszOdciski: (dane) => ipcRenderer.invoke('druk:zapiszOdciski', dane),
   eksportStart: () => ipcRenderer.invoke('eksport:start'),
   eksportPlik: (nazwa, dane) => ipcRenderer.invoke('eksport:plik', nazwa, dane),
   eksportKoniec: () => ipcRenderer.invoke('eksport:koniec'),
