@@ -62,7 +62,7 @@ jobs:
           for ex in ../przyklady/*/; do
             n=$(basename "$ex")
             cp -R "$ex" "$RUNNER_TEMP/$n"                 # kopia: test zapisuje też folder Export
-            "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf "$RUNNER_TEMP/$n" "$RUNNER_TEMP/test/$n.pdf" | tee "$RUNNER_TEMP/test/$n.json"
+            "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-edytor --test-pdf "$RUNNER_TEMP/$n" "$RUNNER_TEMP/test/$n.pdf" | tee "$RUNNER_TEMP/test/$n.json"
             grep -q '"ok":true' "$RUNNER_TEMP/test/$n.json"
           done
           "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-pdf - "$RUNNER_TEMP/test/start.pdf"

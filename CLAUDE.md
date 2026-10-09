@@ -30,9 +30,15 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
   - menu, ostatnie projekty (`userData/ustawienia.json`), przykłady (z `zasoby/przyklady`, tylko do odczytu);
   - **Nowy projekt…** (⌘N): kopiuje `app/szablon-startowy/` (→ `zasoby/szablon-startowy`) do nowego folderu, podmienia `{{NAZWA}}` i `{{NAZWA_W_CUDZYSLOWIE}}` w `Szablony/gra.txt` i `CZYTAJ.txt`; odmawia, gdy folder istnieje i nie jest pusty. Ikony i obrazek startowy są narysowane na potrzeby projektu (bez licencji zewnętrznych);
   - `pdf:zapisz` → `printToPDF({ preferCSSPageSize: true })`.
+- **Edytor szablonu** (w `karty.html`, sekcja „Edytor szablonu”): `<textarea>` z przezroczystym tekstem nad `<pre>` z kolorowaniem (tokenizer liniowy `kolorujLinie`), numery wierszy, lista błędów.
+  - Błędy wierszy pochodzą z Uwag (`plik, wiersz N:`) oraz z „brak kolumny [X]” (wiersze z `[X]`).
+  - Podgląd na żywo: `podgladNaZywo()` podmienia szablon w `files` i woła `build()`; nowe pliki z szablonu dociąga `loadFromServer({ tylkoNowe: true })`.
+  - Stan: `ED.dysk` to ostatnia wersja z dysku. `edytorZDysku()` przy każdym wczytaniu decyduje: brak zmian → tekst z dysku; niezapisane zmiany → tekst edytora i baner konfliktu, gdy dysk się zmienił.
+  - Zapis: IPC `edytor:zapisz`. `edytor:zmiany` ustawia `setDocumentEdited`. Main pyta o zapis (`czyMoznaPorzucic`) przy zamknięciu okna, ⌘Q, otwieraniu innego szablonu i nowym projekcie.
+  - ⌘S = zapisz szablon, ⇧⌘S = zapisz PDF, ⌥⌘E = edytor.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
-- **Tryb testowy:** `[--test-nowy <nowy folder>] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
+- **Tryb testowy:** `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
   - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
@@ -87,16 +93,24 @@ Sekcje w kolejności w pliku:
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
 2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu).
-3. **Edytor szablonów – etap 1** (zaplanowane, czeka na sygnał właściciela): panel edytora w aplikacji obok podglądu.
-   - kolorowanie składni szablonu (komendy, [Kolumny], {ikony}, opcje, komentarze),
-   - podświetlenie linii z błędami (te same komunikaty co w Uwagach),
-   - zapis ⌘S i podgląd kart na żywo podczas pisania,
-   - ochrona przed utratą pracy: pytanie o niezapisane zmiany przy zamykaniu i zmianie projektu, wykrywanie zmiany pliku na dysku.
-   - Etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu.
+3. Edytor – etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu; ewentualnie podpowiadanie komend i nazw kolumn.
 4. **Spad do druku** (zaplanowane): komenda `SPAD = 3` (mm). Tło i elementy dochodzące do krawędzi wychodzą poza linię cięcia, znaczniki cięcia zostają na linii cięcia. Dotyczy druku A4, pojedynczego i PDF.
 5. **Przesunięcie rewersów** (zaplanowane): korekta X/Y w mm arkusza rewersów przy druku dwustronnym (przesunięcie drukarki).
 
-Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), **podejście 4** – edytor szablonów. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
+6. **Numer i wersja na karcie** (zaplanowane): wbudowane pola `[_numer]`, `[_kopia]`, `[_wersja]` (np. „v3 · 12/34” w rogu); wersja z komendy w szablonie.
+7. **Drukuj tylko zmienione karty** (zaplanowane): aplikacja pamięta odcisk (hash) każdej karty z ostatniego PDF i drukuje tylko zmienione od tamtej pory.
+8. **Druk wybranych kart** (zaplanowane): zaznaczanie kart w podglądzie i PDF/druk tylko z nich.
+9. **Tryb szkicu** (zaplanowane): wydruk czarno-biały bez teł (oszczędność tuszu przy prototypach).
+10. **Ikony bez `ikony.csv`** (zaplanowane): każdy plik z folderu `Ikony/` działa jako znacznik `{nazwa_pliku}`; `ikony.csv` tylko do wyjątków (emoji zastępcze, odstęp).
+11. **Stałe w szablonie** (zaplanowane): `STAŁA = margines, 3.5` i użycie `[=margines]` (także w działaniach na liczbach).
+12. **Arkusz Google jako dane** (zaplanowane): `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
+13. **Raport projektu** (zaplanowane): duplikaty ID, puste wymagane kolumny, nieużywane kolumny i obrazki w folderach projektu.
+14. **Historia wersji** (zaplanowane): ukryty folder `.historia/` w projekcie; kopia szablonu i plików danych (CSV/XLSX) tylko gdy treść różni się od ostatniej kopii (zapis z edytora albo zmiana z zewnątrz).
+    - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
+    - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).
+    - Plik → Historia wersji…: lista z datami, różnice linii względem obecnej, „Przywróć” (obecna wersja trafia najpierw do historii), „Pokaż karty z tej wersji”. Obrazków nie kopiujemy.
+
+Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
 
 ### Roadmapa (niski priorytet)
 

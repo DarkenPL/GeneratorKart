@@ -68,12 +68,61 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 .siatka .karta.za-dlugi { outline: 2px dashed #d00; outline-offset: 3px; }
 #druk { display: none; }
 
+/* ── Edytor szablonu (panel po lewej) ── */
+:root { --pasek-h: 56px; --ed-w: 44vw; }
+#edytor {
+  position: fixed; left: 0; top: var(--pasek-h); bottom: 0; width: var(--ed-w); min-width: 360px; z-index: 4;
+  display: flex; flex-direction: column; background: #fbfaf8; border-right: 1px solid #d8d3cb;
+}
+#edytor[hidden] { display: none; }
+body.z-edytorem #podglad, body.z-edytorem .uwagi, body.z-edytorem .start { margin-left: calc(max(var(--ed-w), 360px) + 16px); }
+.ed-pasek { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #e3ded6; font-size: 13px; }
+.ed-pasek b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-pasek #edStan { color: #6b655d; flex: 1; }
+.ed-pasek #edStan.zmiany { color: #b5571a; }
+.ed-pasek button { padding: 4px 10px; }
+.ed-baner { padding: 8px 12px; font-size: 13px; background: #fff4e0; border-bottom: 1px solid #f0d3a0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ed-baner[hidden] { display: none; }
+.ed-baner button { padding: 3px 9px; font-size: 12px; }
+.ed-obszar { flex: 1; min-height: 0; display: flex; background: #fff; }
+.ed-numery, .ed-tekst pre, .ed-tekst textarea {
+  font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace; tab-size: 2;
+}
+.ed-numery { width: 44px; flex: none; overflow: hidden; padding: 10px 6px 10px 0; text-align: right; color: #a39b90; background: #f6f3ee; border-right: 1px solid #ebe6de; user-select: none; }
+.ed-numery div { height: 1.6em; padding-right: 2px; }
+.ed-numery div.blad { color: #c0392b; font-weight: 600; background: #fde8e4; }
+.ed-tekst { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+.ed-tekst pre, .ed-tekst textarea {
+  position: absolute; inset: 0; margin: 0; padding: 10px 12px; border: 0; white-space: pre; overflow: auto;
+}
+.ed-tekst pre { pointer-events: none; color: #2b2925; }
+.ed-tekst pre .l { min-height: 1.6em; }
+.ed-tekst pre .l.blad { background: #fde8e4; box-shadow: inset 3px 0 #e05a47; }
+.ed-tekst textarea { color: transparent; background: transparent; caret-color: #1d1b19; resize: none; outline: none; }
+.ed-tekst textarea::selection { background: rgba(70,130,220,.28); color: transparent; }
+.ed-tekst textarea[readonly] { caret-color: transparent; }
+.sk-kom { color: #8a8378; font-style: italic; }
+.sk-sek { color: #7b3fa0; font-weight: 600; }
+.sk-kmd { color: #1f5fa8; font-weight: 600; }
+.sk-opc { color: #2f7d4a; }
+.sk-str { color: #a1491a; }
+.sk-pole { color: #b0326a; font-weight: 600; }
+.sk-ikona { color: #8a6d00; font-weight: 600; }
+.sk-liczba { color: #0b7285; }
+.sk-kolor { border-bottom: 3px solid var(--sw); }
+.ed-bledy { max-height: 30%; overflow: auto; border-top: 1px solid #e3ded6; font-size: 12px; background: #fff8f6; }
+.ed-bledy:empty { display: none; }
+.ed-bledy div { padding: 4px 12px; cursor: pointer; border-bottom: 1px solid #f6e0dc; }
+.ed-bledy div:hover { background: #fde8e4; }
+.ed-bledy b { color: #c0392b; margin-right: 6px; }
+button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Druk
    ═══════════════════════════════════════════════════════════════════════════ */
 @media print {
   body { background: #fff; }
-  .pasek, .uwagi, #podglad, .start { display: none !important; }
+  .pasek, .uwagi, #podglad, .start, #edytor { display: none !important; }
   #druk { display: block; }
   .arkusz { position: relative; break-after: page; overflow: hidden; margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; }
@@ -88,9 +137,10 @@ label { display: inline-flex; gap: 6px; align-items: center; }
 </head>
 <body>
 
-<div class="pasek">
+<div class="pasek" id="pasek">
   <h1>Generator kart</h1>
   <button class="glowny" id="wybierz">Otwórz szablon…</button>
+  <button id="edytorPrzycisk" disabled title="Edytor szablonu (⌥⌘E)">Edytor</button>
   <button id="odswiez" disabled>Odśwież</button>
   <label title="Sprawdza zmiany plików co 1,5 s"><input type="checkbox" id="auto" checked> Odświeżaj automatycznie</label>
   <select id="filtr"><option value="">Wszystkie talie</option></select>
@@ -107,6 +157,18 @@ label { display: inline-flex; gap: 6px; align-items: center; }
   <span class="status" id="status"></span>
 </div>
 <div class="uwagi" id="uwagi"></div>
+
+<div id="edytor" hidden>
+  <div class="ed-pasek"><b id="edNazwa">Szablon</b><span id="edStan"></span><button id="edZapisz" disabled title="⌘S">Zapisz</button></div>
+  <div class="ed-baner" id="edKonflikt" hidden>Plik szablonu zmienił się na dysku.
+    <button id="edWczytaj">Wczytaj z dysku</button><button id="edZostaw">Zostaw moją wersję</button></div>
+  <div class="ed-baner" id="edTylkoOdczyt" hidden>Przykład jest tylko do odczytu. Żeby go zmieniać, utwórz <b>Nowy projekt…</b> albo skopiuj folder przykładu.</div>
+  <div class="ed-obszar">
+    <div class="ed-numery" id="edNumery"></div>
+    <div class="ed-tekst"><pre id="edKolory" aria-hidden="true"></pre><textarea id="edPole" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"></textarea></div>
+  </div>
+  <div class="ed-bledy" id="edBledy"></div>
+</div>
 
 <div class="start" id="start"><p>Wczytywanie…</p></div>
 
@@ -169,19 +231,25 @@ async function fetchFile(rel) {
 // Pliki, do których odwołuje się szablon wprost (czcionki, obrazki, pliki danych).
 const PLIK_RE = /\.(png|jpe?g|gif|webp|svg|ttf|otf|woff2?|csv|xlsx)$/i;
 
-async function loadFromServer() {
+// tylkoNowe: podgląd na żywo z edytora – pliki już wczytane bierzemy z pamięci, pobieramy tylko nowe.
+async function loadFromServer({ tylkoNowe = false } = {}) {
   const next = new Map(), paths = [];
   const put = async (rel) => {
     rel = String(rel || '').trim();
     if (!rel || next.has(norm(rel))) return;
-    const f = await fetchFile(rel);
+    const f = (tylkoNowe && rel !== SZABLON && files.get(norm(rel))) || await fetchFile(rel);
     if (f) { next.set(norm(rel), f); paths.push(rel); }
   };
-  // 1) szablon
+  // 1) szablon – z dysku, a gdy w edytorze są niezapisane zmiany: z edytora
   await put(SZABLON);
+  let tf = next.get(norm(SZABLON));
+  if (tf) {
+    const zDysku = await tf.text();
+    const tekst = edytorZDysku(zDysku);
+    if (tekst !== zDysku) { tf = new File([tekst], tf.name, { lastModified: Date.now() }); next.set(norm(SZABLON), tf); }
+  }
   // 2) pliki danych i inne pliki wskazane w szablonie
   const refs = new Set([CONFIG.plikIkon]);
-  const tf = next.get(norm(SZABLON));
   if (tf) {
     const t = parseTemplate(await tf.text(), tf.name);
     t.dane.forEach((d) => refs.add(d));
@@ -688,8 +756,10 @@ async function build() {
   const tplFiles = files.has(norm(SZABLON)) ? [[norm(SZABLON), files.get(norm(SZABLON))]] : [];
   if (!tplFiles.length) {
     status(SZABLON ? `Nie można wczytać szablonu ${SZABLON}.` : 'Nie wybrano szablonu.');
+    edytorBledy(new Map());
     return;
   }
+  const tekstSzablonu = await tplFiles[0][1].text();
 
   TALIE = []; PALETA = {}; STOL_PCIO = '';
   PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
@@ -769,8 +839,26 @@ async function build() {
     ['odswiez', 'drukuj', 'png', 'pcio', 'pdf'].forEach((id) => $(id).disabled = false);
     status(`${total} kart · ${found.join(' · ')} · odświeżono ${new Date().toLocaleTimeString('pl-PL')}`);
   }
+  // Uwagi z numerem wiersza szablonu (i brakujące kolumny) trafiają też do edytora.
+  const plikSzablonu = SZABLON.split('/').pop();
+  const linie = new Map(), wpisz = (n, t) => { if (!linie.has(n)) linie.set(n, []); if (!linie.get(n).includes(t)) linie.get(n).push(t); };
+  const liniaUwagi = (w) => { const m = /^(.+?), wiersz (\d+): /.exec(w); return m && m[1] === plikSzablonu ? +m[2] : 0; };
+  for (const w of warn) {
+    const n = liniaUwagi(w);
+    if (n) wpisz(n, w.replace(/^.+?, wiersz \d+: /, ''));
+    const k = /nie ma kolumny \[([^\]]+)\]/.exec(w);
+    if (k) tekstSzablonu.split('\n').forEach((l, i) => {
+      if (l.toLowerCase().includes('[' + k[1].toLowerCase() + ']')) wpisz(i + 1, `w pliku danych nie ma kolumny [${k[1]}]`);
+    });
+  }
+  edytorBledy(linie);
+
   const u = $('uwagi');
-  u.innerHTML = warn.size ? '<b>Uwagi:</b><ul>' + [...warn].map((w) => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '';
+  u.innerHTML = warn.size ? '<b>Uwagi:</b><ul>' + [...warn].map((w) => {
+    const n = liniaUwagi(w);
+    return n ? `<li><a href="#" data-linia="${n}">${esc(w)}</a></li>` : '<li>' + esc(w) + '</li>';
+  }).join('') + '</ul>' : '';
+  for (const a of u.querySelectorAll('[data-linia]')) a.onclick = (e) => { e.preventDefault(); idzDoLinii(+a.dataset.linia); };
   u.classList.toggle('widoczne', warn.size > 0);
 }
 
@@ -1090,6 +1178,158 @@ $('pcio').onclick = async () => {
   finally { btn.disabled = false; }
 };
 
+// ── Edytor szablonu ──────────────────────────────────────────────────────────
+// Pole tekstowe z kolorowaniem składni (warstwa <pre> pod przezroczystym <textarea>),
+// numerami wierszy, zaznaczeniem błędów i podglądem kart na żywo. Zapis ⌘S przez aplikację.
+const ED = { dysk: null, zmiany: false, konflikt: null, bledy: new Map(), tylkoOdczyt: false, czasomierz: 0 };
+const edPole = $('edPole');
+
+const RE_ARG = /("(?:[^"\\]|\\.)*"?)|(\[[^\]\n]*\]?)|(\{[^}\n]*\}?)|(#[0-9a-fA-F]{3,8}\b)|([\p{L}_][\p{L}\p{N}_]*)(?=\s*=)|((?<![\p{L}\p{N}_.])-?\d+(?:\.\d+)?(?![\p{L}\p{N}_]))/gu;
+const kolorujPola = (t) => esc(t)
+  .replace(/\[[^\]]*\]/g, (m) => `<span class="sk-pole">${m}</span>`)
+  .replace(/\{[^}]*\}/g, (m) => `<span class="sk-ikona">${m}</span>`);
+function kolorujArgumenty(t) {
+  let out = '', last = 0, m;
+  RE_ARG.lastIndex = 0;
+  while ((m = RE_ARG.exec(t))) {
+    if (!m[0]) { RE_ARG.lastIndex++; continue; }
+    out += esc(t.slice(last, m.index));
+    const [x, str, pl, ik, kol, opc] = m;
+    if (str) out += `<span class="sk-str">${kolorujPola(str)}</span>`;
+    else if (pl) out += `<span class="sk-pole">${esc(pl)}</span>`;
+    else if (ik) out += `<span class="sk-ikona">${esc(ik)}</span>`;
+    else if (kol) out += `<span class="sk-kolor" style="--sw:${kol}">${esc(kol)}</span>`;
+    else if (opc) out += `<span class="sk-opc">${esc(opc)}</span>`;
+    else out += `<span class="sk-liczba">${esc(x)}</span>`;
+    last = RE_ARG.lastIndex;
+  }
+  return out + esc(t.slice(last));
+}
+function kolorujLinie(l) {
+  if (/^\s*(;|#|\/\/)/.test(l)) return `<span class="sk-kom">${esc(l)}</span>`;
+  let q = false, ci = -1;                                   // komentarz na końcu linii (poza cudzysłowem)
+  for (let i = 0; i < l.length; i++) {
+    const c = l[i];
+    if (c === '"' && l[i - 1] !== '\\') q = !q;
+    else if (!q && (c === ';' || (c === '/' && l[i + 1] === '/')) && /\s/.test(l[i - 1] || ' ')) { ci = i; break; }
+  }
+  const kod = ci >= 0 ? l.slice(0, ci) : l, kom = ci >= 0 ? l.slice(ci) : '';
+  let h;
+  if (/^\s*\[[^\]]*\]\s*$/.test(kod)) h = `<span class="sk-sek">${esc(kod)}</span>`;
+  else {
+    const m = /^(\s*)([^=]*?)(\s*=)([\s\S]*)$/.exec(kod);
+    h = m ? esc(m[1]) + `<span class="sk-kmd">${esc(m[2])}</span>` + esc(m[3]) + kolorujArgumenty(m[4]) : esc(kod);
+  }
+  return h + (kom ? `<span class="sk-kom">${esc(kom)}</span>` : '');
+}
+
+function rysujEdytor() {
+  const linie = edPole.value.split('\n');
+  $('edKolory').innerHTML = linie.map((l, i) =>
+    `<div class="l${ED.bledy.has(i + 1) ? ' blad' : ''}">${kolorujLinie(l)}</div>`).join('') + '<div class="l"></div><div class="l"></div>';
+  $('edNumery').innerHTML = linie.map((l, i) => ED.bledy.has(i + 1)
+    ? `<div class="blad" title="${esc(ED.bledy.get(i + 1).join('\n'))}">${i + 1}</div>` : `<div>${i + 1}</div>`).join('') + '<div></div><div></div>';
+  przewinWarstwy();
+}
+function przewinWarstwy() {
+  $('edKolory').scrollTop = edPole.scrollTop; $('edKolory').scrollLeft = edPole.scrollLeft;
+  $('edNumery').scrollTop = edPole.scrollTop;
+}
+function edytorBledy(linie) {
+  ED.bledy = linie;
+  $('edBledy').innerHTML = [...linie.entries()].sort((a, b) => a[0] - b[0])
+    .map(([n, t]) => `<div data-linia="${n}"><b>wiersz ${n}</b>${esc(t.join(' · '))}</div>`).join('');
+  for (const d of $('edBledy').querySelectorAll('[data-linia]')) d.onclick = () => idzDoLinii(+d.dataset.linia);
+  rysujEdytor();
+}
+function ustawZmiany(z) {
+  ED.zmiany = z;
+  $('edStan').textContent = ED.tylkoOdczyt ? 'tylko do odczytu' : z ? '● niezapisane zmiany' : 'zapisano';
+  $('edStan').classList.toggle('zmiany', z);
+  $('edZapisz').disabled = !z || ED.tylkoOdczyt;
+  if (APP) APP.edytorZmiany(z);
+}
+// Wywoływane przy każdym wczytaniu szablonu z dysku; zwraca tekst, z którego budujemy karty.
+function edytorZDysku(dysk) {
+  if (ED.dysk === null || !ED.zmiany) {
+    if (dysk !== edPole.value) {
+      const [a, b] = [edPole.selectionStart, edPole.selectionEnd];
+      edPole.value = dysk;
+      edPole.setSelectionRange(Math.min(a, dysk.length), Math.min(b, dysk.length));
+      rysujEdytor();
+    }
+    ED.dysk = dysk;
+    return dysk;
+  }
+  if (dysk !== ED.dysk && dysk !== edPole.value) { ED.konflikt = dysk; $('edKonflikt').hidden = false; }
+  return edPole.value;
+}
+async function zapiszSzablon() {
+  if (!SZABLON || ED.tylkoOdczyt || !APP) return false;
+  try { await APP.zapiszSzablon(edPole.value); }
+  catch (e) { status('Nie udało się zapisać szablonu: ' + e.message); return false; }
+  ED.dysk = edPole.value; ED.konflikt = null; $('edKonflikt').hidden = true;
+  ustawZmiany(false);
+  return true;
+}
+window.zapiszSzablon = zapiszSzablon;
+window.edytorTekst = () => edPole.value;
+
+// Podgląd na żywo: przebudowa kart z tekstu edytora (nowe pliki z szablonu są dociągane).
+async function podgladNaZywo() {
+  if (!SZABLON) return;
+  const nazwa = SZABLON.split('/').pop();
+  files.set(norm(SZABLON), new File([edPole.value], nazwa));
+  const t = parseTemplate(edPole.value, nazwa);
+  const nowe = [...t.dane, ...t.pliki].some((r) => !files.has(norm(r)));
+  if (nowe) await loadFromServer({ tylkoNowe: true }); else await build();
+}
+edPole.addEventListener('input', () => {
+  ustawZmiany(edPole.value !== ED.dysk);
+  rysujEdytor();
+  clearTimeout(ED.czasomierz);
+  ED.czasomierz = setTimeout(podgladNaZywo, 350);
+});
+edPole.addEventListener('scroll', przewinWarstwy);
+edPole.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    document.execCommand('insertText', false, '  ');             // z zachowaniem cofania (⌘Z)
+  }
+});
+$('edZapisz').onclick = zapiszSzablon;
+$('edWczytaj').onclick = () => {
+  edPole.value = ED.konflikt; ED.dysk = ED.konflikt; ED.konflikt = null; $('edKonflikt').hidden = true;
+  ustawZmiany(false); rysujEdytor(); podgladNaZywo();
+};
+$('edZostaw').onclick = () => { ED.dysk = ED.konflikt; ED.konflikt = null; $('edKonflikt').hidden = true; ustawZmiany(true); };
+
+function idzDoLinii(n) {
+  if ($('edytor').hidden) przelaczEdytor(true);
+  const linie = edPole.value.split('\n');
+  n = Math.max(1, Math.min(n, linie.length));
+  let pos = 0;
+  for (let i = 0; i < n - 1; i++) pos += linie[i].length + 1;
+  edPole.focus();
+  edPole.setSelectionRange(pos, pos + linie[n - 1].length);
+  edPole.scrollTop = Math.max(0, (n - 6) * parseFloat(getComputedStyle(edPole).lineHeight));
+  przewinWarstwy();
+}
+
+// Panel edytora po lewej; wysokość paska aplikacji zmienia się przy zawijaniu przycisków.
+new ResizeObserver(() => document.documentElement.style.setProperty('--pasek-h', $('pasek').offsetHeight + 'px')).observe($('pasek'));
+function przelaczEdytor(pokaz) {
+  const otwarty = typeof pokaz === 'boolean' ? pokaz : $('edytor').hidden;
+  if (otwarty && !SZABLON) return;
+  $('edytor').hidden = !otwarty;
+  document.body.classList.toggle('z-edytorem', otwarty);
+  $('edytorPrzycisk').classList.toggle('wlaczony', otwarty);
+  try { localStorage.setItem('edytor', otwarty ? '1' : '0'); } catch (e) { /* bez zapamiętywania */ }
+  if (otwarty) { rysujEdytor(); edPole.focus(); }
+}
+window.przelaczEdytor = przelaczEdytor;
+$('edytorPrzycisk').onclick = () => przelaczEdytor();
+
 // ── Aplikacja (Electron): window.generatorApp z preload.js ───────────────────
 const APP = window.generatorApp || null;
 
@@ -1131,6 +1371,16 @@ async function startAplikacji() {
   const info = await APP.info();
   if (!info.szablon) return startAplikacji();
   if (info.przyklad) $('wybierz').title = 'Przykład jest tylko do odczytu – żeby go zmieniać, skopiuj jego folder';
+  // Edytor szablonu
+  ED.tylkoOdczyt = !!info.przyklad;
+  edPole.readOnly = ED.tylkoOdczyt;
+  $('edTylkoOdczyt').hidden = !ED.tylkoOdczyt;
+  $('edNazwa').textContent = SZABLON;
+  $('edytorPrzycisk').disabled = false;
+  ustawZmiany(false);
+  let otwarty = false;
+  try { otwarty = localStorage.getItem('edytor') === '1'; } catch (e) { /* domyślnie zamknięty */ }
+  if (otwarty) przelaczEdytor(true);
   loadFromServer().then(() => { $('odswiez').disabled = false; });
 })();
 </script>

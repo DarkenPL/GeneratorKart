@@ -16,6 +16,7 @@ let szablon = null;          // otwarty plik szablonu (.txt)
 let projekt = null;          // folder projektu: folder szablonu, a gdy szablon leży w „Szablony” – folder nad nim
 let port = 0;
 let testowy = false;         // tryb testowy (CI) – bez otwierania okien Findera
+let zmiany = false;          // niezapisane zmiany w edytorze szablonu
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
 const plikUstawien = () => path.join(app.getPath('userData'), 'ustawienia.json');
@@ -50,7 +51,31 @@ const folderProjektu = (plik) => {
 const nazwaProjektu = () => (projekt ? path.basename(projekt) : '');
 
 // ── Projekt ─────────────────────────────────────────────────────────────────
-function otworzSzablon(plik) {
+// Niezapisane zmiany w edytorze: Zapisz / Nie zapisuj / Anuluj. Zwraca true, gdy można iść dalej.
+async function czyMoznaPorzucic() {
+  if (!zmiany || testowy || !okno) return true;
+  const r = await dialog.showMessageBox(okno, {
+    type: 'warning', buttons: ['Zapisz', 'Nie zapisuj', 'Anuluj'], defaultId: 0, cancelId: 2,
+    message: `Zapisać zmiany w szablonie „${path.basename(szablon || '')}”?`,
+    detail: 'Jeśli nie zapiszesz, zmiany przepadną.',
+  });
+  if (r.response === 2) return false;
+  if (r.response === 0) {
+    try { zapiszSzablonNaDysk(await okno.webContents.executeJavaScript('window.edytorTekst()')); }
+    catch (e) { dialog.showErrorBox('Nie można zapisać szablonu', e.message); return false; }
+  }
+  zmiany = false;
+  return true;
+}
+function zapiszSzablonNaDysk(tekst) {
+  if (!szablon || jestPrzykladem(szablon)) throw new Error('Ten szablon jest tylko do odczytu.');
+  fs.writeFileSync(szablon, String(tekst));
+}
+
+async function otworzSzablon(plik) {
+  if (!(await czyMoznaPorzucic())) return;
+  zmiany = false;
+  if (okno) okno.setDocumentEdited(false);
   szablon = naSzablon(plik);
   projekt = szablon ? folderProjektu(szablon) : null;
   if (szablon && !jestPrzykladem(szablon)) {
@@ -105,6 +130,7 @@ async function nowyProjekt() {
     properties: ['createDirectory', 'showOverwriteConfirmation'],
   });
   if (r.canceled || !r.filePath) return false;
+  if (!(await czyMoznaPorzucic())) return false;
   try { otworzSzablon(utworzProjekt(r.filePath)); return true; }
   catch (e) { dialog.showErrorBox('Nie można utworzyć projektu', e.message); return false; }
 }
@@ -126,6 +152,8 @@ ipcMain.handle('projekt:info', () => ({
   szablon, sciezka: projekt, nazwa: nazwaProjektu(), przyklad: jestPrzykladem(szablon),
 }));
 ipcMain.handle('projekt:otworz', () => wybierzSzablon());
+ipcMain.handle('edytor:zapisz', (e, tekst) => { zapiszSzablonNaDysk(tekst); zmiany = false; if (okno) okno.setDocumentEdited(false); return true; });
+ipcMain.handle('edytor:zmiany', (e, czy) => { zmiany = !!czy; if (okno) okno.setDocumentEdited(zmiany); });
 ipcMain.handle('projekt:nowy', () => nowyProjekt());
 ipcMain.handle('projekt:przyklady', () => listaPrzykladow());
 ipcMain.handle('projekt:przyklad', (e, nazwa) => {
@@ -194,7 +222,8 @@ function zbudujMenu() {
         { type: 'separator' },
         { label: 'Pokaż folder projektu w Finderze', enabled: !!projekt, click: () => shell.openPath(projekt) },
         { type: 'separator' },
-        { label: 'Zapisz PDF…', accelerator: 'CmdOrCtrl+S', enabled: !!projekt, click: wStronie('window.zapiszPdf && zapiszPdf()') },
+        { label: 'Zapisz szablon', accelerator: 'CmdOrCtrl+S', enabled: !!szablon && !jestPrzykladem(szablon), click: wStronie('window.zapiszSzablon && zapiszSzablon()') },
+        { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!projekt, click: wStronie('window.zapiszPdf && zapiszPdf()') },
         { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("document.getElementById('drukuj').click()") },
         { label: 'Eksport JPG do folderu Export', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie("document.getElementById('png').click()") },
         { label: 'Eksport do playingcards.io…', enabled: !!projekt, click: wStronie("document.getElementById('pcio').click()") },
@@ -206,6 +235,7 @@ function zbudujMenu() {
     {
       label: 'Widok',
       submenu: [
+        { label: 'Edytor szablonu', accelerator: 'Alt+CmdOrCtrl+E', enabled: !!szablon, click: wStronie('window.przelaczEdytor && przelaczEdytor()') },
         { label: 'Odśwież karty', accelerator: 'CmdOrCtrl+R', click: wStronie("document.getElementById('odswiez').click()") },
         { type: 'separator' },
         { role: 'resetZoom', label: 'Rzeczywisty rozmiar' },
@@ -232,6 +262,11 @@ function utworzOkno() {
   okno.once('ready-to-show', () => okno.show());
   okno.on('page-title-updated', (e) => e.preventDefault());      // tytuł okna = nazwa projektu
   okno.on('closed', () => { okno = null; });
+  okno.on('close', (e) => {                                   // niezapisany szablon przy zamykaniu okna
+    if (!zmiany || testowy) return;
+    e.preventDefault();
+    czyMoznaPorzucic().then((ok) => { if (ok && okno) okno.close(); });
+  });
 
   const nasz = `http://127.0.0.1:${port}/`;
   okno.webContents.on('will-navigate', (e, url) => {
@@ -294,10 +329,35 @@ async function trybTestowy(folder, wynik) {
       eksport = await wc.executeJavaScript("document.getElementById('status').textContent").catch(() => '');
     }
   }
+  // Edytor (--test-edytor, tylko poza przykładami): kolorowanie, błąd w wierszu, podgląd na żywo, zapis.
+  let edytor = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const oryginal = fs.readFileSync(szablon, 'utf8');
+    const wpisz = (t) => js(`(() => { const p = document.getElementById('edPole'); p.value = ${JSON.stringify(t)}; p.dispatchEvent(new Event('input')); })()`);
+    await js('przelaczEdytor(true)');
+    const kolory = await js("document.querySelectorAll('#edKolory .sk-kmd').length");
+    await wpisz(oryginal + '\nBŁĘDNA = 1\n'); await czekaj(2000);
+    const bladLinia = oryginal.split('\n').length + 1;
+    const blad = await js(`document.querySelector('#edNumery div:nth-child(${bladLinia})').className + ' | ' + document.getElementById('edBledy').innerText`);
+    const zmianyPrzed = zmiany;
+    const zmieniony = oryginal.replace(/^KARTA\s*=\s*63\s*,\s*88/m, 'KARTA = 70, 100');
+    await wpisz(zmieniony); await czekaj(2000);
+    const szer = await js("Math.round(document.querySelector('#podglad .karta:not(.rewers)').getBoundingClientRect().width * 25.4 / 96)");
+    await js('zapiszSzablon()'); await czekaj(500);
+    const zapisany = fs.readFileSync(szablon, 'utf8') === zmieniony && !zmiany;
+    await wpisz(oryginal); await js('zapiszSzablon()'); await czekaj(1500);
+    const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
+    edytor = { kolory, blad, zmianyPrzed, szer, zapisany, przywrocony,
+      ok: kolory > 0 && /blad/.test(blad) && /nieznana komenda/.test(blad) && zmianyPrzed && (oryginal === zmieniony || szer === 70) && zapisany && przywrocony };
+    await js('przelaczEdytor(true)');
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-edytor.png', (await okno.capturePage()).toPNG());
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
-  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'));
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, pdf: wynik, ok }) + '\n');
+  const ok = / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
+    && (!edytor || edytor.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, jpg, eksport, edytor, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
@@ -333,3 +393,8 @@ app.whenReady().then(async () => {
 
 app.on('activate', () => { if (!okno && port) { utworzOkno(); otworzSzablon(szablon); } });
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', (e) => {                               // ⌘Q z niezapisanym szablonem
+  if (!zmiany || testowy) return;
+  e.preventDefault();
+  czyMoznaPorzucic().then((ok) => { if (ok) app.quit(); });
+});

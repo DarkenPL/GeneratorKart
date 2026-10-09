@@ -16,7 +16,7 @@ Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV a
 2. Za pierwszym razem kliknij ją **prawym przyciskiem → Otwórz**. Aplikacja nie ma podpisu Apple, więc trzeba ją raz odblokować ([szczegóły](docs/aplikacja.md)).
 3. Na ekranie powitalnym wybierz **Nowy projekt…** (powstanie folder gry z gotowym szablonem, plikiem kart i ikonami), jeden z **przykładów** albo **Otwórz szablon…** swojej gry.
 
-Karty odświeżają się same po każdym zapisie szablonu albo pliku z kartami.
+Karty odświeżają się same po każdym zapisie szablonu albo pliku z kartami. Szablon możesz edytować we wbudowanym **edytorze** (przycisk **Edytor**, ⌥⌘E), z kolorowaniem składni, zaznaczaniem błędów i podglądem kart na żywo.
 
 ## Projekt gry
 
