@@ -226,9 +226,8 @@ const CONFIG = {
   plikIkon: 'ikony.csv',
   odstep: true,                            // odstęp po ikonach z "Odstęp = tak"
   minSkalaTekstu: 0.6,                     // domyślnie najmniej 60% rozmiaru, gdy tekst się nie mieści
-  jpgDpi: 150,                             // rozdzielczość eksportu pojedynczych kart
+  jpgDpi: 150,                             // rozdzielczość obrazków kart (eksport JPG i playingcards.io)
   jpgJakosc: 0.92,                         // jakość JPG (0–1)
-  pcioRozmiar: 560,                        // dłuższy bok obrazka karty w pikselach
   // Ikony wbudowane (bez ikony.csv). Znacznik: [plik, odstęp po ikonie, znak zastępczy gdy pliku brak]
   ikonyDomyslne: {},
 };
@@ -870,10 +869,19 @@ const googleFonts = new Set();
 // Przebudowy idą po kolei: nowsza czeka na starszą (inaczej starsza mogła skończyć później
 // i zostawić karty z obrazkami, których adresy nowsza już unieważniła).
 let KOLEJKA_BUDOWY = Promise.resolve();
+let KONIEC_EKSPORTU = Promise.resolve();   // w czasie eksportu przebudowa czeka (eksport czyta karty z podglądu)
 function build() {
-  const p = KOLEJKA_BUDOWY.then(zbudujTeraz);
+  const p = KOLEJKA_BUDOWY.then(() => KONIEC_EKSPORTU).then(zbudujTeraz);
   KOLEJKA_BUDOWY = p.catch(() => {});
   return p;
+}
+// Eksport na wyłączność: najpierw kończą się trwające przebudowy, nowe czekają do końca eksportu.
+async function naWylacznosc(fn) {
+  let koniec;
+  KONIEC_EKSPORTU = new Promise((r) => { koniec = r; });
+  EKSPORT_TRWA = true;
+  try { await KOLEJKA_BUDOWY; return await fn(); }
+  finally { EKSPORT_TRWA = false; koniec(); }
 }
 async function zbudujTeraz() {
   urls.forEach(URL.revokeObjectURL); urls = []; URL_PLIK.clear();
@@ -1473,8 +1481,8 @@ async function jpegBlob(el, opts) {
 }
 
 // Każda karta jako osobny plik JPG w folderze Export projektu (zapisuje aplikacja).
-$('png').onclick = async () => {
-  const btn = $('png'); btn.disabled = true; EKSPORT_TRWA = true;
+$('png').onclick = () => naWylacznosc(async () => {
+  const btn = $('png'); btn.disabled = true;
   try {
     if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
     const folder = await APP.eksportStart();
@@ -1507,8 +1515,8 @@ $('png').onclick = async () => {
     APP.eksportKoniec();
   } catch (e) {
     status('Eksport JPG nie powiódł się: ' + e.message);
-  } finally { btn.disabled = false; EKSPORT_TRWA = false; }
-};
+  } finally { btn.disabled = false; }
+});
 
 // ── Eksport do playingcards.io ───────────────────────────────────────────────
 // Tworzy nowy pokój (.pcio): każda talia to osobny stos (holder) z kartami zakrytymi,
@@ -1517,8 +1525,9 @@ $('png').onclick = async () => {
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-async function cardToJpeg(el, width) {
-  const opts = { pixelRatio: width / el.offsetWidth, quality: 0.9,
+// Te same ustawienia co eksport JPG (CONFIG.jpgDpi, CONFIG.jpgJakosc).
+async function cardToJpeg(el) {
+  const opts = { pixelRatio: CONFIG.jpgDpi / 96, quality: CONFIG.jpgJakosc,
                  style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
   try { return await jpegBlob(el, opts); }
   catch (e) { return await jpegBlob(el, { ...opts, skipFonts: true }); }
@@ -1528,16 +1537,13 @@ const PCIO = { dluzszyBok: 160, odstep: 40, margines: 40, szerokoscStolu: 1500, 
 
 async function exportPcio() {
   if (EKSPORT_TRWA) return;
-  EKSPORT_TRWA = true;
-  try { return await eksportujPcio(); } finally { EKSPORT_TRWA = false; }
+  return naWylacznosc(eksportujPcio);
 }
 async function eksportujPcio() {
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
   if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
   const widgets = [], assets = new Map(), report = [];
   let z = 1, x = PCIO.margines, y = PCIO.margines, wysRzedu = 0;
-  const L = CONFIG.pcioRozmiar;
-  const imgWidth = (el) => (el.offsetWidth >= el.offsetHeight ? L : Math.round(L * el.offsetWidth / el.offsetHeight));
 
   // Wszystkie talie, także odfiltrowane w podglądzie.
   const filtr = $('filtr').value; $('filtr').value = ''; applyFilter();
@@ -1567,7 +1573,7 @@ async function eksportujPcio() {
       for (const { el, n } of wzory.values()) {
         status(`playingcards.io: ${nazwa} ${++i}/${wzory.size}…`);
         const plik = uuid() + '.jpg';
-        assets.set(plik, await cardToJpeg(el, imgWidth(el)));
+        assets.set(plik, await cardToJpeg(el));
         const typ = 'type-' + uuid();
         deck.cardTypes[typ] = { image: 'package://userassets/' + plik, label: el.title || el.dataset.id };
         for (let j = 0; j < n; j++) cards.push({ id: uuid(), type: 'card', cardType: typ, deck: deck.id, parent: holder.id,
@@ -1579,7 +1585,7 @@ async function eksportujPcio() {
       let tylObiekty;
       if (back) {
         const plik = uuid() + '.jpg';
-        assets.set(plik, await cardToJpeg(back, imgWidth(back)));
+        assets.set(plik, await cardToJpeg(back));
         tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'transparent', valueType: 'static', value: 'package://userassets/' + plik }];
       } else {
         tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: '#3d3a36', valueType: 'static', value: '' },

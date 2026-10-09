@@ -25,5 +25,5 @@ Gdy karty się zmienią, wyeksportuj pokój ponownie. Ustawienia stołu z poprze
 ## Uwagi
 
 - Plik `.pcio` to archiwum ZIP: `schemaVersion`, `widgets.json` (opis elementów stołu) i folder `userassets/` z obrazkami kart.
-- Rozmiar obrazka karty ustawia `CONFIG.pcioRozmiar` w `karty.html` (domyślnie 560 px na dłuższym boku). Na stole dłuższy bok karty ma 160 jednostek.
+- Obrazki kart mają te same ustawienia co eksport JPG: 150 dpi (karta 63×88 mm to ok. 372×520 px), jakość 92%. Na stole dłuższy bok karty ma 160 jednostek.
 - Komendy `STÓŁ` i `PCIO` z wcześniejszych wersji (podmiana talii w istniejącym pokoju) nie są już używane. Aplikacja pokazuje przy nich uwagę, a wiersze możesz usunąć z szablonu.
