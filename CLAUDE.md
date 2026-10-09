@@ -111,6 +111,15 @@ Sekcje w kolejności w pliku:
     - Przerzedzanie: ostatnia godzina – najwyżej 1 kopia / 5 min, ostatnia doba – 1 / godzinę, miesiąc – 1 / dzień, starsze – 1 / tydzień.
     - Zawsze zostają: stan z otwarcia projektu, stan sprzed przywrócenia, punkty nazwane ręcznie (np. „przed playtestem 3”).
     - Plik → Historia wersji…: lista z datami, różnice linii względem obecnej, „Przywróć” (obecna wersja trafia najpierw do historii), „Pokaż karty z tej wersji”. Obrazków nie kopiujemy.
+15. **Obrót elementów** (zaplanowane): opcja `obrót=90` (stopnie) w `TEKST`, `OBRAZEK`, `IKONA`, `PROSTOKĄT`; obrót wokół środka pola.
+16. **Obrys i cień tekstu** (zaplanowane): np. `obrys=0.3, kolor_obrysu=#000`, `cień=…` – czytelny tekst na obrazkach.
+17. **Gradienty** (zaplanowane): w `TŁO` i `PROSTOKĄT`, np. `#fff > #c0504d` (kierunek opcją).
+18. **Wiele arkuszy XLSX** (zaplanowane): `DANE = gra.xlsx#Arkusz` (bez `#` – pierwszy arkusz, jak dziś).
+19. **Statystyki talii** (zaplanowane): rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
+20. **Wizualne porównanie wersji** (zaplanowane): podświetlenie kart zmienionych od ostatniego PDF (ten sam odcisk co w „druku zmienionych”, pkt 7) i podgląd przed/po (z historią wersji, pkt 14).
+21. **Eksport do Tabletop Simulator** (zaplanowane): arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
+22. **Katalog kart do PDF** (zaplanowane): wiele zmniejszonych kart na stronie A4 (np. 4×4 albo 5×5) z podpisami – do przeglądu, instrukcji i dla testerów.
+23. **Rozdzielczość eksportu** (zaplanowane): wybór 150/300 dpi i PNG z przezroczystymi rogami (obok JPG).
 
 Ustalona kolejność prac: **podejście 2** – spad i przesunięcie rewersów (potem próbny wydruk u właściciela), Podejście 4 (edytor szablonów, etap 1) zrobione w v0.4.0. Podejście 1 (kolumny, rewers w podglądzie, nazwy JPG, DMG, Dependabot) zrobione w v0.2.0, podejście 3 (Nowy projekt…) w v0.3.0. Podejście 2 odłożone (właściciel sprawdzi wydruk później).
 
