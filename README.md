@@ -6,7 +6,7 @@ Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV a
 
 - **zapisać PDF do druku**: A4 ze znacznikami cięcia (karty 1:1, np. 63×88 mm) i z rewersami do druku dwustronnego, albo każda karta na osobnej stronie;
 - **wyeksportować obrazki JPG** każdej karty do folderu `Export` projektu;
-- **wgrać karty do pokoju [playingcards.io](https://playingcards.io)**, podmieniając talie w istniejącym stole.
+- **przygotować pokój [playingcards.io](https://playingcards.io)**: każda talia jako osobny stos, gotowy do dalszego ustawienia.
 
 ![Przykładowe karty](docs/img/przyklady.png)
 

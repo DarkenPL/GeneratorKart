@@ -188,8 +188,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
   <button id="png" disabled title="Każda karta jako osobny plik JPG w folderze Export projektu">Eksport JPG</button>
   <button id="historiaPrzycisk" disabled title="Historia wersji szablonu i plików danych">Historia</button>
   <button id="raportPrzycisk" disabled title="Duplikaty ID, puste pola, nieużywane kolumny, obrazki i ikony">Raport</button>
-  <button id="pcio" disabled title="Pokój playingcards.io z kartami z generatora (plik pokoju: komenda STOL w szablonie)">Eksport do playingcards.io</button>
-  <input type="file" id="pcioPlik" accept=".pcio,.zip" hidden>
+  <button id="pcio" disabled title="Nowy pokój playingcards.io: każda talia jako osobny stos (plik .pcio w folderze projektu)">Eksport do playingcards.io</button>
   <span class="status" id="status"></span>
 </div>
 <div class="uwagi" id="uwagi"></div>
@@ -223,7 +222,7 @@ button.wlaczony { background: #4a453f; border-color: #4a453f; color: #fff; }
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
   // Nazwy kolorów i plik pokoju playingcards.io ustawia się w szablonach:
-  // KOLOR = nazwa, #RRGGBB   oraz   STOL = plik.pcio
+  // KOLOR = nazwa, #RRGGBB
   plikIkon: 'ikony.csv',
   odstep: true,                            // odstęp po ikonach z "Odstęp = tak"
   minSkalaTekstu: 0.6,                     // domyślnie najmniej 60% rozmiaru, gdy tekst się nie mieści
@@ -236,7 +235,6 @@ const CONFIG = {
 
 // Paleta nazwanych kolorów i plik pokoju playingcards.io – zbierane z szablonów przy każdym odświeżeniu.
 let PALETA = {};
-let STOL_PCIO = '';
 let PROJEKT = 'NowaGra';     // nazwa projektu: PROJEKT = … w szablonie, inaczej nazwa pliku szablonu
 let WERSJA = '';             // WERSJA = … w szablonie – pole [_wersja] na kartach
 
@@ -335,7 +333,7 @@ $('filtr').onchange = applyFilter;
 
 // Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików.
 setInterval(async () => {
-  if (!$('auto').checked || document.hidden || !serverPaths.length || PODGLAD_WERSJI) return;
+  if (!$('auto').checked || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
   const stamp = await serverStamp();
   if (lastStamp && stamp !== lastStamp) await loadFromServer();
   lastStamp = stamp;
@@ -537,7 +535,7 @@ function num(v) {
 // Plik szablonu: jedna talia albo kilka sekcji [TALIA Nazwa]. Wszystko przed pierwszą
 // [TALIA …] jest wspólne dla talii z tego pliku (KARTA, CZCIONKA, elementy awersu i rewersu).
 function parseTemplate(text, plik) {
-  const out = { talie: [], pliki: [], dane: [], czcionki: [], google: [], kolory: [], stol: '', wersja: '', bledy: [] };
+  const out = { talie: [], pliki: [], dane: [], czcionki: [], google: [], kolory: [], wersja: '', bledy: [] };
   const nowa = (nazwa, wz) => ({
     plik, nazwa, dane: [], pcio: '', w: wz ? wz.w : 63, h: wz ? wz.h : 88,
     karta: wz ? { ...wz.karta } : {}, kartaRewers: wz ? wz.kartaRewers : undefined,
@@ -602,7 +600,7 @@ function parseTemplate(text, plik) {
     switch (kom) {
       case 'nazwa': t.nazwa = args[0] || t.nazwa; break;
       case 'dane': t.dane = args.filter(Boolean); out.dane.push(...t.dane); break;
-      case 'pcio': t.pcio = args[0] || ''; break;
+      case 'pcio': out.bledy.push(`${where}: komenda PCIO nie jest już potrzebna – eksport do playingcards.io tworzy nowy pokój ze wszystkimi taliami. Możesz usunąć ten wiersz.`); break;
       case 'karta': {
         const w = num(args[0]), h = num(args[1]);
         if (cel === t.rewers) { t.kartaRewers = opt; break; }        // rewers: własne zaokrąglenie/obwódka, rozmiar jak awers
@@ -622,7 +620,7 @@ function parseTemplate(text, plik) {
           out.bledy.push(`${where}: KOLOR = nazwa, #RRGGBB`);
         else out.kolory.push([args[0].trim(), '#' + args[1].trim().replace('#', '')]);
         break;
-      case 'stol': if (args[0]) out.stol = args[0]; break;
+      case 'stol': out.bledy.push(`${where}: komenda STÓŁ nie jest już potrzebna – eksport do playingcards.io tworzy nowy pokój. Możesz usunąć ten wiersz.`); break;
       case 'projekt': if (args[0]) out.projekt = args[0].trim(); break;
       case 'wersja': out.wersja = (args[0] || '').trim(); break;
       default:
@@ -869,7 +867,15 @@ let RAPORT = { tekst: '', talie: [], icons: {} };   // dane do raportu projektu 
 let TALIE = [];               // wczytane szablony talii
 const googleFonts = new Set();
 
-async function build() {
+// Przebudowy idą po kolei: nowsza czeka na starszą (inaczej starsza mogła skończyć później
+// i zostawić karty z obrazkami, których adresy nowsza już unieważniła).
+let KOLEJKA_BUDOWY = Promise.resolve();
+function build() {
+  const p = KOLEJKA_BUDOWY.then(zbudujTeraz);
+  KOLEJKA_BUDOWY = p.catch(() => {});
+  return p;
+}
+async function zbudujTeraz() {
   urls.forEach(URL.revokeObjectURL); urls = []; URL_PLIK.clear();
   const warn = new Set();
   const icons = await loadIcons(warn);
@@ -885,7 +891,7 @@ async function build() {
   }
   const tekstSzablonu = await tplFiles[0][1].text();
 
-  TALIE = []; PALETA = {}; STOL_PCIO = '';
+  TALIE = []; PALETA = {};
   RAPORT = { tekst: tekstSzablonu, talie: [], icons };
   PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
   WERSJA = '';
@@ -894,7 +900,6 @@ async function build() {
     const t = parseTemplate(await f.text(), f.name);
     t.bledy.forEach((b) => warn.add(b));
     for (const [n, v] of t.kolory) { PALETA[n.toLowerCase()] = v; PALETA[plain(n)] = v; }
-    if (t.stol && !STOL_PCIO) STOL_PCIO = t.stol;
     if (t.projekt) PROJEKT = t.projekt;
     if (t.wersja) WERSJA = t.wersja;
     for (const talia of t.talie) {
@@ -1151,7 +1156,8 @@ $('porownaj').onclick = () => pokazPorownanie();
 // ── Historia wersji ─────────────────────────────────────────────────────────
 // Kopie robi aplikacja (historia.js) po każdym wczytaniu plików z dysku – tylko gdy treść się zmieniła.
 let HIST_OTWARCIE = true;        // pierwsze wczytanie po otwarciu projektu = punkt „otwarcie”
-let PODGLAD_WERSJI = null;       // czas oglądanej wersji (wtedy bez automatycznego odświeżania)
+let PODGLAD_WERSJI = null;
+let EKSPORT_TRWA = false;        // eksport JPG / playingcards.io – bez przebudowy podglądu w trakcie       // czas oglądanej wersji (wtedy bez automatycznego odświeżania)
 const plikiHistorii = () => serverPaths.filter((p) => p === SZABLON || /\.(csv|xlsx)$/i.test(p));
 async function zapiszHistorie(punkt = null) {
   if (!APP || !APP.historiaZapisz || PODGLAD_WERSJI) return;
@@ -1275,6 +1281,8 @@ window.podgladWersji = podgladWersji;
 window.wrocDoObecnej = wrocDoObecnej;
 window.przywrocWersje = przywrocWersje;
 $('historiaPrzycisk').onclick = () => pokazHistorie();
+if (window.generatorApp && window.generatorApp.naZmianeHistorii)
+  window.generatorApp.naZmianeHistorii(() => { if (!$('historia').hidden) pokazHistorie(true); });
 
 function applyFilter() {
   const f = $('filtr').value;
@@ -1466,7 +1474,7 @@ async function jpegBlob(el, opts) {
 
 // Każda karta jako osobny plik JPG w folderze Export projektu (zapisuje aplikacja).
 $('png').onclick = async () => {
-  const btn = $('png'); btn.disabled = true;
+  const btn = $('png'); btn.disabled = true; EKSPORT_TRWA = true;
   try {
     if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
     const folder = await APP.eksportStart();
@@ -1499,12 +1507,12 @@ $('png').onclick = async () => {
     APP.eksportKoniec();
   } catch (e) {
     status('Eksport JPG nie powiódł się: ' + e.message);
-  } finally { btn.disabled = false; }
+  } finally { btn.disabled = false; EKSPORT_TRWA = false; }
 };
 
 // ── Eksport do playingcards.io ───────────────────────────────────────────────
-// Bierze pokój wskazany komendą STOL (plik .pcio: plansza, miejsca graczy, żetony, przyciski automatyzacji)
-// i podmienia w nim talie na karty z generatora. Identyfikatory talii zostają, więc przyciski działają.
+// Tworzy nowy pokój (.pcio): każda talia to osobny stos (holder) z kartami zakrytymi,
+// stosy w rzędach obok siebie. Resztę stołu właściciel ustawia sam w playingcards.io.
 
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
@@ -1516,129 +1524,96 @@ async function cardToJpeg(el, width) {
   catch (e) { return await jpegBlob(el, { ...opts, skipFonts: true }); }
 }
 
-async function pcioTemplate() {
-  // Plik pokoju z komendy STOL w szablonie; bez niej (albo gdy pliku brak) – prośba o wskazanie pliku.
-  let f = STOL_PCIO ? files.get(norm(STOL_PCIO)) : null;
-  if (!f && STOL_PCIO) f = await fetchFile(STOL_PCIO);
-  if (f) return f;
-  // Brak szablonu w folderze – poproś o plik.
-  return new Promise((ok) => {
-    const inp = $('pcioPlik');
-    inp.value = '';
-    inp.onchange = () => ok(inp.files[0] || null);
-    inp.click();
-  });
-}
+const PCIO = { dluzszyBok: 160, odstep: 40, margines: 40, szerokoscStolu: 1500, ramka: 4 };
 
 async function exportPcio() {
+  if (EKSPORT_TRWA) return;
+  EKSPORT_TRWA = true;
+  try { return await eksportujPcio(); } finally { EKSPORT_TRWA = false; }
+}
+async function eksportujPcio() {
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
   if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-  const tpl = await pcioTemplate();
-  if (!tpl) { status('Eksport do playingcards.io przerwany: nie wskazano pliku pokoju (.pcio).'); return; }
+  const widgets = [], assets = new Map(), report = [];
+  let z = 1, x = PCIO.margines, y = PCIO.margines, wysRzedu = 0;
+  const L = CONFIG.pcioRozmiar;
+  const imgWidth = (el) => (el.offsetWidth >= el.offsetHeight ? L : Math.round(L * el.offsetWidth / el.offsetHeight));
 
-  const src = await JSZip.loadAsync(await tpl.arrayBuffer());
-  const widgets = JSON.parse(await src.file('widgets.json').async('string'));
-  const byId = new Map(widgets.map((w) => [w.id, w]));
-  const newAssets = new Map();                 // nazwa pliku → Blob
-  const report = [];
-  let z = Math.max(0, ...widgets.map((w) => w.z || 0)) + 1;
-
-  // Pokazujemy wszystkie talie, żeby dało się je wyrenderować.
+  // Wszystkie talie, także odfiltrowane w podglądzie.
   const filtr = $('filtr').value; $('filtr').value = ''; applyFilter();
   try {
-    for (const talia of TALIE) {
-      if (!talia.pcio) continue;
-      const section = [...$('podglad').querySelectorAll('.talia')].find((x) => x.dataset.talia === talia.nazwa);
-      const deck = byId.get(talia.pcio);
-      if (!section) continue;
-      if (!deck || deck.type !== 'cardDeck') { report.push(`${talia.nazwa}: w szablonie nie ma talii ${talia.pcio} – pominięta`); continue; }
+    for (const section of $('podglad').querySelectorAll('.talia')) {
+      const nazwa = section.dataset.talia;
+      const karty = [...section.querySelectorAll('.karta:not(.rewers)')];
+      if (!karty.length) continue;
+      // Rozmiar karty w jednostkach stołu: dłuższy bok = 160, proporcje jak KARTA.
+      const [wmm, hmm] = cardMm(karty[0]);
+      const cw = Math.round(wmm >= hmm ? PCIO.dluzszyBok : PCIO.dluzszyBok * wmm / hmm);
+      const ch = Math.round(wmm >= hmm ? PCIO.dluzszyBok * hmm / wmm : PCIO.dluzszyBok);
+      const hw = cw + 2 * PCIO.ramka, hh = ch + 2 * PCIO.ramka;
+      if (x > PCIO.margines && x + hw > PCIO.szerokoscStolu) { x = PCIO.margines; y += wysRzedu + PCIO.odstep; wysRzedu = 0; }
 
-      const cw = deck.cardWidth, ch = deck.cardHeight;
-      const L = CONFIG.pcioRozmiar;
-      const imgWidth = (el) => (el.offsetWidth >= el.offsetHeight ? L : Math.round(L * el.offsetWidth / el.offsetHeight));
+      const holder = { id: uuid(), type: 'holder', x, y, z: z++, width: hw, height: hh, label: nazwa, dragging: null };
+      const deck = { id: uuid(), type: 'cardDeck', parent: holder.id, x, y, z: z++, cardWidth: cw, cardHeight: ch,
+        showUnflipped: true, enlarge: 'normal', onRemoveFromHand: null, dragging: null, cardTypes: {},
+        faceTemplate: { includeBorder: 'heavy', includeRadius: true,
+          objects: [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'white', valueType: 'dynamic', value: 'image' }] } };
 
-      // Unikalne karty (wiersze CSV) i liczba kopii.
-      const rows = new Map();
-      for (const el of section.querySelectorAll('.karta:not(.rewers)')) {
-        const key = el.dataset.row;
-        if (!rows.has(key)) rows.set(key, { el, n: 0 }); rows.get(key).n++;
-      }
-
-      // Stare karty tej talii (do zachowania ułożenia, gdy talia nie ma stosu startowego).
-      const oldTypes = Object.keys(deck.cardTypes || {});
-      const oldCards = widgets.filter((w) => w.type === 'card' && w.deck === deck.id);
-      const oldByType = oldTypes.map((t) => oldCards.filter((c) => c.cardType === t));
-
-      const cardTypes = {};
-      const newCards = [];
-      const home = deck.parent ? byId.get(deck.parent) : null;
-      const sample = home && oldCards.find((c) => c.parent === home.id);
-      const ox = sample ? sample.x - home.x : Math.max(0, ((home ? home.width : cw) - cw) / 2);
-      const oy = sample ? sample.y - home.y : Math.max(0, ((home ? home.height : ch) - ch) / 2);
-
+      // Wzory kart (wiersze danych) i kopie.
+      const wzory = new Map();
+      for (const el of karty) { const k = el.dataset.row; if (!wzory.has(k)) wzory.set(k, { el, n: 0 }); wzory.get(k).n++; }
+      const cards = [];
       let i = 0;
-      for (const { el, n } of rows.values()) {
-        status(`playingcards.io: ${talia.nazwa} ${i + 1}/${rows.size}…`);
-        const file = uuid() + '.jpg';
-        newAssets.set(file, await cardToJpeg(el, imgWidth(el)));
-        const typeKey = 'type-' + uuid();
-        cardTypes[typeKey] = { image: 'package://userassets/' + file, label: el.title || el.dataset.id };
-        for (let j = 0; j < n; j++) {
-          const card = { id: uuid(), type: 'card', cardType: typeKey, deck: deck.id, faceup: false, owner: null, layoutStackParent: null, r: 0, z: z++ };
-          const prev = !home && oldByType[i] && oldByType[i][j];
-          if (home) Object.assign(card, { parent: home.id, x: home.x + ox, y: home.y + oy });
-          else if (prev) Object.assign(card, { parent: prev.parent ?? null, x: prev.x, y: prev.y, faceup: !!prev.faceup });
-          else Object.assign(card, { parent: null, x: deck.x || 0, y: deck.y || 0, faceup: true });
-          newCards.push(card);
-        }
-        i++;
+      for (const { el, n } of wzory.values()) {
+        status(`playingcards.io: ${nazwa} ${++i}/${wzory.size}…`);
+        const plik = uuid() + '.jpg';
+        assets.set(plik, await cardToJpeg(el, imgWidth(el)));
+        const typ = 'type-' + uuid();
+        deck.cardTypes[typ] = { image: 'package://userassets/' + plik, label: el.title || el.dataset.id };
+        for (let j = 0; j < n; j++) cards.push({ id: uuid(), type: 'card', cardType: typ, deck: deck.id, parent: holder.id,
+          x: x + PCIO.ramka, y: y + PCIO.ramka, z: 0, faceup: false, owner: null, layoutStackParent: null, r: 0 });
       }
 
-      const face = deck.faceTemplate || {};
-      deck.faceTemplate = { includeBorder: face.includeBorder ?? 'heavy', includeRadius: face.includeRadius ?? true,
-        objects: [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'white', valueType: 'dynamic', value: 'image' }] };
-      deck.cardTypes = cardTypes;
-
+      // Rewers z generatora; bez [REWERS] – kolorowy rewers z nazwą talii.
       const back = section.querySelector('.karta.rewers');
+      let tylObiekty;
       if (back) {
-        const file = uuid() + '.jpg';
-        newAssets.set(file, await cardToJpeg(back, imgWidth(back)));
-        const bt = deck.backTemplate || {};
-        deck.backTemplate = { includeBorder: bt.includeBorder ?? 'heavy', includeRadius: bt.includeRadius ?? true,
-          objects: [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'transparent', valueType: 'static', value: 'package://userassets/' + file }] };
+        const plik = uuid() + '.jpg';
+        assets.set(plik, await cardToJpeg(back, imgWidth(back)));
+        tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: 'transparent', valueType: 'static', value: 'package://userassets/' + plik }];
+      } else {
+        tylObiekty = [{ type: 'image', x: 0, y: 0, w: cw, h: ch, color: '#3d3a36', valueType: 'static', value: '' },
+          { type: 'text', x: 8, y: ch / 2 - 10, w: cw - 16, fontSize: 16, valueType: 'static', value: nazwa, textAlign: 'center', textFont: null, color: 'rgb(255,255,255)' }];
       }
+      deck.backTemplate = { includeBorder: 'heavy', includeRadius: true, objects: tylObiekty };
 
-      // Podmiana kart w pokoju.
-      for (let k = widgets.length - 1; k >= 0; k--) if (widgets[k].type === 'card' && widgets[k].deck === deck.id) widgets.splice(k, 1);
-      widgets.push(...newCards);
-      report.push(`${talia.nazwa}: ${rows.size} wzorów, ${newCards.length} kart${home ? ` na stosie „${home.label || 'talia'}”` : ''}`);
+      for (const c of cards) c.z = z++;
+      widgets.push(holder, deck, ...cards);
+      report.push(`${nazwa}: ${cards.length} kart`);
+      x += hw + PCIO.odstep; wysRzedu = Math.max(wysRzedu, hh);
     }
   } finally { $('filtr').value = filtr; applyFilter(); }
+  if (!widgets.length) { status('Eksport do playingcards.io: brak kart.'); return; }
 
-  // Nowe archiwum: widgets.json + używane obrazki (stare niepotrzebne obrazki kart znikają).
-  const out = new JSZip();
-  const json = JSON.stringify(widgets);
-  out.file('schemaVersion', await src.file('schemaVersion').async('string'));
-  out.file('widgets.json', json);
-  const used = new Set([...json.matchAll(/package:\/\/userassets\/([^"\\]+)/g)].map((m) => m[1]));
-  out.folder('userassets');
-  for (const name of used) {
-    if (newAssets.has(name)) out.file('userassets/' + name, newAssets.get(name));
-    else if (src.file('userassets/' + name)) out.file('userassets/' + name, await src.file('userassets/' + name).async('uint8array'));
-    else report.push('Brak obrazka w szablonie: ' + name);
-  }
-  const blob = await out.generateAsync({ type: 'blob', compression: 'STORE' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = tpl.name.replace(/\.(pcio|zip)$/i, '') + '-karty.pcio';
-  a.click();
-  status(`Zapisano ${a.download} (${(blob.size / 1048576).toFixed(1)} MB) · ` + report.join(' · '));
+  const zip = new JSZip();
+  zip.file('schemaVersion', '8');
+  zip.file('widgets.json', JSON.stringify(widgets));
+  const folder = zip.folder('userassets');
+  for (const [plik, blob] of assets) folder.file(plik, blob);
+  const dane = await zip.generateAsync({ type: 'uint8array', compression: 'STORE' });
+  const nazwa = PROJEKT + ' – playingcards.pcio';
+  const zapisany = await APP.zapiszPcio(nazwa, dane);
+  if (!zapisany) { status('Eksport do playingcards.io anulowany.'); return; }
+  status(`Zapisano ${zapisany} (${(dane.length / 1048576).toFixed(1)} MB) · ${report.join(' · ')} · w playingcards.io: Edit Table → Import room`);
+  return { plik: zapisany, talie: report, holdery: widgets.filter((w) => w.type === 'holder').length,
+           karty: widgets.filter((w) => w.type === 'card').length, obrazki: assets.size };
 }
+window.exportPcio = exportPcio;
 
 $('pcio').onclick = async () => {
   const btn = $('pcio'); btn.disabled = true;
   try { await exportPcio(); }
-  catch (e) { status('Eksport do playingcards.io nie powiódł się: ' + e.message); console.error(e); }
+  catch (e) { status('Eksport do playingcards.io nie powiódł się: ' + ((e && e.message) || e)); console.error(e); }
   finally { btn.disabled = false; }
 };
 
