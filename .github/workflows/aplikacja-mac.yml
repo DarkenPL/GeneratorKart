@@ -87,13 +87,13 @@ jobs:
           test -L "$RUNNER_TEMP/dmg/Applications"
           hdiutil detach "$RUNNER_TEMP/dmg"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Generator-kart
           path: app/dist/Generator-kart.dmg
           compression-level: 0
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: wyniki-testow
