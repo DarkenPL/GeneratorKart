@@ -97,7 +97,11 @@ Sekcje w kolejności w pliku:
 Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione punkty przechodzą do „Zrobione”, nowe dostają kolejny numer.
 
 1. **Aplikacja – dalszy rozwój** (pomysły):
-   - automatyczne aktualizacje,
+   - **automatyczne aktualizacje** – plan (10.10.2026, właściciel zgodził się na publiczne repo):
+     - własny aktualizator w `main.js` (nie `autoUpdater`/electron-updater – Squirrel.Mac wymaga podpisu Developer ID): przy starcie i z menu „Sprawdź aktualizacje…” porównuje wersję z `releases/latest` (REST API GitHuba, bez tokenu – repo publiczne), pyta, pobiera ZIP `.app` (nowy artefakt obok DMG), po zamknięciu podmienia aplikację w Programach i uruchamia ją ponownie; pilnuje niezapisanego szablonu jak ⌘Q;
+     - plik pobrany przez aplikację nie ma `com.apple.quarantine`, więc Gatekeeper nie pyta – zatwierdzenie tylko przy pierwszej instalacji z DMG;
+     - do sprawdzenia na Macu właściciela: jednorazowe pytanie „Zarządzanie aplikacjami” i czy macOS ponownie pyta o dostęp do folderów (podpis ad hoc zmienia się co wersję); jeśli tak – pozostaje podpis Apple (niżej);
+     - przed upublicznieniem repo: historia sprawdzona – bez danych gry i sekretów (jedyne nazwy talii właściciela w przykładzie w `docs/aplikacja.md` z v0.4.6 zastąpione w v0.4.7; zostają w historii commita 7322127). Zmienić widoczność może tylko właściciel (Settings → Danger Zone), sesja Claude ma blokadę ustawień repo;
    - wersja na Windows – **odłożona** (decyzja 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na `windows-latest`, test na żywym Windows),
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
    - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
@@ -156,5 +160,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
   - 30. Katalog talii A (menu) + B (zlecenie z pliku, `wynik.json`).
   - 33. Układ „Drukarnia”: strona na kopię, awers/rewers na przemian, spad (domyślnie 2 mm), bez znaczników; Raport: obrazki poniżej 300 dpi. CMYK odłożony (pkt 34).
   - Test (`--test-edytor`): linie cięcia, układ drukarnia (liczba i rozmiar stron, raport); poza przykładami katalog A i zlecenie B.
+- **v0.4.7** – plan automatycznych aktualizacji w kolejce (pkt 1), przykład zlecenia katalogu w `docs/aplikacja.md` bez nazw talii właściciela.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
