@@ -83,8 +83,6 @@ Aplikacja ma w środku ich kopie (instalowane z npm przy budowaniu, nie są czę
 |---|---|---|
 | `Ikony/wielblad.svg` | [camel](https://game-icons.net/1x1/delapouite/camel.html) | Delapouite |
 | `Ikony/karawana.svg` | [caravan](https://game-icons.net/1x1/delapouite/caravan.html) | Delapouite |
-| `Ikony/oaza.svg` | [oasis](https://game-icons.net/1x1/delapouite/oasis.html) | Delapouite |
-| `Ikony/pustynia.svg` | [desert](https://game-icons.net/1x1/delapouite/desert.html) | Delapouite |
 | `Ikony/palma.svg` | [palm-tree](https://game-icons.net/1x1/delapouite/palm-tree.html) | Delapouite |
 | `Ikony/amfora.svg` | [amphora](https://game-icons.net/1x1/delapouite/amphora.html) | Delapouite |
 | `Ikony/jedwab.svg` | [rolled-cloth](https://game-icons.net/1x1/delapouite/rolled-cloth.html) | Delapouite |
@@ -103,7 +101,6 @@ Aplikacja ma w środku ich kopie (instalowane z npm przy budowaniu, nie są czę
 | `Ikony/liscie.svg` | [leaf-swirl](https://game-icons.net/1x1/lorc/leaf-swirl.html) | Lorc |
 | `Ikony/krysztal.svg` | [crystal-ball](https://game-icons.net/1x1/lorc/crystal-ball.html) | Lorc |
 | `Ikony/ksiega.svg` | [spell-book](https://game-icons.net/1x1/delapouite/spell-book.html) | Delapouite |
-| `Ikony/wir.svg` | [magic-swirl](https://game-icons.net/1x1/lorc/magic-swirl.html) | Lorc |
 | `Ikony/eliksir.svg` | [health-potion](https://game-icons.net/1x1/delapouite/health-potion.html) | Delapouite |
 | `Ikony/runa.svg` | [rune-stone](https://game-icons.net/1x1/lorc/rune-stone.html) | Lorc |
 | `Ikony/mana.svg` | [drop](https://game-icons.net/1x1/lorc/drop.html) | Lorc |
