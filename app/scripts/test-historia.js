@@ -85,4 +85,28 @@ assert.match(cli('przywroc', path.join(dir4, 'Szablony'), '2'), /Przywrócono/);
 assert.strictEqual(fs.readFileSync(szablon, 'utf8'), oryg);
 assert.match(cli('lista', dir4), /stan sprzed przywrócenia/);
 
-console.log('historia: OK (' + w.length + ' kopii po przerzedzeniu; skrzynka, blokada, konsola)');
+// 8) Siatka bezpieczeństwa i punkty eksportu.
+const dir5 = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
+const siatka = { powod: 'siatka', etykieta: 'Siatka bezpieczeństwa', jesliZmiany: true, minOdstep: 60 * MIN };
+fs.writeFileSync(path.join(dir5, 'k.csv'), 'a');
+H.zapisz(dir5, ['k.csv'], { powod: 'otwarcie' }, T0);
+// bez zmian → ani kopii, ani punktu
+assert.strictEqual(H.zapisz(dir5, ['k.csv'], { ...siatka, minOdstep: 0 }, T0 + 5 * MIN), 0);
+assert.ok(!H.wczytajIndeks(dir5).punkty.some((p) => p.powod === 'siatka'));
+// zmiana, ale ostatnia kopia młodsza niż godzina → nic
+fs.writeFileSync(path.join(dir5, 'k.csv'), 'b');
+assert.strictEqual(H.zapisz(dir5, ['k.csv'], siatka, T0 + 30 * MIN), 0);
+// po godzinie → kopia z punktem siatki (opcje nie trafiają do indeksu)
+assert.strictEqual(H.zapisz(dir5, ['k.csv'], siatka, T0 + 61 * MIN), 1);
+const ps = H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'siatka');
+assert.deepStrictEqual(ps.map((p) => Object.keys(p).sort()), [['czas', 'etykieta', 'powod']]);
+// eksport bez zmian: punkt raz, drugi taki sam nie jest dublowany; inny opis – nowy punkt
+H.zapisz(dir5, ['k.csv'], { powod: 'eksport', etykieta: 'PDF A4' }, T0 + 62 * MIN);
+H.zapisz(dir5, ['k.csv'], { powod: 'eksport', etykieta: 'PDF A4' }, T0 + 63 * MIN);
+H.zapisz(dir5, ['k.csv'], { powod: 'eksport', etykieta: 'eksport JPG 150 dpi' }, T0 + 64 * MIN);
+assert.deepStrictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'eksport').map((p) => p.etykieta), ['PDF A4', 'eksport JPG 150 dpi']);
+// zostaje 24 ostatnich punktów siatki
+for (let i = 1; i <= 30; i++) { fs.writeFileSync(path.join(dir5, 'k.csv'), 'z' + i); H.zapisz(dir5, ['k.csv'], siatka, T0 + (61 + i * 61) * MIN); }
+assert.strictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'siatka').length, 24);
+
+console.log('historia: OK (' + w.length + ' kopii po przerzedzeniu; skrzynka, blokada, konsola, siatka, eksporty)');

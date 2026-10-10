@@ -75,6 +75,7 @@ function zapiszSzablonNaDysk(tekst) {
 
 async function otworzSzablon(plik) {
   if (!(await czyMoznaPorzucic())) return;
+  historiaZamkniecie();
   zmiany = false;
   if (okno) okno.setDocumentEdited(false);
   szablon = naSzablon(plik);
@@ -249,6 +250,15 @@ ipcMain.handle('historia:zapisz', (e, pliki, punkt) =>
 ipcMain.handle('historia:lista', () => historiaDostepna() ? historia.wczytajIndeks(projekt) : null);
 ipcMain.handle('historia:stan', (e, czas) => historiaDostepna()
   ? historia.stan(projekt, Number(czas)).map((s) => ({ plik: s.plik, dane: new Uint8Array(s.dane) })) : []);
+// Zamknięcie projektu (inny szablon, koniec aplikacji): kopia plików, które zmieniły się od ostatniej kopii.
+// Pliki = te, które historia już śledzi (przy otwarciu projektu kopiowane są wszystkie).
+function historiaZamkniecie() {
+  if (!historiaDostepna()) return;
+  try {
+    const pliki = [...new Set(historia.wczytajIndeks(projekt).wersje.map((v) => v.plik))];
+    if (pliki.length) historia.zapisz(projekt, pliki, { powod: 'zamknięcie', etykieta: 'zamknięcie projektu', jesliZmiany: true });
+  } catch (e) { /* bez kopii – nie blokujemy zamykania */ }
+}
 // Skrzynka (.historia/przychodzace) – punkty od innych narzędzi, np. Claude; sprawdzana co 3 s.
 setInterval(() => {
   if (!historiaDostepna() || !okno) return;
@@ -527,9 +537,16 @@ async function trybTestowy(folder, wynik) {
     const lista = () => js('window.generatorApp.historiaLista()');
     const przed = await lista();
     const otwarcie = przed.punkty.find((p) => p.powod === 'otwarcie');
+    const kopie = (l) => l.wersje.filter((v) => szablon.endsWith(v.plik)).length;
+    const kopiePrzed = kopie(przed);
     fs.writeFileSync(szablon, oryginal + '\n; zmiana z innego edytora\n'); await czekaj(4500);
+    const bezKopii = kopie(await lista()) === kopiePrzed;            // zwykła zmiana pliku – bez kopii
+    await js('siatkaHistorii(0)');                                     // siatka bezpieczeństwa (bez czekania godziny)
     const po = await lista();
-    const kopieSzablonu = po.wersje.filter((v) => szablon.endsWith(v.plik)).length;
+    const kopieSzablonu = kopie(po);
+    fs.writeFileSync(szablon, oryginal + '\n; druga zmiana\n'); await czekaj(2500);
+    await js('siatkaHistorii()');                                      // ostatnia kopia sprzed chwili – bez nowej
+    const siatkaOdstep = kopie(await lista()) === kopieSzablonu;
     await js('pokazHistorie(true)');
     const wiersze = await js("document.querySelectorAll('#historia .wiersz').length");
     const diff = await js(`(async () => { const b = document.querySelector('#historia .wiersz:last-child [data-akcja="zmiany"]'); const sz = b.closest('.wiersz').querySelector('.szczegoly'); await akcjaHistorii(b, +b.closest('.wiersz').dataset.czas); return sz.innerText; })()`);
@@ -548,8 +565,9 @@ async function trybTestowy(folder, wynik) {
     const zeSkrzynki = (await lista()).punkty.some((p) => p.etykieta === 'Claude: test skrzynki') && !fs.existsSync(skr);
     const punkty = (await lista()).punkty.map((p) => p.powod);
     await js('pokazHistorie(false)');
-    hist = { otwarcie: !!otwarcie, kopieSzablonu, wiersze, diff: diff.slice(0, 120), baner, przywrocony, punkty, zeSkrzynki };
-    hist.ok = !!otwarcie && kopieSzablonu >= 2 && wiersze >= 2 && /zmiana z innego edytora/.test(diff) && baner && przywrocony
+    hist = { otwarcie: !!otwarcie, bezKopii, siatkaOdstep, kopieSzablonu, wiersze, diff: diff.slice(0, 120), baner, przywrocony, punkty, zeSkrzynki };
+    hist.ok = !!otwarcie && bezKopii && siatkaOdstep && kopieSzablonu === kopiePrzed + 1 && po.punkty.some((p) => p.powod === 'siatka' && p.etykieta === 'Siatka bezpieczeństwa')
+      && po.punkty.some((p) => p.powod === 'eksport') && wiersze >= 2 && /druga zmiana/.test(diff) && baner && przywrocony
       && punkty.includes('przed przywróceniem') && zeSkrzynki;
   }
   // Eksport playingcards.io (poza przykładami): nowy pokój – stos na talię, wszystkie karty.
@@ -666,6 +684,7 @@ app.whenReady().then(async () => {
 
 app.on('activate', () => { if (!okno && port) { utworzOkno(); otworzSzablon(szablon); } });
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => historiaZamkniecie());
 app.on('before-quit', (e) => {                               // ⌘Q z niezapisanym szablonem
   if (!zmiany || testowy) return;
   e.preventDefault();

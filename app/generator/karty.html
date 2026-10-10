@@ -1253,7 +1253,9 @@ function pokazPorownanie(pokaz = $('porownanie').hidden) {
 $('porownaj').onclick = () => pokazPorownanie();
 
 // ── Historia wersji ─────────────────────────────────────────────────────────
-// Kopie robi aplikacja (historia.js) po każdym wczytaniu plików z dysku – tylko gdy treść się zmieniła.
+// Kopie robi aplikacja (historia.js) w ważnych chwilach – i tylko gdy treść pliku się zmieniła:
+// otwarcie projektu, eksport / druk / PDF (punkt z opisem), siatka bezpieczeństwa (co najwyżej raz na godzinę,
+// gdy coś się zmieniło), zamknięcie projektu (main.js), punkty nazwane i od innych narzędzi (skrzynka, konsola).
 let HIST_OTWARCIE = true;        // pierwsze wczytanie po otwarciu projektu = punkt „otwarcie”
 let PODGLAD_WERSJI = null;
 let EKSPORT_TRWA = false;        // eksport JPG / playingcards.io – bez przebudowy podglądu w trakcie       // czas oglądanej wersji (wtedy bez automatycznego odświeżania)
@@ -1261,11 +1263,19 @@ const plikiHistorii = () => serverPaths.filter((p) => p === SZABLON || /\.(csv|x
 async function zapiszHistorie(punkt = null) {
   if (!APP || !APP.historiaZapisz || PODGLAD_WERSJI) return;
   if (HIST_OTWARCIE) { punkt = punkt || { powod: 'otwarcie' }; HIST_OTWARCIE = false; }
+  else if (!punkt) return;                       // zwykłe wczytanie zmienionego pliku – bez kopii
   try { await APP.historiaZapisz(plikiHistorii(), punkt); } catch (e) { return; }
   if (!$('historia').hidden) pokazHistorie(true);
 }
+const punktHistorii = (etykieta) => zapiszHistorie({ powod: 'eksport', etykieta });
+// Siatka bezpieczeństwa: sprawdzana co 5 minut; kopia, gdy coś się zmieniło, a ostatnia kopia ma ponad godzinę.
+const SIATKA = { etykieta: 'Siatka bezpieczeństwa', odstep: 60 * 60 * 1000, co: 5 * 60 * 1000 };
+const siatkaHistorii = (odstep = SIATKA.odstep) =>
+  zapiszHistorie({ powod: 'siatka', etykieta: SIATKA.etykieta, jesliZmiany: true, minOdstep: odstep });
+setInterval(() => { if (!HIST_OTWARCIE) siatkaHistorii(); }, SIATKA.co);
+Object.assign(window, { siatkaHistorii, punktHistorii });
 const dataCzas = (t) => new Date(t).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const OPIS_PUNKTU = { otwarcie: 'otwarcie projektu', 'przed przywróceniem': 'stan sprzed przywrócenia', punkt: '' };
+const OPIS_PUNKTU = { otwarcie: 'otwarcie projektu', 'przed przywróceniem': 'stan sprzed przywrócenia', 'zamknięcie': 'zamknięcie projektu', punkt: '' };
 // Tekst pliku do porównania: CSV i szablon jako tekst, XLSX jako wiersze „a ; b ; c”.
 async function liniePliku(plik, dane) {
   const f = new File([dane], plik.split('/').pop());
@@ -1311,7 +1321,7 @@ async function pokazHistorie(pokaz = $('historia').hidden) {
     for (const pk of idx.punkty) chwila(pk.czas).punkty.push(pk);
     const lista = [...chwile.values()].sort((a, b) => b.czas - a.czas);
     p.innerHTML = zamknij + '<h3>Historia wersji</h3>' +
-      '<div class="opis">Kopia szablonu i plików z kartami powstaje przy każdej zapisanej zmianie (w folderze <code>.historia</code> projektu). Starsze kopie są przerzedzane: z ostatniej godziny co 5 min, z doby co godzinę, z miesiąca co dzień, starsze co tydzień. Punkty zostają zawsze.</div>' +
+      '<div class="opis">Kopia szablonu i plików z kartami (folder <code>.historia</code> projektu) powstaje, gdy coś się zmieniło: przy otwarciu projektu, eksporcie, druku i PDF, zamknięciu projektu oraz co najwyżej raz na godzinę jako <b>siatka bezpieczeństwa</b>. Starsze kopie są przerzedzane: z doby co godzinę, z miesiąca co dzień, starsze co tydzień. Punkty eksportów i nazwane zostają zawsze, siatki – 24 ostatnie.</div>' +
       '<div style="margin:6px 0"><input id="histNazwa" placeholder="np. przed playtestem 3" size="28"> <button id="histPunkt">Zapisz punkt</button></div>' +
       lista.map((c, n) => `<div class="wiersz" data-czas="${c.czas}"><b>${esc(dataCzas(c.czas))}</b>` +
         c.punkty.map((pk) => `<span class="punkt">${esc(pk.etykieta || OPIS_PUNKTU[pk.powod] || pk.powod)}</span>`).join('') +
@@ -1606,6 +1616,7 @@ function drukuj(o = {}) {
   const karty = kartyEksportu(o);
   if (!karty.length) { status('Brak kart do druku – sprawdź wybór kart i talii.'); return; }
   buildPrint({ ...o, karty }); window.print();
+  punktHistorii('druk');
 }
 window.drukuj = drukuj;
 
@@ -1652,6 +1663,7 @@ async function eksportObrazkow(o = {}) {
         await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
       }
       status(`Zapisano ${els.length} plików ${FMT} (${dpi} dpi) w ${folder}`);
+      punktHistorii(`eksport ${FMT} ${dpi} dpi`);
       APP.eksportKoniec();
       return { folder, pliki: els.length };
     } catch (e) {
@@ -1742,7 +1754,7 @@ async function zapiszKatalog(o = {}, cel = 'katalog') {
     const strony = await katalogPng(o);
     for (const s of strony) await APP.eksportPlik(s.nazwa, new Uint8Array(await s.blob.arrayBuffer()));
     status(strony.length ? `Zapisano katalog: ${strony.length} plików PNG w ${folder}` : 'Katalog: brak kart do pokazania.');
-    if (cel === 'katalog') APP.eksportKoniec();
+    if (cel === 'katalog') { APP.eksportKoniec(); punktHistorii('katalog talii'); }
     const talie = new Map();
     for (const s of strony) {
       const t = talie.get(s.talia) || talie.set(s.talia, { nazwa: s.talia, pliki: [], karty: 0, zaDlugie: s.zaDlugie }).get(s.talia);
@@ -1858,6 +1870,7 @@ async function eksportujPcio(o = {}) {
   const nazwa = PROJEKT + ' – playingcards.pcio';
   const zapisany = await APP.zapiszPcio(nazwa, dane);
   if (!zapisany) { status('Eksport do playingcards.io anulowany.'); return; }
+  punktHistorii('playingcards.io');
   status(`Zapisano ${zapisany} (${(dane.length / 1048576).toFixed(1)} MB) · ${report.join(' · ')} · w playingcards.io: Edit Table → Import room`);
   return { plik: zapisany, talie: report, holdery: widgets.filter((w) => w.type === 'holder').length,
            karty: widgets.filter((w) => w.type === 'card').length, obrazki: assets.size };
@@ -2033,7 +2046,7 @@ async function zapiszPdf(o = {}) {
   try {
     const plik = await APP.zapiszPdf(nazwa);
     status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
-    if (plik) await zapamietajDruk(karty);
+    if (plik) { await zapamietajDruk(karty); punktHistorii({ pojedyncze: 'PDF – osobne strony', drukarnia: 'PDF – drukarnia' }[o.uklad] || 'PDF A4'); }
     return plik;
   } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
 }
