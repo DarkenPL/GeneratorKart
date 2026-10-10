@@ -1623,9 +1623,48 @@ window.drukuj = drukuj;
 // ── Eksport JPG ──────────────────────────────────────────────────────────────
 
 // Obrazek karty: JPG – na białym tle (zaokrąglone rogi nie robią się czarne); PNG – z przezroczystymi rogami.
+// Czcionki do obrazków kart (html-to-image rysuje kartę w SVG i potrzebuje czcionek osadzonych jako data:).
+// Samo html-to-image nie umie ich pobrać: arkusz Google Fonts jest przekierowany na kopię w aplikacji
+// (inny adres – przeglądarka nie pozwala czytać jego reguł), więc obrazki wychodziły czcionką zastępczą.
+// Zbieramy CSS sami: czcionki wbudowane (/.app/fonts), CZCIONKA_PLIK (blob:) i CZCIONKA_GOOGLE (z internetu, latin/latin-ext).
+let CSS_CZCIONEK = null;
+async function cssCzcionek() {
+  const linki = [...document.querySelectorAll('link[rel=stylesheet][href^="https://fonts.googleapis.com"]')].map((l) => l.href);
+  const klucz = $('czcionki-szablonow').textContent + '|' + linki.join('|');
+  if (CSS_CZCIONEK && CSS_CZCIONEK.klucz === klucz) return CSS_CZCIONEK.css;
+  const naData = async (u) => {
+    const r = await fetch(u); if (!r.ok) throw new Error(u);
+    const b = await r.blob();
+    return new Promise((ok, zle) => { const f = new FileReader(); f.onload = () => ok(f.result); f.onerror = zle; f.readAsDataURL(b); });
+  };
+  const osadz = async (css, baza) => {
+    // Tylko alfabet łaciński (Google dzieli czcionkę na zakresy: cyrylica, grecki… – tych nie pobieramy).
+    css = css.replace(/\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{[^}]*\}/g, (m, zakres) => /^(cyrillic|greek|vietnamese|hebrew|arabic|devanagari|math|symbols|emoji)/.test(zakres) ? '' : m);
+    for (const u of new Set([...css.matchAll(/url\((['"]?)([^'")]+)\1\)/g)].map((m) => m[2]))) {
+      if (u.startsWith('data:')) continue;
+      try { css = css.split(u).join(await naData(new URL(u, baza).href)); } catch (e) { /* bez tej czcionki */ }
+    }
+    return css;
+  };
+  const czesci = [];
+  try {
+    const adres = new URL('/.app/fonts/fonts.css', location.href).href;
+    const r = await fetch(adres);
+    if (r.ok) czesci.push(await osadz(await r.text(), adres));
+  } catch (e) { /* poza aplikacją – bez czcionek wbudowanych */ }
+  czesci.push(await osadz($('czcionki-szablonow').textContent, location.href));
+  for (const href of linki) {
+    if (/EB\+Garamond/.test(href) && /Patrick\+Hand/.test(href)) continue;       // to są czcionki wbudowane
+    try { const r = await fetch(href); if (r.ok) czesci.push(await osadz(await r.text(), href)); } catch (e) { /* brak internetu */ }
+  }
+  CSS_CZCIONEK = { klucz, css: czesci.join('\n') };
+  return CSS_CZCIONEK.css;
+}
+
 async function obrazKarty(el, { dpi = CONFIG.jpgDpi, format = 'jpg' } = {}) {
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
-  const opts = { pixelRatio: dpi / 96, style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
+  const opts = { pixelRatio: dpi / 96, fontEmbedCSS: await cssCzcionek(),
+    style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
   let c;
   try { c = await htmlToImage.toCanvas(el, opts); } catch (e) { c = await htmlToImage.toCanvas(el, { ...opts, skipFonts: true }); }
   if (format === 'png') return new Promise((ok) => c.toBlob(ok, 'image/png'));
@@ -1675,7 +1714,7 @@ window.eksportObrazkow = eksportObrazkow;
 async function jpegBlob(el) { return obrazKarty(el); }   // tryb testowy (podgląd JPG)
 
 // ── Katalog talii ────────────────────────────────────────────────────────────
-// PNG na talię: siatka zmniejszonych kart (każda karta raz, z liczbą kopii) z podpisami „ID Nazwa ×kopie”.
+// JPG na talię: najpierw rewers, potem siatka zmniejszonych awersów (każda karta raz, z liczbą kopii) z podpisami „ID Nazwa ×kopie”.
 // Strona ma najwyżej ok. 2000×2000 px – większe talie dzielą się na kilka plików (_1, _2…).
 // Czytelne dla człowieka i dla modelu językowego (pkt 30 kolejki). Karty za długie mają czerwoną ramkę.
 const KATALOG = { dpi: 110, maks: 2000, odstep: 24, podpis: 40, naglowek: 64, margines: 32 };
@@ -1701,6 +1740,8 @@ async function katalogPng(o = {}) {
       }
       const lista = [...wiersze.values()];
       if (!lista.length) continue;
+      const rewers = section.querySelector('.karta.rewers');
+      if (rewers && !tylkoId.size) lista.unshift({ karta: rewers, kopie: 1, rewers: true });   // rewers na początku
       // Rozmiar miniatury i siatka strony.
       const [wmm, hmm] = cardMm(lista[0].karta);
       const tw = Math.round(wmm / 25.4 * KATALOG.dpi), th = Math.round(hmm / 25.4 * KATALOG.dpi);
@@ -1708,7 +1749,8 @@ async function katalogPng(o = {}) {
       const kol = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines + KATALOG.odstep) / kom));
       const wierszy = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines - KATALOG.naglowek + KATALOG.odstep) / rz));
       const naStrone = kol * wierszy, stron = Math.ceil(lista.length / naStrone);
-      const zaDlugie = lista.filter((x) => x.karta.classList.contains('za-dlugi')).map((x) => x.karta.dataset.id);
+      const zaDlugie = lista.filter((x) => !x.rewers && x.karta.classList.contains('za-dlugi')).map((x) => x.karta.dataset.id);
+      const awersy = lista.filter((x) => !x.rewers);
       for (let s = 0; s < stron; s++) {
         const czesc = lista.slice(s * naStrone, (s + 1) * naStrone);
         const k = Math.min(kol, czesc.length), r = Math.ceil(czesc.length / kol);
@@ -1721,9 +1763,9 @@ async function katalogPng(o = {}) {
         g.fillStyle = '#1d1b19'; g.font = `600 30px ${SANS}`; g.textBaseline = 'top';
         g.fillText(`${PROJEKT || ''} – ${talia}` + (stron > 1 ? ` (${s + 1}/${stron})` : ''), KATALOG.margines, KATALOG.margines);
         g.fillStyle = '#6b6560'; g.font = `18px ${SANS}`;
-        g.fillText(`${lista.length} kart, ${lista.reduce((a, x) => a + x.kopie, 0)} z kopiami · ${wmm}×${hmm} mm`, KATALOG.margines, KATALOG.margines + 36);
+        g.fillText(`${awersy.length} kart, ${awersy.reduce((a, x) => a + x.kopie, 0)} z kopiami · ${wmm}×${hmm} mm`, KATALOG.margines, KATALOG.margines + 36);
         for (let i = 0; i < czesc.length; i++) {
-          const { karta, kopie } = czesc[i];
+          const { karta, kopie, rewers: jestRewers } = czesc[i];
           status(`Katalog ${talia}: ${s * naStrone + i + 1}/${lista.length}…`);
           const x = KATALOG.margines + (i % kol) * kom, y = KATALOG.margines + KATALOG.naglowek + Math.floor(i / kol) * rz;
           const bmp = await createImageBitmap(await obrazKarty(karta, { dpi: KATALOG.dpi * 2, format: 'jpg' }));
@@ -1731,14 +1773,15 @@ async function katalogPng(o = {}) {
           g.drawImage(bmp, x, y, tw, th);
           g.strokeStyle = '#c9c4bd'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, tw - 1, th - 1);
           if (karta.classList.contains('za-dlugi')) { g.strokeStyle = '#d00'; g.lineWidth = 4; g.strokeRect(x - 2, y - 2, tw + 4, th + 4); }
+          if (jestRewers) { g.strokeStyle = '#2f6fd6'; g.lineWidth = 4; g.strokeRect(x - 3, y - 3, tw + 6, th + 6); }
           // Podpis: „ID Nazwa” (z tytułu karty, bez nazwy talii) i liczba kopii; przycięty do szerokości miniatury.
-          let t = (karta.title || '').replace(talia + ' ', '') + (kopie > 1 ? ` ×${kopie}` : '');
-          g.fillStyle = karta.classList.contains('za-dlugi') ? '#c00' : '#1d1b19'; g.font = `600 17px ${SANS}`;
+          let t = jestRewers ? 'Rewers' : (karta.title || '').replace(talia + ' ', '') + (kopie > 1 ? ` ×${kopie}` : '');
+          g.fillStyle = jestRewers ? '#2f6fd6' : karta.classList.contains('za-dlugi') ? '#c00' : '#1d1b19'; g.font = `600 17px ${SANS}`;
           while (t.length > 1 && g.measureText(t).width > tw) t = t.slice(0, -2) + '…';
           g.fillText(t, x, y + th + 8);
         }
-        const nazwa = slowoPliku(PROJEKT) + '_' + slowoPliku(talia) + (stron > 1 ? '_' + (s + 1) : '') + '.png';
-        wynik.push({ nazwa, blob: await new Promise((ok) => c.toBlob(ok, 'image/png')), talia, karty: czesc.length, zaDlugie });
+        const nazwa = slowoPliku(PROJEKT) + '_' + slowoPliku(talia) + (stron > 1 ? '_' + (s + 1) : '') + '.jpg';
+        wynik.push({ nazwa, blob: await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.9)), talia, karty: czesc.filter((x) => !x.rewers).length, zaDlugie });
       }
     }
   } finally { $('filtr').value = filtr; applyFilter(); }
@@ -1753,7 +1796,7 @@ async function zapiszKatalog(o = {}, cel = 'katalog') {
     if (!folder) { status('Katalog anulowany.'); return null; }
     const strony = await katalogPng(o);
     for (const s of strony) await APP.eksportPlik(s.nazwa, new Uint8Array(await s.blob.arrayBuffer()));
-    status(strony.length ? `Zapisano katalog: ${strony.length} plików PNG w ${folder}` : 'Katalog: brak kart do pokazania.');
+    status(strony.length ? `Zapisano katalog: ${strony.length} plików JPG w ${folder}` : 'Katalog: brak kart do pokazania.');
     if (cel === 'katalog') { APP.eksportKoniec(); punktHistorii('katalog talii'); }
     const talie = new Map();
     for (const s of strony) {
@@ -2066,7 +2109,7 @@ const OKNA = {
     przyciski: [['drukuj', 'Drukuj…'], ['pdf', 'Zapisz PDF']] },
   katalog: { tytul: 'Katalog talii', pola: ['talie'], domyslne: { pominTalie: [] },
     przyciski: [['ok', 'Zapisz katalog']],
-    opis: 'Każda talia jako obrazek PNG z siatką zmniejszonych kart i podpisami (ID, nazwa, liczba kopii) – do przeglądu, instrukcji i dla testerów. Pliki w folderze Export/katalog projektu.' },
+    opis: 'Każda talia jako obrazek JPG: rewers, a po nim zmniejszone awersy z podpisami (ID, nazwa, liczba kopii) – do przeglądu, instrukcji i dla testerów. Pliki w folderze Export/katalog projektu.' },
   pcio: { tytul: 'Pokój playingcards.io', pola: ['dpi', 'talie'],
     domyslne: { dpi: 150, pominTalie: [] },
     przyciski: [['ok', 'Zapisz pokój']],

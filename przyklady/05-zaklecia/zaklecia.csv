@@ -1,0 +1,9 @@
+ID,Ilość,Nazwa,Szkoła,Obrazek,Koszt,Opis,Cytat
+01,3,Kula ognia,ogień,Ikony/kula_ognia.svg,2,"Zadaj 3 obrażenia. Jeśli cel stoi obok wody, tylko 1.","Najpierw rzucasz, potem myślisz."
+02,2,Lodowy pocisk,lód,Ikony/lod.svg,1,"Zadaj 1 obrażenie i zamroź cel do końca rundy.","Zimno, zimniej, zamrożone."
+03,2,Łańcuch błyskawic,burza,Ikony/blyskawica.svg,3,"Zadaj 2 obrażenia celowi i każdemu sąsiadowi. Zapłać dodatkowo {mana}, by trafić też siebie (po co?).","Iskra lubi towarzystwo."
+04,1,Wir powietrza,burza,Ikony/tornado.svg,2,"Przesuń dowolną postać o 2 pola.","Kto sieje wiatr…"
+05,3,Szept liści,natura,Ikony/liscie.svg,1,"Ulecz 2 rany. Połącz z kartą {kolor-natura} – ulecz 3.","Las pamięta każdego wędrowca."
+06,2,Eliksir,natura,Ikony/eliksir.svg,0,"Odzyskaj {mana}{mana}.","Smakuje jak kompot z mchu."
+07,1,Kryształowa kula,wróżby,Ikony/krysztal.svg,2,"Podejrzyj 3 wierzchnie karty talii i ułóż je w dowolnej kolejności.",
+08,1,Runa ochrony,wróżby,Ikony/runa.svg,3,"Do twojej następnej tury karty {kolor-ogień} i {kolor-lód} nie zadają ci obrażeń.","Wyryta raz, chroni na zawsze. Prawie."
