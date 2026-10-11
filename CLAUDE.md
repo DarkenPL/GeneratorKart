@@ -88,12 +88,39 @@ Sekcje w kolejności w pliku:
 
 ## Testowanie (środowisko Claude)
 
+- **Najszybciej: `app/scripts/testuj.sh`** – przebudowuje `zasoby`, sprawdza składnię `main.js`/`preload.js`/`karty.html` i uruchamia `--test-edytor` na kopiach wszystkich przykładów **naraz** (≈ 1,5 min; po kolei było > 5 min). Jeden przykład w trakcie pracy: `scripts/testuj.sh 03-ogrod` (≈ 45 s). Dowolny projekt: `scripts/testuj.sh <…>/Szablony/gra.txt` (kopiuje cały folder projektu). `BEZ_EDYTORA=1` – szybki test bez `--test-edytor`. Wynik: wiersz na projekt + kod 0/1, pliki w `/tmp/gk-testy`.
 - Główne narzędzie: tryb testowy aplikacji pod Xvfb (patrz wyżej). Electron z npm pobiera się poprawnie; czcionki i biblioteki są lokalne, więc wynik jest jak na Macu.
 - Dokładność druku 1:1: `pdftoppm -r 300` i pomiar znaczników cięcia (odstępy 63,0 / 88,0 mm).
 - Zrzuty pojedynczych kart (porównanie przed/po zmianie silnika): Playwright (Chromium w `/opt/pw-browsers`) na `http://127.0.0.1:<port>/karty.html?szablon=…` z serwerem `node -e "require('./app/serwer').utworzSerwer({zasoby:'app/zasoby',projekt:()=>'<folder>'}).listen(8766)"`. CDN jest zablokowany: podmieniaj biblioteki przez `page.route` na pliki z `app/node_modules`.
 - Pobieranie artefaktów i wydań GitHuba z tego środowiska nie działa (blob storage zablokowany).
 - Błędy JS strony w trybie testowym: `--enable-logging=file --log-file=/tmp/el.log`, potem `grep CONSOLE`. Uwaga: funkcja globalna to też `window.nazwa` – `window.x = () => x()` daje nieskończoną rekurencję (test wisi).
 - Przed oddaniem zmiany przejrzyj wszystkie przykłady: zero Uwag i zero błędów strony.
+
+## Jak pracować szybko (wnioski z poprzednich sesji)
+
+Właściciel zwraca uwagę na czas pracy – mniej czekania, mniej czytania na ślepo.
+
+**Start sesji**
+- `git clone --depth 1` → `cd app && npm ci && npm run zasoby` (≈ 1 min). Mapa `karty.html` (≈ 2300 wierszy): `grep -n "^async function\|^function\|^const [A-Z_]* =" app/generator/karty.html`; opis sekcji – „Architektura” wyżej. Czytaj tylko potrzebne fragmenty.
+- Płytki klon ma w `remote.origin.fetch` tylko `main` – po wypchnięciu własnej gałęzi `git status` nie widzi jej na serwerze i hook zgłasza „unpushed commit”. Od razu po `git push -u`: `git config --add remote.origin.fetch '+refs/heads/<gałąź>:refs/remotes/origin/<gałąź>' && git fetch -q origin`.
+- `gh pr list` nie działa (GraphQL zablokowany) – tylko REST: `gh api repos/DarkenPL/GeneratorKart/pulls …`.
+
+**Pętla pracy**
+- Test uruchamia kopię `app/zasoby/karty.html`, nie `app/generator/karty.html` – po każdej zmianie `npm run zasoby` (robi to `scripts/testuj.sh`). Zapomniane = test starego kodu.
+- Nowa funkcja = nowy blok w `trybTestowy` (`main.js`) przed `await wc.executeJavaScript('buildPrint()')`, dopisany do `ok` i do JSON-a na końcu. Wzór: bloki `katalog`, `zlecenia`.
+- Tekst dopisany w teście na koniec szablonu trafia do ostatniej sekcji (w 02-kuznia to `[REWERS]`) – zmieniając karty w teście, celuj w konkretną sekcję albo w wiersz `PROJEKT =` (komentarz `;` za wartością!).
+- **Nie zmieniaj atrybutów ani struktury HTML kart** (`renderCard`, `data-*`, `title`) bez potrzeby: odcisk karty (`htmlKarty`) to jej HTML, więc po aktualizacji aplikacji wszystkie karty u właściciela byłyby „zmienione od ostatniego PDF”. Brakujące dane bierz z istniejących atrybutów (np. nazwa z `title`).
+- Błędy, które już raz kosztowały czas: `window.x = () => x()` (rekurencja, test wisi); zmienna lokalna o nazwie globalnej `szablon` w `main.js` (v0.4.0 – ReferenceError, domyślne menu); eksport bez `naWylacznosc()` (losowo padał co kilka przebiegów); odcisk plików z nieposortowanej listy (pętla odświeżania, v0.4.4); `html-to-image` bez `fontEmbedCSS` (czcionka zastępcza, v0.4.9).
+
+**CI i PR**
+- Workflow macOS trwa ≈ 8–10 min. Nie czekaj na niego bezczynnie w pętli: otwórz PR, napisz właścicielowi wynik testów lokalnych, a CI sprawdź raz na końcu (`gh api "repos/DarkenPL/GeneratorKart/actions/runs?branch=<gałąź>&per_page=1" --jq '.workflow_runs[0]|.status+" "+(.conclusion//"")'`). Gdy padnie: `…/actions/runs/<id>/jobs` → `…/actions/jobs/<id>/logs`.
+- Drobna poprawka do otwartego, niescalonego PR-a = commit na tę samą gałąź (bez nowego podbicia wersji).
+
+**Praca na Macu właściciela (podłączone foldery)**
+- Foldery gier są w powłoce na Macu pod `$HOME/mnt/<Folder>` (Ubuntu, Node 22, bez Electrona, bez sieci do GitHuba). Usuwanie plików jest tam domyślnie zablokowane.
+- `historia-cli.js` zostawia `.historia/indeks.lock`, którego bez zgody na usuwanie nie da się skasować (następny punkt czeka). Jeśli planujesz punkty historii – na początku poproś raz o zgodę na usuwanie w folderze gry (`device_request_delete_permission`). Skrypty (`historia.js` + `historia-cli.js`) przenieś do `$HOME/hist` (np. `base64` + `tar` w poleceniu).
+- Kopia projektu do testu u siebie: `device_stage_files` (do 50 plików na wywołanie; pliki lądują w `/mnt/user-data/uploads/<Folder>/…`), bez `*.indd`, `*.pdf`, `Export/`, `.historia/`, `.generator/`. Potem `scripts/testuj.sh /mnt/user-data/uploads/<Folder>/Szablony/gra.txt`. Danych gier nie kopiuj do repozytorium.
+- Gdy aplikacja właściciela jest otwarta na projekcie (od v0.4.11), PDF/obrazki/raport/stan rób **zleceniami z pliku** (`docs/aplikacja.md`, „Zlecenia z pliku”) – wynik jest z jego wersji aplikacji, bez kopiowania plików. Zlecenia wykonują się tylko w wersji, która je zna: przy braku `wynik-<polecenie>.json` po ~10 s sprawdź wersję aplikacji (`wersjaAplikacji` w `wynik-stan.json` albo zapytaj).
 
 ## Kolejka (do zrobienia)
 
@@ -167,6 +194,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
 - **v0.4.8** – historia wersji: kopie tylko w ważnych chwilach (decyzja 10.10.2026 – wcześniej przy każdym wczytaniu zmienionego pliku, za często). `zapiszHistorie()` po wczytaniu działa tylko przy otwarciu; `punktHistorii(etykieta)` (powód `eksport`) po PDF („PDF A4” / „PDF – drukarnia” / „PDF – osobne strony”), druku, eksporcie obrazków („eksport JPG 150 dpi”), playingcards.io i katalogu (A; zlecenia B – bez punktu); **siatka bezpieczeństwa** `siatkaHistorii()` co 5 min: powód `siatka`, etykieta „Siatka bezpieczeństwa”, `jesliZmiany` + `minOdstep` 1 h (opcje punktu w `historia.zapisz`, nie trafiają do indeksu); `historiaZamkniecie()` w main (`otworzSzablon`, `will-quit`; pliki z indeksu, `jesliZmiany`). Punkt bez nowych kopii z tym samym opisem co ostatni nie jest dublowany. Przerzedzanie punktów: otwarcie – 10, siatka – 24 ostatnie. ⌘S w edytorze – bez kopii. Testy: `test-historia.js` (siatka, odstęp, dedupe, limit 24), tryb testowy (`hist.bezKopii`, `hist.siatkaOdstep`, punkt `eksport`).
 - **v0.4.9** – przykłady 04-karawana i 05-zaklecia (funkcje nieobecne w 01–03); katalog: JPG, rewers przed awersami; **poprawka czcionek w obrazkach kart** (`cssCzcionek`, wcześniej JPG/PNG/playingcards.io/katalog miały czcionkę zastępczą); test PNG 300 dpi liczy szerokość z najwęższej karty. Jednostronicowy PDF „wszystkie karty” – makieta pokazana właścicielowi, czeka na decyzję.
 - **v0.4.10** – kolejka: pkt 35 (zlecenia z pliku dla całej gry: `pdf`, `obrazki`, `pcio`, `raport`, `stan`).
-- **v0.4.11** – 35. Zlecenia z pliku dla całej gry: `stan`, `raport`, `pdf`, `obrazki`, `pcio` (obok `katalog`), wynik `wynik-<polecenie>.json`, opis w `docs/aplikacja.md` („Zlecenia z pliku”). PDF ze zlecenia: nazwa domyślna jak przy ręcznym zapisie (nie `– karty.pdf`), żeby A4 i drukarnia się nie nadpisywały.
+- **v0.4.11** – `app/scripts/testuj.sh` (testy przykładów równolegle) i „Jak pracować szybko” w tym pliku. 35. Zlecenia z pliku dla całej gry: `stan`, `raport`, `pdf`, `obrazki`, `pcio` (obok `katalog`), wynik `wynik-<polecenie>.json`, opis w `docs/aplikacja.md` („Zlecenia z pliku”). PDF ze zlecenia: nazwa domyślna jak przy ręcznym zapisie (nie `– karty.pdf`), żeby A4 i drukarnia się nie nadpisywały.
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
