@@ -1253,7 +1253,9 @@ function pokazPorownanie(pokaz = $('porownanie').hidden) {
 $('porownaj').onclick = () => pokazPorownanie();
 
 // ── Historia wersji ─────────────────────────────────────────────────────────
-// Kopie robi aplikacja (historia.js) po każdym wczytaniu plików z dysku – tylko gdy treść się zmieniła.
+// Kopie robi aplikacja (historia.js) w ważnych chwilach – i tylko gdy treść pliku się zmieniła:
+// otwarcie projektu, eksport / druk / PDF (punkt z opisem), siatka bezpieczeństwa (co najwyżej raz na godzinę,
+// gdy coś się zmieniło), zamknięcie projektu (main.js), punkty nazwane i od innych narzędzi (skrzynka, konsola).
 let HIST_OTWARCIE = true;        // pierwsze wczytanie po otwarciu projektu = punkt „otwarcie”
 let PODGLAD_WERSJI = null;
 let EKSPORT_TRWA = false;        // eksport JPG / playingcards.io – bez przebudowy podglądu w trakcie       // czas oglądanej wersji (wtedy bez automatycznego odświeżania)
@@ -1261,11 +1263,19 @@ const plikiHistorii = () => serverPaths.filter((p) => p === SZABLON || /\.(csv|x
 async function zapiszHistorie(punkt = null) {
   if (!APP || !APP.historiaZapisz || PODGLAD_WERSJI) return;
   if (HIST_OTWARCIE) { punkt = punkt || { powod: 'otwarcie' }; HIST_OTWARCIE = false; }
+  else if (!punkt) return;                       // zwykłe wczytanie zmienionego pliku – bez kopii
   try { await APP.historiaZapisz(plikiHistorii(), punkt); } catch (e) { return; }
   if (!$('historia').hidden) pokazHistorie(true);
 }
+const punktHistorii = (etykieta) => zapiszHistorie({ powod: 'eksport', etykieta });
+// Siatka bezpieczeństwa: sprawdzana co 5 minut; kopia, gdy coś się zmieniło, a ostatnia kopia ma ponad godzinę.
+const SIATKA = { etykieta: 'Siatka bezpieczeństwa', odstep: 60 * 60 * 1000, co: 5 * 60 * 1000 };
+const siatkaHistorii = (odstep = SIATKA.odstep) =>
+  zapiszHistorie({ powod: 'siatka', etykieta: SIATKA.etykieta, jesliZmiany: true, minOdstep: odstep });
+setInterval(() => { if (!HIST_OTWARCIE) siatkaHistorii(); }, SIATKA.co);
+Object.assign(window, { siatkaHistorii, punktHistorii });
 const dataCzas = (t) => new Date(t).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const OPIS_PUNKTU = { otwarcie: 'otwarcie projektu', 'przed przywróceniem': 'stan sprzed przywrócenia', punkt: '' };
+const OPIS_PUNKTU = { otwarcie: 'otwarcie projektu', 'przed przywróceniem': 'stan sprzed przywrócenia', 'zamknięcie': 'zamknięcie projektu', punkt: '' };
 // Tekst pliku do porównania: CSV i szablon jako tekst, XLSX jako wiersze „a ; b ; c”.
 async function liniePliku(plik, dane) {
   const f = new File([dane], plik.split('/').pop());
@@ -1311,7 +1321,7 @@ async function pokazHistorie(pokaz = $('historia').hidden) {
     for (const pk of idx.punkty) chwila(pk.czas).punkty.push(pk);
     const lista = [...chwile.values()].sort((a, b) => b.czas - a.czas);
     p.innerHTML = zamknij + '<h3>Historia wersji</h3>' +
-      '<div class="opis">Kopia szablonu i plików z kartami powstaje przy każdej zapisanej zmianie (w folderze <code>.historia</code> projektu). Starsze kopie są przerzedzane: z ostatniej godziny co 5 min, z doby co godzinę, z miesiąca co dzień, starsze co tydzień. Punkty zostają zawsze.</div>' +
+      '<div class="opis">Kopia szablonu i plików z kartami (folder <code>.historia</code> projektu) powstaje, gdy coś się zmieniło: przy otwarciu projektu, eksporcie, druku i PDF, zamknięciu projektu oraz co najwyżej raz na godzinę jako <b>siatka bezpieczeństwa</b>. Starsze kopie są przerzedzane: z doby co godzinę, z miesiąca co dzień, starsze co tydzień. Punkty eksportów i nazwane zostają zawsze, siatki – 24 ostatnie.</div>' +
       '<div style="margin:6px 0"><input id="histNazwa" placeholder="np. przed playtestem 3" size="28"> <button id="histPunkt">Zapisz punkt</button></div>' +
       lista.map((c, n) => `<div class="wiersz" data-czas="${c.czas}"><b>${esc(dataCzas(c.czas))}</b>` +
         c.punkty.map((pk) => `<span class="punkt">${esc(pk.etykieta || OPIS_PUNKTU[pk.powod] || pk.powod)}</span>`).join('') +
@@ -1606,15 +1616,55 @@ function drukuj(o = {}) {
   const karty = kartyEksportu(o);
   if (!karty.length) { status('Brak kart do druku – sprawdź wybór kart i talii.'); return; }
   buildPrint({ ...o, karty }); window.print();
+  punktHistorii('druk');
 }
 window.drukuj = drukuj;
 
 // ── Eksport JPG ──────────────────────────────────────────────────────────────
 
 // Obrazek karty: JPG – na białym tle (zaokrąglone rogi nie robią się czarne); PNG – z przezroczystymi rogami.
+// Czcionki do obrazków kart (html-to-image rysuje kartę w SVG i potrzebuje czcionek osadzonych jako data:).
+// Samo html-to-image nie umie ich pobrać: arkusz Google Fonts jest przekierowany na kopię w aplikacji
+// (inny adres – przeglądarka nie pozwala czytać jego reguł), więc obrazki wychodziły czcionką zastępczą.
+// Zbieramy CSS sami: czcionki wbudowane (/.app/fonts), CZCIONKA_PLIK (blob:) i CZCIONKA_GOOGLE (z internetu, latin/latin-ext).
+let CSS_CZCIONEK = null;
+async function cssCzcionek() {
+  const linki = [...document.querySelectorAll('link[rel=stylesheet][href^="https://fonts.googleapis.com"]')].map((l) => l.href);
+  const klucz = $('czcionki-szablonow').textContent + '|' + linki.join('|');
+  if (CSS_CZCIONEK && CSS_CZCIONEK.klucz === klucz) return CSS_CZCIONEK.css;
+  const naData = async (u) => {
+    const r = await fetch(u); if (!r.ok) throw new Error(u);
+    const b = await r.blob();
+    return new Promise((ok, zle) => { const f = new FileReader(); f.onload = () => ok(f.result); f.onerror = zle; f.readAsDataURL(b); });
+  };
+  const osadz = async (css, baza) => {
+    // Tylko alfabet łaciński (Google dzieli czcionkę na zakresy: cyrylica, grecki… – tych nie pobieramy).
+    css = css.replace(/\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{[^}]*\}/g, (m, zakres) => /^(cyrillic|greek|vietnamese|hebrew|arabic|devanagari|math|symbols|emoji)/.test(zakres) ? '' : m);
+    for (const u of new Set([...css.matchAll(/url\((['"]?)([^'")]+)\1\)/g)].map((m) => m[2]))) {
+      if (u.startsWith('data:')) continue;
+      try { css = css.split(u).join(await naData(new URL(u, baza).href)); } catch (e) { /* bez tej czcionki */ }
+    }
+    return css;
+  };
+  const czesci = [];
+  try {
+    const adres = new URL('/.app/fonts/fonts.css', location.href).href;
+    const r = await fetch(adres);
+    if (r.ok) czesci.push(await osadz(await r.text(), adres));
+  } catch (e) { /* poza aplikacją – bez czcionek wbudowanych */ }
+  czesci.push(await osadz($('czcionki-szablonow').textContent, location.href));
+  for (const href of linki) {
+    if (/EB\+Garamond/.test(href) && /Patrick\+Hand/.test(href)) continue;       // to są czcionki wbudowane
+    try { const r = await fetch(href); if (r.ok) czesci.push(await osadz(await r.text(), href)); } catch (e) { /* brak internetu */ }
+  }
+  CSS_CZCIONEK = { klucz, css: czesci.join('\n') };
+  return CSS_CZCIONEK.css;
+}
+
 async function obrazKarty(el, { dpi = CONFIG.jpgDpi, format = 'jpg' } = {}) {
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
-  const opts = { pixelRatio: dpi / 96, style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
+  const opts = { pixelRatio: dpi / 96, fontEmbedCSS: await cssCzcionek(),
+    style: { boxShadow: 'none', outline: 'none', borderRadius: el.style.borderRadius || '0', margin: '0' } };
   let c;
   try { c = await htmlToImage.toCanvas(el, opts); } catch (e) { c = await htmlToImage.toCanvas(el, { ...opts, skipFonts: true }); }
   if (format === 'png') return new Promise((ok) => c.toBlob(ok, 'image/png'));
@@ -1652,6 +1702,7 @@ async function eksportObrazkow(o = {}) {
         await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
       }
       status(`Zapisano ${els.length} plików ${FMT} (${dpi} dpi) w ${folder}`);
+      punktHistorii(`eksport ${FMT} ${dpi} dpi`);
       APP.eksportKoniec();
       return { folder, pliki: els.length };
     } catch (e) {
@@ -1663,7 +1714,7 @@ window.eksportObrazkow = eksportObrazkow;
 async function jpegBlob(el) { return obrazKarty(el); }   // tryb testowy (podgląd JPG)
 
 // ── Katalog talii ────────────────────────────────────────────────────────────
-// PNG na talię: siatka zmniejszonych kart (każda karta raz, z liczbą kopii) z podpisami „ID Nazwa ×kopie”.
+// JPG na talię: najpierw rewers, potem siatka zmniejszonych awersów (każda karta raz, z liczbą kopii) z podpisami „ID Nazwa ×kopie”.
 // Strona ma najwyżej ok. 2000×2000 px – większe talie dzielą się na kilka plików (_1, _2…).
 // Czytelne dla człowieka i dla modelu językowego (pkt 30 kolejki). Karty za długie mają czerwoną ramkę.
 const KATALOG = { dpi: 110, maks: 2000, odstep: 24, podpis: 40, naglowek: 64, margines: 32 };
@@ -1689,6 +1740,8 @@ async function katalogPng(o = {}) {
       }
       const lista = [...wiersze.values()];
       if (!lista.length) continue;
+      const rewers = section.querySelector('.karta.rewers');
+      if (rewers && !tylkoId.size) lista.unshift({ karta: rewers, kopie: 1, rewers: true });   // rewers na początku
       // Rozmiar miniatury i siatka strony.
       const [wmm, hmm] = cardMm(lista[0].karta);
       const tw = Math.round(wmm / 25.4 * KATALOG.dpi), th = Math.round(hmm / 25.4 * KATALOG.dpi);
@@ -1696,7 +1749,8 @@ async function katalogPng(o = {}) {
       const kol = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines + KATALOG.odstep) / kom));
       const wierszy = Math.max(1, Math.floor((KATALOG.maks - 2 * KATALOG.margines - KATALOG.naglowek + KATALOG.odstep) / rz));
       const naStrone = kol * wierszy, stron = Math.ceil(lista.length / naStrone);
-      const zaDlugie = lista.filter((x) => x.karta.classList.contains('za-dlugi')).map((x) => x.karta.dataset.id);
+      const zaDlugie = lista.filter((x) => !x.rewers && x.karta.classList.contains('za-dlugi')).map((x) => x.karta.dataset.id);
+      const awersy = lista.filter((x) => !x.rewers);
       for (let s = 0; s < stron; s++) {
         const czesc = lista.slice(s * naStrone, (s + 1) * naStrone);
         const k = Math.min(kol, czesc.length), r = Math.ceil(czesc.length / kol);
@@ -1709,9 +1763,9 @@ async function katalogPng(o = {}) {
         g.fillStyle = '#1d1b19'; g.font = `600 30px ${SANS}`; g.textBaseline = 'top';
         g.fillText(`${PROJEKT || ''} – ${talia}` + (stron > 1 ? ` (${s + 1}/${stron})` : ''), KATALOG.margines, KATALOG.margines);
         g.fillStyle = '#6b6560'; g.font = `18px ${SANS}`;
-        g.fillText(`${lista.length} kart, ${lista.reduce((a, x) => a + x.kopie, 0)} z kopiami · ${wmm}×${hmm} mm`, KATALOG.margines, KATALOG.margines + 36);
+        g.fillText(`${awersy.length} kart, ${awersy.reduce((a, x) => a + x.kopie, 0)} z kopiami · ${wmm}×${hmm} mm`, KATALOG.margines, KATALOG.margines + 36);
         for (let i = 0; i < czesc.length; i++) {
-          const { karta, kopie } = czesc[i];
+          const { karta, kopie, rewers: jestRewers } = czesc[i];
           status(`Katalog ${talia}: ${s * naStrone + i + 1}/${lista.length}…`);
           const x = KATALOG.margines + (i % kol) * kom, y = KATALOG.margines + KATALOG.naglowek + Math.floor(i / kol) * rz;
           const bmp = await createImageBitmap(await obrazKarty(karta, { dpi: KATALOG.dpi * 2, format: 'jpg' }));
@@ -1719,14 +1773,15 @@ async function katalogPng(o = {}) {
           g.drawImage(bmp, x, y, tw, th);
           g.strokeStyle = '#c9c4bd'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, tw - 1, th - 1);
           if (karta.classList.contains('za-dlugi')) { g.strokeStyle = '#d00'; g.lineWidth = 4; g.strokeRect(x - 2, y - 2, tw + 4, th + 4); }
+          if (jestRewers) { g.strokeStyle = '#2f6fd6'; g.lineWidth = 4; g.strokeRect(x - 3, y - 3, tw + 6, th + 6); }
           // Podpis: „ID Nazwa” (z tytułu karty, bez nazwy talii) i liczba kopii; przycięty do szerokości miniatury.
-          let t = (karta.title || '').replace(talia + ' ', '') + (kopie > 1 ? ` ×${kopie}` : '');
-          g.fillStyle = karta.classList.contains('za-dlugi') ? '#c00' : '#1d1b19'; g.font = `600 17px ${SANS}`;
+          let t = jestRewers ? 'Rewers' : (karta.title || '').replace(talia + ' ', '') + (kopie > 1 ? ` ×${kopie}` : '');
+          g.fillStyle = jestRewers ? '#2f6fd6' : karta.classList.contains('za-dlugi') ? '#c00' : '#1d1b19'; g.font = `600 17px ${SANS}`;
           while (t.length > 1 && g.measureText(t).width > tw) t = t.slice(0, -2) + '…';
           g.fillText(t, x, y + th + 8);
         }
-        const nazwa = slowoPliku(PROJEKT) + '_' + slowoPliku(talia) + (stron > 1 ? '_' + (s + 1) : '') + '.png';
-        wynik.push({ nazwa, blob: await new Promise((ok) => c.toBlob(ok, 'image/png')), talia, karty: czesc.length, zaDlugie });
+        const nazwa = slowoPliku(PROJEKT) + '_' + slowoPliku(talia) + (stron > 1 ? '_' + (s + 1) : '') + '.jpg';
+        wynik.push({ nazwa, blob: await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.9)), talia, karty: czesc.filter((x) => !x.rewers).length, zaDlugie });
       }
     }
   } finally { $('filtr').value = filtr; applyFilter(); }
@@ -1741,8 +1796,8 @@ async function zapiszKatalog(o = {}, cel = 'katalog') {
     if (!folder) { status('Katalog anulowany.'); return null; }
     const strony = await katalogPng(o);
     for (const s of strony) await APP.eksportPlik(s.nazwa, new Uint8Array(await s.blob.arrayBuffer()));
-    status(strony.length ? `Zapisano katalog: ${strony.length} plików PNG w ${folder}` : 'Katalog: brak kart do pokazania.');
-    if (cel === 'katalog') APP.eksportKoniec();
+    status(strony.length ? `Zapisano katalog: ${strony.length} plików JPG w ${folder}` : 'Katalog: brak kart do pokazania.');
+    if (cel === 'katalog') { APP.eksportKoniec(); punktHistorii('katalog talii'); }
     const talie = new Map();
     for (const s of strony) {
       const t = talie.get(s.talia) || talie.set(s.talia, { nazwa: s.talia, pliki: [], karty: 0, zaDlugie: s.zaDlugie }).get(s.talia);
@@ -1858,6 +1913,7 @@ async function eksportujPcio(o = {}) {
   const nazwa = PROJEKT + ' – playingcards.pcio';
   const zapisany = await APP.zapiszPcio(nazwa, dane);
   if (!zapisany) { status('Eksport do playingcards.io anulowany.'); return; }
+  punktHistorii('playingcards.io');
   status(`Zapisano ${zapisany} (${(dane.length / 1048576).toFixed(1)} MB) · ${report.join(' · ')} · w playingcards.io: Edit Table → Import room`);
   return { plik: zapisany, talie: report, holdery: widgets.filter((w) => w.type === 'holder').length,
            karty: widgets.filter((w) => w.type === 'card').length, obrazki: assets.size };
@@ -2033,7 +2089,7 @@ async function zapiszPdf(o = {}) {
   try {
     const plik = await APP.zapiszPdf(nazwa);
     status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
-    if (plik) await zapamietajDruk(karty);
+    if (plik) { await zapamietajDruk(karty); punktHistorii({ pojedyncze: 'PDF – osobne strony', drukarnia: 'PDF – drukarnia' }[o.uklad] || 'PDF A4'); }
     return plik;
   } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
 }
@@ -2053,7 +2109,7 @@ const OKNA = {
     przyciski: [['drukuj', 'Drukuj…'], ['pdf', 'Zapisz PDF']] },
   katalog: { tytul: 'Katalog talii', pola: ['talie'], domyslne: { pominTalie: [] },
     przyciski: [['ok', 'Zapisz katalog']],
-    opis: 'Każda talia jako obrazek PNG z siatką zmniejszonych kart i podpisami (ID, nazwa, liczba kopii) – do przeglądu, instrukcji i dla testerów. Pliki w folderze Export/katalog projektu.' },
+    opis: 'Każda talia jako obrazek JPG: rewers, a po nim zmniejszone awersy z podpisami (ID, nazwa, liczba kopii) – do przeglądu, instrukcji i dla testerów. Pliki w folderze Export/katalog projektu.' },
   pcio: { tytul: 'Pokój playingcards.io', pola: ['dpi', 'talie'],
     domyslne: { dpi: 150, pominTalie: [] },
     przyciski: [['ok', 'Zapisz pokój']],

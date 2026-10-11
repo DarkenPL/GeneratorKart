@@ -76,3 +76,31 @@ Aplikacja ma w środku ich kopie (instalowane z npm przy budowaniu, nie są czę
 - [JSZip](https://stuk.github.io/jszip/) – MIT lub GPLv3
 - [SheetJS (xlsx)](https://sheetjs.com) – Apache 2.0
 - [Electron](https://www.electronjs.org) – MIT (aplikacja na Maca)
+
+### `przyklady/04-karawana`
+
+| Plik | Ikona | Autor |
+|---|---|---|
+| `Ikony/wielblad.svg` | [camel](https://game-icons.net/1x1/delapouite/camel.html) | Delapouite |
+| `Ikony/karawana.svg` | [caravan](https://game-icons.net/1x1/delapouite/caravan.html) | Delapouite |
+| `Ikony/palma.svg` | [palm-tree](https://game-icons.net/1x1/delapouite/palm-tree.html) | Delapouite |
+| `Ikony/amfora.svg` | [amphora](https://game-icons.net/1x1/delapouite/amphora.html) | Delapouite |
+| `Ikony/jedwab.svg` | [rolled-cloth](https://game-icons.net/1x1/delapouite/rolled-cloth.html) | Delapouite |
+| `Ikony/przyprawy.svg` | [powder](https://game-icons.net/1x1/lorc/powder.html) | Lorc |
+| `Ikony/monety.svg` | [two-coins](https://game-icons.net/1x1/delapouite/two-coins.html) | Delapouite |
+| `Ikony/waga.svg` | [scales](https://game-icons.net/1x1/lorc/scales.html) | Lorc |
+
+### `przyklady/05-zaklecia`
+
+| Plik | Ikona | Autor |
+|---|---|---|
+| `Ikony/kula_ognia.svg` | [fireball](https://game-icons.net/1x1/lorc/fireball.html) | Lorc |
+| `Ikony/lod.svg` | [ice-bolt](https://game-icons.net/1x1/lorc/ice-bolt.html) | Lorc |
+| `Ikony/blyskawica.svg` | [lightning-arc](https://game-icons.net/1x1/lorc/lightning-arc.html) | Lorc |
+| `Ikony/tornado.svg` | [tornado](https://game-icons.net/1x1/lorc/tornado.html) | Lorc |
+| `Ikony/liscie.svg` | [leaf-swirl](https://game-icons.net/1x1/lorc/leaf-swirl.html) | Lorc |
+| `Ikony/krysztal.svg` | [crystal-ball](https://game-icons.net/1x1/lorc/crystal-ball.html) | Lorc |
+| `Ikony/ksiega.svg` | [spell-book](https://game-icons.net/1x1/delapouite/spell-book.html) | Delapouite |
+| `Ikony/eliksir.svg` | [health-potion](https://game-icons.net/1x1/delapouite/health-potion.html) | Delapouite |
+| `Ikony/runa.svg` | [rune-stone](https://game-icons.net/1x1/lorc/rune-stone.html) | Lorc |
+| `Ikony/mana.svg` | [drop](https://game-icons.net/1x1/lorc/drop.html) | Lorc |

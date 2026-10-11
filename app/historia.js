@@ -1,7 +1,9 @@
 'use strict';
 // Historia wersji projektu: kopie szablonu i plików danych w ukrytym folderze `.historia/` projektu.
 // - kopia powstaje tylko wtedy, gdy treść pliku różni się od jego ostatniej kopii,
-// - punkty (otwarcie projektu, stan sprzed przywrócenia, punkty nazwane ręcznie) zapamiętują chwilę,
+// - kopie robi aplikacja w ważnych chwilach: otwarcie, eksport/druk/PDF, zamknięcie, siatka bezpieczeństwa
+//   (najwyżej co godzinę, gdy coś się zmieniło), punkty nazwane, punkty od innych narzędzi (skrzynka, konsola),
+// - punkty zapamiętują chwilę i jej opis,
 // - przerzedzanie: ostatnia godzina – 1 kopia / 5 min, doba – 1 / godz., 30 dni – 1 / dzień, starsze – 1 / tydzień.
 //   Zawsze zostaje najnowsza kopia każdego pliku i kopie potrzebne do odtworzenia stanu z każdego punktu.
 const fs = require('fs');
@@ -11,6 +13,7 @@ const crypto = require('crypto');
 const FOLDER = '.historia';
 const MIN = 60 * 1000, GODZ = 60 * MIN, DZIEN = 24 * GODZ;
 const MAKS_OTWARC = 10;            // tyle ostatnich punktów „otwarcie” zostaje
+const MAKS_SIATKA = 24;            // i tyle ostatnich punktów siatki bezpieczeństwa
 const SKRZYNKA = 'przychodzace';   // .historia/przychodzace/<nazwa>/: kopie plików + opis.txt od innych narzędzi
 
 const skrot = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
@@ -37,9 +40,9 @@ function kopiaZChwili(wersje, plik, czas) {
 
 // Które kopie i punkty zostają po przerzedzeniu (funkcja czysta – testowana w scripts/test-historia.js).
 function przerzedz({ wersje, punkty }, teraz = Date.now()) {
-  // Punkty „otwarcie”: tylko kilka ostatnich; reszta punktów (ręczne, przed przywróceniem) zostaje zawsze.
-  const otwarcia = punkty.filter((p) => p.powod === 'otwarcie').sort((a, b) => b.czas - a.czas);
-  const zbedne = new Set(otwarcia.slice(MAKS_OTWARC));
+  // Punkty „otwarcie” i „siatka”: tylko kilka ostatnich; reszta punktów (eksporty, ręczne, przed przywróceniem) zostaje zawsze.
+  const ostatnie = (powod, n) => punkty.filter((p) => p.powod === powod).sort((a, b) => b.czas - a.czas).slice(n);
+  const zbedne = new Set([...ostatnie('otwarcie', MAKS_OTWARC), ...ostatnie('siatka', MAKS_SIATKA)]);
   const punktyPo = punkty.filter((p) => !zbedne.has(p));
   const zostaja = new Set();
   const pliki = [...new Set(wersje.map((v) => v.plik))];
@@ -142,12 +145,21 @@ function zapiszPrzerzedzony(projekt, indeks, teraz) {
 }
 
 // Kopiuje pliki, które zmieniły się od ostatniej kopii. `punkt`: { powod, etykieta } – dodatkowo zapamiętuje chwilę.
+// Opcje punktu (nie są zapisywane):
+//   jesliZmiany – punkt tylko wtedy, gdy powstała nowa kopia (siatka bezpieczeństwa, zamknięcie),
+//   minOdstep   – ms; nic nie rób, jeśli ostatnia kopia jest młodsza (siatka: godzina).
+// Punkt bez nowych kopii z tym samym opisem co poprzedni punkt (np. drugi PDF bez zmian) nie jest dublowany.
 function zapisz(projekt, pliki, punkt = null, teraz = Date.now()) {
   return zBlokada(projekt, () => zapiszBezBlokady(projekt, pliki, punkt, teraz));
 }
 function zapiszBezBlokady(projekt, pliki, punkt, teraz) {
   const indeks = wczytajIndeks(projekt);
   const zeSkrzynki = importujSkrzynke(projekt, indeks);
+  const { jesliZmiany, minOdstep, ...pk } = punkt || {};
+  if (minOdstep && indeks.wersje.some((v) => v.czas > teraz - minOdstep)) {
+    if (zeSkrzynki) zapiszPrzerzedzony(projekt, indeks, teraz);
+    return 0;
+  }
   let nowe = 0;
   for (const plik of [...new Set(pliki)]) {
     const pelna = path.join(projekt, plik);
@@ -163,8 +175,14 @@ function zapiszBezBlokady(projekt, pliki, punkt, teraz) {
     indeks.wersje.push({ id, plik, czas: teraz, hash: h, rozmiar: dane.length });
     nowe++;
   }
-  if (punkt) indeks.punkty.push({ czas: teraz, powod: punkt.powod || 'punkt', etykieta: String(punkt.etykieta || '').slice(0, 200) });
-  if (!nowe && !punkt && !zeSkrzynki) return 0;
+  let dodajPunkt = !!punkt && (nowe > 0 || !jesliZmiany);
+  if (dodajPunkt && !nowe) {                       // bez zmian: nie powtarzaj tego samego punktu
+    const ost = indeks.punkty.reduce((a, p) => (!a || p.czas > a.czas ? p : a), null);
+    const ostKopia = Math.max(0, ...indeks.wersje.map((v) => v.czas));
+    if (ost && ost.czas >= ostKopia && ost.powod === (pk.powod || 'punkt') && ost.etykieta === String(pk.etykieta || '').slice(0, 200)) dodajPunkt = false;
+  }
+  if (dodajPunkt) indeks.punkty.push({ czas: teraz, powod: pk.powod || 'punkt', etykieta: String(pk.etykieta || '').slice(0, 200) });
+  if (!nowe && !dodajPunkt && !zeSkrzynki) return 0;
   zapiszPrzerzedzony(projekt, indeks, teraz);
   return nowe;
 }
