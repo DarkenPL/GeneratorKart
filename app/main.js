@@ -1,16 +1,21 @@
 'use strict';
-// Generator kart – aplikacja na macOS (Electron).
+// KarKa (Kawia Karciana, dawniej Generator kart) – aplikacja na macOS (Electron).
 // Okno pokazuje generator (generator/karty.html). Pliki projektu podaje lokalny serwer (serwer.js),
 // a biblioteki i czcionki są w aplikacji. Projekt otwiera się przez wskazanie pliku szablonu.
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { utworzSerwer } = require('./serwer');
 const historia = require('./historia');
+const aktualizacje = require('./aktualizacje');
 
-const ZASOBY = app.isPackaged ? path.join(process.resourcesPath, 'zasoby') : path.join(__dirname, 'zasoby');
+// Kod aplikacji: z paczki albo z nakładki po aktualizacji (start.js, nakladka.js). Zasoby leżą obok kodu
+// (nakładka, npm start) albo – w paczce – w Contents/Resources/zasoby.
+const KOD = global.GENERATOR_KOD || { zrodlo: 'paczka', dir: __dirname, wersja: app.getVersion(), wbudowana: app.getVersion() };
+const WERSJA = KOD.wersja;
+const ZASOBY = fs.existsSync(path.join(__dirname, 'zasoby', 'karty.html')) ? path.join(__dirname, 'zasoby') : path.join(process.resourcesPath, 'zasoby');
 const PRZYKLADY = path.join(ZASOBY, 'przyklady');
-const DOKUMENTACJA = 'https://github.com/DarkenPL/GeneratorKart#readme';
+const DOKUMENTACJA = 'https://github.com/DarkenPL/KarKa#readme';
 
 let okno = null;
 let szablon = null;          // otwarty plik szablonu (.txt)
@@ -20,6 +25,8 @@ let testowy = false;         // tryb testowy (CI) – bez otwierania okien Finde
 let zmiany = false;          // niezapisane zmiany w edytorze szablonu
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
+// Pierwszy start po zmianie nazwy (Generator kart → KarKa): ustawienia ze starego folderu danych.
+aktualizacje.przeniesDane(path.join(app.getPath('appData'), 'Generator kart'), app.getPath('userData'));
 const plikUstawien = () => path.join(app.getPath('userData'), 'ustawienia.json');
 function ustawienia() {
   try { return JSON.parse(fs.readFileSync(plikUstawien(), 'utf8')); } catch (e) { return { ostatnie: [] }; }
@@ -28,7 +35,9 @@ function zapiszUstawienia(u) {
   try { fs.mkdirSync(path.dirname(plikUstawien()), { recursive: true }); fs.writeFileSync(plikUstawien(), JSON.stringify(u, null, 2)); }
   catch (e) { /* bez zapisu ustawień aplikacja nadal działa */ }
 }
-const jestPrzykladem = (p) => !!p && path.resolve(p).startsWith(path.resolve(PRZYKLADY) + path.sep);
+// Przykłady są tylko do odczytu – także te z paczki, gdy działa nakładka (ostatnie projekty mogą wskazywać oba miejsca).
+const FOLDERY_PRZYKLADOW = [...new Set([PRZYKLADY, path.join(process.resourcesPath || '', 'zasoby', 'przyklady')].map((p) => path.resolve(p)))];
+const jestPrzykladem = (p) => !!p && FOLDERY_PRZYKLADOW.some((f) => path.resolve(p).startsWith(f + path.sep));
 const jestPlikiem = (p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } };
 const jestFolderem = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
 
@@ -87,7 +96,7 @@ async function otworzSzablon(plik) {
     app.addRecentDocument(szablon);
   }
   if (okno) {
-    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – Generator kart` : 'Generator kart');
+    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – KarKa` : 'KarKa');
     if (szablon) okno.setRepresentedFilename(szablon);
     const rel = szablon ? path.relative(projekt, szablon).split(path.sep).join('/') : '';
     okno.loadURL(`http://127.0.0.1:${port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
@@ -289,7 +298,7 @@ async function wykonajPlikZlecenia(polecenie) {
   if (!gotowa) return false;
   const wyniki = [path.join(folder, `wynik-${polecenie}.json`)];
   if (polecenie === 'katalog') wyniki.push(path.join(folder, 'wynik.json'));     // zgodność z v0.4.6–0.4.10
-  const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), wersjaAplikacji: app.getVersion() };
+  const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), wersjaAplikacji: WERSJA };
   let wynik;
   try {
     wyniki.forEach((w) => fs.rmSync(w, { force: true }));
@@ -311,7 +320,10 @@ async function wykonajPlikZlecenia(polecenie) {
 async function sprawdzZlecenia() {
   if (zlecenieTrwa || !historiaDostepna() || !okno) return;
   zlecenieTrwa = true;
-  try { for (const p of POLECENIA) if (projekt) await wykonajPlikZlecenia(p); }
+  try {
+    await zlecenieAktualizacji();
+    for (const p of POLECENIA) if (projekt) await wykonajPlikZlecenia(p);
+  }
   finally { zlecenieTrwa = false; }
 }
 setInterval(sprawdzZlecenia, 3000);
@@ -331,6 +343,124 @@ ipcMain.handle('historia:przywroc', (e, czas) => {
   return { zmienione: historia.przywroc(projekt, Number(czas)) };
 });
 
+// ── Aktualizacje ─────────────────────────────────────────────────────────────
+// Sprawdzanie: przy starcie (bez komunikatu, gdy brak nowej wersji albo internetu), z menu
+// (KarKa → Sprawdź aktualizacje…) i zleceniem z pliku .generator/zlecenia/aktualizacja.
+// Mała aktualizacja = nakładka kodu (restart), pełna = podmiana aplikacji po zamknięciu (aktualizacje.js).
+const AKT = { trwa: false, podmiana: null };     // podmiana: { nowa, stara, wersja } – czeka na zamknięcie aplikacji
+const MB = (b) => (b / 1048576).toLocaleString('pl-PL', { maximumFractionDigits: b < 10485760 ? 1 : 0 }) + ' MB';
+const pobieraj = (u, o) => net.fetch(u, o);
+const okienko = (o) => (okno ? dialog.showMessageBox(okno, o) : dialog.showMessageBox(o));
+const postepAktualizacji = (f) => { if (okno) okno.setProgressBar(f == null ? -1 : f); };
+
+function sprawdzWydanie() {
+  return aktualizacje.sprawdz({ wersja: WERSJA, electron: process.versions.electron, fetch: pobieraj });
+}
+// Pobranie i instalacja według wyniku sprawdzWydanie(). Mała – od razu do <dane>/kod; pełna – nowa .app
+// czeka na zamknięcie (AKT.podmiana).
+async function zainstalujAktualizacje(info) {
+  AKT.trwa = true; zbudujMenu();
+  try {
+    const dane = app.getPath('userData'), opcje = { fetch: pobieraj, postep: postepAktualizacji };
+    if (info.rodzaj === 'kod') { await aktualizacje.zainstalujKod(info, dane, opcje); return; }
+    const stara = aktualizacje.folderAplikacji();
+    if (!aktualizacje.moznaPodmienic(stara)) throw new Error(stara ? `Brak prawa zapisu w folderze ${path.dirname(stara)}.` : 'Aplikacja nie działa z paczki .app.');
+    AKT.podmiana = { nowa: await aktualizacje.przygotujPelna(info, dane, opcje), stara, wersja: info.najnowsza };
+  } finally { AKT.trwa = false; postepAktualizacji(null); zbudujMenu(); }
+}
+function uruchomPodmiane(uruchom) {
+  const p = AKT.podmiana;
+  if (!p) return;
+  AKT.podmiana = null;
+  aktualizacje.uruchomPodmiane(aktualizacje.zaplanujPodmiane({ nowa: p.nowa, stara: p.stara, uruchom, dane: app.getPath('userData') }));
+}
+// Zamknięcie i start nowej wersji (bez pytania – niezapisany szablon sprawdza wcześniej wywołujący).
+function zrestartuj() {
+  zmiany = false;
+  if (AKT.podmiana) uruchomPodmiane(true); else app.relaunch();
+  app.quit();
+}
+app.on('will-quit', () => uruchomPodmiane(false));         // pełna aktualizacja bez restartu – podmiana przy wyjściu
+
+async function sprawdzAktualizacje({ cicho }) {
+  if (AKT.trwa || testowy) return;
+  let info;
+  AKT.trwa = true;
+  try { info = await sprawdzWydanie(); }
+  catch (e) {
+    if (!cicho) okienko({ type: 'warning', message: 'Nie udało się sprawdzić aktualizacji.', detail: String((e && e.message) || e) });
+    return;
+  } finally { AKT.trwa = false; }
+  const u = ustawienia();
+  if (!info.dostepna) { if (!cicho) okienko({ type: 'info', message: `Masz najnowszą wersję (${WERSJA}).` }); return; }
+  if (cicho && u.pominWersje === info.najnowsza) return;
+  if (AKT.podmiana && AKT.podmiana.wersja === info.najnowsza) {
+    const r = await okienko({ type: 'info', buttons: ['Uruchom ponownie', 'Później'], defaultId: 0, cancelId: 1,
+      message: `Wersja ${info.najnowsza} jest pobrana.`, detail: 'Aplikacja podmieni się po zamknięciu.' });
+    if (r.response === 0 && await czyMoznaPorzucic()) zrestartuj();
+    return;
+  }
+  const opis = info.opis.replace(/\r/g, '').split('\n').map((l) => l.replace(/\s*by @\S+ in https?:\S+/, '').trim())
+    .filter((l) => l && !/^#+\s*(What's Changed|Full Changelog)|^\*\*Full Changelog/.test(l)).slice(0, 10).join('\n');
+  const jak = info.rodzaj === 'kod'
+    ? `Mała aktualizacja: ${MB(info.rozmiar)}. Aplikacja uruchomi się ponownie.`
+    : `Pełna aktualizacja (nowa wersja silnika Electron): ${MB(info.rozmiar)}. Po pobraniu aplikacja zamknie się, podmieni i uruchomi ponownie.`;
+  const r = await okienko({ type: 'info', buttons: ['Zainstaluj', 'Później', 'Pomiń tę wersję'], defaultId: 0, cancelId: 1,
+    message: `Dostępna jest wersja ${info.najnowsza} (masz ${WERSJA}).`, detail: jak + (opis ? '\n\nCo nowego:\n' + opis : '') });
+  if (r.response === 2) { u.pominWersje = info.najnowsza; zapiszUstawienia(u); return; }
+  if (r.response !== 0) return;
+  try { await zainstalujAktualizacje(info); }
+  catch (e) {
+    const r2 = await okienko({ type: 'error', buttons: ['Otwórz stronę wydania', 'Zamknij'], defaultId: 1, cancelId: 1,
+      message: 'Aktualizacja nie powiodła się.', detail: String((e && e.message) || e) + '\n\nMożesz pobrać plik DMG ze strony wydania.' });
+    if (r2.response === 0 && info.strona) shell.openExternal(info.strona);
+    return;
+  }
+  if (await czyMoznaPorzucic()) return zrestartuj();
+  okienko({ type: 'info', message: `Wersja ${info.najnowsza} uruchomi się przy następnym starcie aplikacji.` });
+}
+
+// Zlecenie z pliku .generator/zlecenia/aktualizacja: „instaluj = tak” (domyślnie tylko sprawdza),
+// „restart = nie” (domyślnie po instalacji restart – chyba że edytor ma niezapisane zmiany).
+// Wynik: wynik-aktualizacja.json; plik wyniku powstaje przed restartem.
+const TAK = (v) => /^(tak|t|true|1|yes)$/i.test(String(v).trim());
+async function zlecenieAktualizacji() {
+  const folder = path.join(projekt, ...FOLDER_ZLECEN), plik = path.join(folder, 'aktualizacja');
+  let tekst;
+  try { if (!fs.statSync(plik).isFile()) return; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return; }
+  const wynikPlik = path.join(folder, 'wynik-aktualizacja.json');
+  fs.rmSync(wynikPlik, { force: true });
+  const opcje = { instaluj: false, restart: true }, ostrzezenia = [];
+  for (const [k, v] of Object.entries(czytajZlecenie(tekst))) {
+    const kk = k.trim().toLowerCase();
+    if (kk === 'instaluj' || kk === 'restart') opcje[kk] = TAK(v); else ostrzezenia.push(`nieznany klucz „${k}” – pominięty`);
+  }
+  const wynik = { zlecenie: 'aktualizacja', czas: new Date().toISOString(), wersjaAplikacji: WERSJA, kod: KOD.zrodlo,
+    electron: process.versions.electron, opcje, ok: false, blad: null };
+  if (ostrzezenia.length) wynik.ostrzezenia = ostrzezenia;
+  let restart = false;
+  try {
+    if (AKT.trwa) throw new Error('aktualizacja już trwa');
+    const info = await sprawdzWydanie();
+    Object.assign(wynik, { ok: true, najnowsza: info.najnowsza, dostepna: info.dostepna, rodzaj: info.dostepna ? info.rodzaj : null,
+      rozmiar: info.dostepna ? info.rozmiar : 0, zainstalowano: false, restart: false });
+    if (opcje.instaluj && info.dostepna) {
+      await zainstalujAktualizacje(info);
+      wynik.zainstalowano = true;
+      wynik.niezapisaneZmiany = zmiany;
+      restart = wynik.restart = opcje.restart && !zmiany;
+      if (!restart) wynik.uwaga = info.rodzaj === 'kod' ? 'nowa wersja uruchomi się przy następnym starcie aplikacji'
+        : 'aplikacja podmieni się po zamknięciu';
+    }
+  } catch (e) { wynik.ok = false; wynik.blad = String((e && e.message) || e); }
+  try { fs.rmSync(plik, { force: true }); fs.writeFileSync(wynikPlik, JSON.stringify(wynik, null, 1)); } catch (e) { /* trudno */ }
+  if (restart && !testowy) setTimeout(zrestartuj, 500);
+}
+// Usunięcie znacznika startu nakładki – nowy kod uruchomił się poprawnie (nakladka.js).
+function potwierdzStart() {
+  if (KOD.znacznik) try { fs.rmSync(KOD.znacznik, { force: true }); } catch (e) { /* trudno */ }
+}
+
 // ── Menu ────────────────────────────────────────────────────────────────────
 const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).catch(() => {});
 
@@ -339,7 +469,21 @@ function zbudujMenu() {
   const przyk = listaPrzykladow();
   // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
   const menu = [
-    { role: 'appMenu', label: 'Generator kart' },
+    {
+      label: 'KarKa',
+      submenu: [
+        { role: 'about', label: 'O aplikacji KarKa' },
+        { label: 'Sprawdź aktualizacje…', enabled: !AKT.trwa, click: () => sprawdzAktualizacje({ cicho: false }) },
+        { type: 'separator' },
+        { role: 'services', label: 'Usługi' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Ukryj KarKę' },
+        { role: 'hideOthers', label: 'Ukryj pozostałe' },
+        { role: 'unhide', label: 'Pokaż wszystkie' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Zakończ KarKę' },
+      ],
+    },
     {
       label: 'Plik',
       submenu: [
@@ -407,11 +551,12 @@ function zbudujMenu() {
 // ── Okno ────────────────────────────────────────────────────────────────────
 function utworzOkno() {
   okno = new BrowserWindow({
-    width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'Generator kart',
+    width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'KarKa',
     backgroundColor: '#ece9e4', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   okno.once('ready-to-show', () => okno.show());
+  okno.webContents.once('did-finish-load', potwierdzStart);
   okno.on('page-title-updated', (e) => e.preventDefault());      // tytuł okna = nazwa projektu
   okno.on('closed', () => { okno = null; });
   okno.on('close', (e) => {                                   // niezapisany szablon przy zamykaniu okna
@@ -743,16 +888,36 @@ async function trybTestowy(folder, wynik) {
     z.nazwaKarty = nazwaKarty;
     zlecenia = z;
   }
+  // Aktualizacja zleceniem z pliku (--test-aktualizacja, serwer testowy w KARKA_AKTUALIZACJE;
+  // scripts/test-aktualizacje.js --electron): samo sprawdzenie, potem instalacja nakładki (bez restartu w teście).
+  let aktualizacja = null;
+  if (process.argv.includes('--test-aktualizacja') && !jestPrzykladem(szablon)) {
+    const zl = path.join(projekt, ...FOLDER_ZLECEN), wp = path.join(zl, 'wynik-aktualizacja.json');
+    fs.mkdirSync(zl, { recursive: true });
+    const zlec = async (tresc) => {
+      fs.rmSync(wp, { force: true }); fs.writeFileSync(path.join(zl, 'aktualizacja'), tresc);
+      for (let i = 0; i < 120; i++) { await czekaj(500); try { return JSON.parse(fs.readFileSync(wp, 'utf8')); } catch (e) { /* jeszcze nie */ } }
+      return null;
+    };
+    const spr = await zlec('');
+    const inst = await zlec('instaluj = tak\nnieznany = 1\n');
+    aktualizacja = { sprawdzenie: spr && { ok: spr.ok, dostepna: spr.dostepna, rodzaj: spr.rodzaj, zainstalowano: spr.zainstalowano, blad: spr.blad },
+      instalacja: inst && { ok: inst.ok, zainstalowano: inst.zainstalowano, restart: inst.restart, ostrzezenia: inst.ostrzezenia, blad: inst.blad } };
+    aktualizacja.ok = !!(spr && spr.ok && spr.dostepna && spr.rodzaj === 'kod' && !spr.zainstalowano
+      && inst && inst.ok && inst.zainstalowano && inst.restart && (inst.ostrzezenia || []).length === 1
+      && fs.existsSync(path.join(app.getPath('userData'), 'kod', 'main.js')));
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
   const menu = (Menu.getApplicationMenu()?.items || []).map((i) => i.label);
   const plik = Menu.getApplicationMenu()?.items.find((i) => i.label === 'Plik');
-  const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
+  const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon')
+    && Menu.getApplicationMenu().items[0].submenu.items.some((i) => i.label === 'Sprawdź aktualizacje…');
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
-    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, menu, pdf: wynik, ok }) + '\n');
+    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
@@ -771,6 +936,10 @@ app.whenReady().then(async () => {
   await new Promise((ok) => serwer.listen(0, '127.0.0.1', ok));
   port = serwer.address().port;
   przekierujCdn();
+  let nazwaWydania = '';
+  try { nazwaWydania = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).nazwaWydania || ''; } catch (e) { /* bez nazwy */ }
+  app.setAboutPanelOptions({ applicationName: 'KarKa', credits: 'Kawia Karciana – generator kart do gier (dawniej Generator kart)', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
+    version: `${KOD.zrodlo === 'nakładka' ? 'kod z aktualizacji, ' : ''}Electron ${process.versions.electron}` });
   utworzOkno();
 
   const argi = process.argv;
@@ -784,6 +953,7 @@ app.whenReady().then(async () => {
     return;
   }
   otworzSzablon(doOtwarcia || ostatnie()[0] || null);
+  setTimeout(() => sprawdzAktualizacje({ cicho: true }), 4000);
 });
 
 app.on('activate', () => { if (!okno && port) { utworzOkno(); otworzSzablon(szablon); } });

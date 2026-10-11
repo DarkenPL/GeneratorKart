@@ -1,8 +1,10 @@
-# Aplikacja Generator kart
+# Aplikacja KarKa (Kawia Karciana)
+
+KarKa to dawny **Generator kart** – od wersji 0.5.0 pod nową nazwą.
 
 ## Pobieranie
 
-**[Pobierz najnowszą wersję](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg)** (`Generator-kart.dmg`).
+**[Pobierz najnowszą wersję](https://github.com/DarkenPL/KarKa/releases/latest/download/KarKa.dmg)** (`KarKa.dmg`).
 
 Aplikacja działa na Macach z procesorem Apple (M1–M4). Jaki masz procesor, sprawdzisz w  → **Ten Mac** (pozycja „Układ”).
 
@@ -10,16 +12,33 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
 
 ## Instalacja i pierwsze uruchomienie
 
-1. Otwórz pobrany plik `Generator-kart.dmg` i w okienku przeciągnij **Generator kart** na folder **Programy**. Potem możesz go wysunąć (w Finderze ⏏) i skasować.
+1. Otwórz pobrany plik `KarKa.dmg` i w okienku przeciągnij **KarKa** na folder **Programy**. Potem możesz go wysunąć (w Finderze ⏏) i skasować.
 2. Aplikacja nie jest podpisana certyfikatem Apple (wymaga płatnego konta deweloperskiego), więc przy pierwszym uruchomieniu macOS ją zablokuje. Odblokowujesz ją raz:
    - kliknij aplikację **prawym przyciskiem → Otwórz → Otwórz**,
-   - albo, jeśli macOS pokaże tylko „Gotowe/Przenieś do Kosza”: otwórz **Ustawienia systemowe → Prywatność i ochrona**, przewiń w dół i kliknij **Otwórz mimo to** przy „Generator kart”.
+   - albo, jeśli macOS pokaże tylko „Gotowe/Przenieś do Kosza”: otwórz **Ustawienia systemowe → Prywatność i ochrona**, przewiń w dół i kliknij **Otwórz mimo to** przy „KarKa”.
 
    Gdyby macOS twierdził, że aplikacja jest „uszkodzona”, wpisz w Terminalu:
 
    ```
-   xattr -dr com.apple.quarantine "/Applications/Generator kart.app"
+   xattr -dr com.apple.quarantine "/Applications/KarKa.app"
    ```
+
+## Aktualizacje
+
+Od wersji 0.5.0 („Gołąb pocztowy”) aplikacja aktualizuje się sama – bez ponownego pobierania DMG i bez ponownego odblokowywania.
+
+**Przejście z Generatora kart (0.4.x):** zainstaluj KarKę z DMG jak przy pierwszej instalacji. Przy pierwszym uruchomieniu KarKa przejmie ostatnie projekty i ustawienia okien druku i eksportu. Starą aplikację **Generator kart** usuń potem z Programów (przenieś do Kosza); jej folder danych `~/Library/Application Support/Generator kart` też można skasować.
+
+- **Kiedy sprawdza:** przy każdym uruchomieniu (po kilku sekundach; bez komunikatu, gdy nie ma nowej wersji albo internetu), z menu **KarKa → Sprawdź aktualizacje…** i [zleceniem z pliku](#zlecenia-z-pliku) `aktualizacja`.
+- Gdy jest nowa wersja, okno pokazuje, co się zmieniło: **Zainstaluj**, **Później** albo **Pomiń tę wersję** (przy starcie aplikacja nie zapyta o nią ponownie; z menu – tak).
+- **Mała aktualizacja** (prawie zawsze, ok. 1 MB): pobiera się sam kod Generatora (silnik kart, okna, przykłady) do `~/Library/Application Support/KarKa/kod`, a aplikacja uruchamia się ponownie. Aplikacja w Programach się nie zmienia, więc macOS o nic nie pyta.
+- **Pełna aktualizacja** (ok. 120 MB): gdy nowa wersja ma nowszy Electron (silnik okna), pobiera się cała aplikacja. Po pobraniu aplikacja zamyka się, podmienia w Programach i uruchamia od nowa. macOS może wtedy raz zapytać o dostęp do folderów z projektami.
+- Przed ponownym uruchomieniem aplikacja pyta o niezapisane zmiany w edytorze szablonu.
+- Pobrane pliki są sprawdzane sumą kontrolną SHA-256 z wydania; uszkodzony plik nie zostanie zainstalowany.
+- Gdyby nowa wersja kodu nie uruchomiła się poprawnie, przy następnym starcie aplikacja wraca do wersji z Programów.
+- Pełna podmiana wymaga prawa zapisu w folderze aplikacji (konto administratora przy `/Applications`). Bez niego okno proponuje pobranie DMG ze strony wydania.
+
+Wersję, nazwę wydania i źródło kodu pokazuje **KarKa → O aplikacji KarKa** („kod z aktualizacji” = mała aktualizacja).
 
 ## Praca
 
@@ -28,7 +47,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
    **Plik → Otwórz szablon… (⌘O)** otwiera istniejący projekt: wskaż plik szablonu (`.txt`) swojej gry.
    - Szablon wskazuje resztę plików: dane kart (`DANE = …`), obrazki, czcionki.
    - Ścieżki liczą się od folderu projektu: tego, w którym leży szablon, albo folderu nad `Szablony`, gdy szablon leży w takim podfolderze.
-   - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → Generator kart**.
+   - Szablon możesz też otworzyć z Findera: prawy przycisk → **Otwórz za pomocą → KarKa**.
 2. Karty odświeżają się same po każdym zapisie szablonu, pliku z kartami albo obrazka.
 3. **Edytor szablonu** (przycisk **Edytor** albo ⌥⌘E) otwiera szablon w panelu obok kart:
    - kolorowanie składni: komendy, `[Kolumny]`, `{ikony}`, opcje, liczby, kolory (podkreślone swoim kolorem), komentarze;
@@ -103,6 +122,7 @@ Otwarta aplikacja wykonuje polecenia zapisane w plikach – bez klikania. Służ
 | `obrazki` | eksport JPG/PNG do `Export/` | `dpi` (150 / 300), `format` (jpg / png), `talie`, `id`, `rewersy` |
 | `pcio` | pokój playingcards.io w folderze projektu | `dpi`, `talie` |
 | `katalog` | katalog talii (JPG) do `.generator/katalog/` | `talie`, `id` |
+| `aktualizacja` | sprawdza, czy jest nowa wersja aplikacji; z `instaluj = tak` instaluje ją i uruchamia aplikację ponownie | `instaluj` (domyślnie `nie`), `restart` (domyślnie `tak`) |
 
 - `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10).
 - Brak klucza = ostatnie ustawienie z okna (Druk i PDF, Eksport obrazków, playingcards.io) albo domyślne. Zlecenie tych ustawień nie zmienia. Wyjątek: zlecenie zawsze bierze wszystkie karty (nie „zaznaczone”), chyba że `tylkoZmienione = tak`.
@@ -130,6 +150,7 @@ Wynik `wynik-pdf.json` (skrót):
 - Wspólne pola wyniku: `ok`, `pliki` (ścieżki względem folderu projektu; w katalogu – nazwy w `folder`), `uwagi`, `zaDlugie` (karty z za długim tekstem), `niezapisaneZmiany`, `blad`, `wersjaAplikacji`, `opcje` (opcje po uzupełnieniu z okna), `ostrzezenia` (np. nieznany klucz, brak karty o podanym ID).
 - Błędna wartość (np. `uklad = plakat`, nieistniejąca talia) – zlecenie nie jest wykonane: `ok: false` i opis w `blad`.
 - `katalog` zapisuje wynik także w dawnym `wynik.json` (zgodność ze starszymi wersjami).
+- `aktualizacja`: wynik (`wersjaAplikacji`, `najnowsza`, `dostepna`, `rodzaj` – `kod` albo `pelna`, `rozmiar`, `zainstalowano`, `restart`) powstaje przed ponownym uruchomieniem. Gdy edytor ma niezapisane zmiany albo `restart = nie`, nowa wersja uruchomi się przy następnym starcie (pełna – po zamknięciu aplikacji). Zlecenie nie pokazuje okien z pytaniami.
 
 ## Dla deweloperów
 
@@ -144,7 +165,8 @@ npm run dist       # budowanie .app (na macOS)
 - `app/main.js`: okno, menu, ostatnie projekty, zapis PDF, eksport do `Export/`, podmiana adresów CDN na zasoby lokalne.
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
-- Tryb testowy: `Generator kart [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- Tryb testowy: `KarKa [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- Aktualizacje: `app/start.js` (rozrusznik – wybiera kod z paczki albo nakładkę), `app/nakladka.js`, `app/aktualizacje.js`; pliki do wydania robi `app/scripts/paczka-kodu.js` (`kod.zip`, `aktualizacja.json`), a workflow dokłada `KarKa.zip` (`ditto` z `.app`). Test: `node app/scripts/test-aktualizacje.js [--electron]`. `--bez-nakladki` uruchamia kod z paczki.
 - `app/scripts/testuj.sh [przykład… | szablon.txt]`: na Linuksie z Xvfb przebudowuje zasoby i uruchamia tryb testowy na kopiach przykładów (domyślnie wszystkich, równolegle); wypisuje wiersz na projekt i kończy z kodem 0 albo 1.
 - `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` tworzy wydanie `v<wersja>` z DMG (wersja z `app/package.json`).
 

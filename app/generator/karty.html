@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generator kart</title>
+<title>KarKa</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Patrick+Hand&display=swap" rel="stylesheet">
 <style>
@@ -2381,7 +2381,7 @@ $('obrazkiPrzycisk').onclick = () => oknoObrazkow();
 // Ekran powitalny, gdy nie otwarto jeszcze szablonu.
 async function startAplikacji() {
   const przyklady = await APP.przyklady();
-  $('start').innerHTML = '<h2>Generator kart</h2>' +
+  $('start').innerHTML = '<h2>KarKa <span class="opis">– Kawia Karciana</span></h2>' +
     '<p>Otwórz <b>plik szablonu</b> (.txt) swojej gry. Szablon wskazuje plik z kartami (CSV/XLSX), ' +
     'obrazki i czcionki – generator wczyta je sam.</p>' +
     '<p><button class="glowny" id="startOtworz">Otwórz szablon…</button> <button id="startNowy">Nowy projekt…</button></p>' +
@@ -2396,7 +2396,7 @@ async function startAplikacji() {
 
 // Start
 (async () => {
-  if (!APP) { $('start').innerHTML = '<p>Ten plik jest częścią aplikacji Generator kart i działa tylko w niej.</p>'; return; }
+  if (!APP) { $('start').innerHTML = '<p>Ten plik jest częścią aplikacji KarKa i działa tylko w niej.</p>'; return; }
   const info = await APP.info();
   AUTO_ODSWIEZANIE = info.auto !== false;
   try { USTAWIENIA_OKIEN = (await APP.eksportUstawienia()) || {}; } catch (e) { USTAWIENIA_OKIEN = {}; }

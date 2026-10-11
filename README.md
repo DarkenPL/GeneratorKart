@@ -1,8 +1,8 @@
-# Generator kart
+# KarKa – Kawia Karciana
 
-**[⬇️ Pobierz aplikację na Maca](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg)** – najnowsza wersja, Mac z procesorem Apple (M1–M4) · [instalacja i pierwsze uruchomienie](docs/aplikacja.md)
+**[⬇️ Pobierz aplikację na Maca](https://github.com/DarkenPL/KarKa/releases/latest/download/KarKa.dmg)** – najnowsza wersja, Mac z procesorem Apple (M1–M4) · [instalacja i pierwsze uruchomienie](docs/aplikacja.md)
 
-Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a aplikacja na bieżąco pokazuje gotowe karty. Z aplikacji możesz:
+**KarKa** (Kawia Karciana, dawniej *Generator kart*) to generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV albo XLSX), wygląd opisujesz prostym plikiem tekstowym w stylu [nanDecka](https://www.nandeck.com/), a aplikacja na bieżąco pokazuje gotowe karty. Z aplikacji możesz:
 
 - **zapisać PDF do druku**: A4 ze znacznikami cięcia (karty 1:1, np. 63×88 mm) i z rewersami do druku dwustronnego, albo każda karta na osobnej stronie;
 - **wyeksportować obrazki** każdej karty (JPG albo PNG, 150 lub 300 dpi) do folderu `Export` projektu;
@@ -12,7 +12,7 @@ Generator kart do gier planszowych i karcianych. Karty trzymasz w arkuszu (CSV a
 
 ## Szybki start
 
-1. [Pobierz aplikację](https://github.com/DarkenPL/GeneratorKart/releases/latest/download/Generator-kart.dmg), otwórz pobrany plik i w okienku przeciągnij **Generator kart** na folder **Programy**.
+1. [Pobierz aplikację](https://github.com/DarkenPL/KarKa/releases/latest/download/KarKa.dmg), otwórz pobrany plik i w okienku przeciągnij **KarKa** na folder **Programy**. Kolejne wersje aplikacja instaluje sama ([aktualizacje](docs/aplikacja.md#aktualizacje)).
 2. Za pierwszym razem kliknij ją **prawym przyciskiem → Otwórz**. Aplikacja nie ma podpisu Apple, więc trzeba ją raz odblokować ([szczegóły](docs/aplikacja.md)).
 3. Na ekranie powitalnym wybierz **Nowy projekt…** (powstanie folder gry z gotowym szablonem, plikiem kart i ikonami), jeden z **przykładów** albo **Otwórz szablon…** swojej gry.
 
