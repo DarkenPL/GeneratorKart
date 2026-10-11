@@ -6,9 +6,9 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 
 Wnioski z porównania sesji z 9–11.10.2026 (łączone PR-y, kolizja wersji, nazwy talii właściciela w dokumentacji). Nad projektem pracuje równolegle kilka sesji Claude.
 
-- **Przed startem:** sprawdź otwarte PR-y i gałęzie (`gh api repos/DarkenPL/KarKa/pulls?state=open`, `git branch -r`). Gdy inna sesja pracuje nad tym samym punktem – zapytaj właściciela, nie rób tego drugi raz.
-- **Sesje z projektów gier** (prototypy u właściciela) zmieniają w repozytorium **tylko `CLAUDE.md`**: dopisują punkty do kolejki i poprawiają punkty, które same dodały. Bez zmian w kodzie i bez podnoszenia wersji (decyzja właściciela 11.10.2026).
-- **Start zadania tylko na wyraźny sygnał** („zrób”, „startuj”). „Dopisz do kolejki” = tylko wpis. Prośba o plik lokalny ≠ zmiana w repozytorium (PR #18).
+- **Przed startem:** sprawdź otwarte issues, PR-y i gałęzie (`gh api "repos/DarkenPL/KarKa/issues?state=open&per_page=100"` – lista zawiera też PR-y, `git branch -r`). Gdy inna sesja pracuje nad tym samym zadaniem – zapytaj właściciela, nie rób tego drugi raz.
+- **Sesje z projektów gier** (prototypy u właściciela) **nie zmieniają repozytorium** – błędy i pomysły zgłaszają jako issues z etykietami (patrz „Zadania”) i uzupełniają issues, które same założyły (decyzja właściciela 11.10.2026; od 12.10.2026 issues zamiast kolejki w tym pliku).
+- **Start zadania tylko na wyraźny sygnał** („zrób”, „startuj”). „Dopisz do kolejki” = tylko nowe issue (bez kodu i bez PR-a). Prośba o plik lokalny ≠ zmiana w repozytorium (PR #18).
 - **Jedno zadanie = jedna gałąź z aktualnego `origin/main` = jeden PR.** Nigdy PR zawierający inny niescalony PR (#20 ⊃ #19, #23 ⊃ #22 – właściciel zamykał duplikaty). Gdy nowe zadanie wymaga niescalonego PR-a – poczekaj na scalenie albo zapytaj.
 - **Wersja:** dopiero po sprawdzeniu `main` i otwartych PR-ów – kolejna wolna podwersja (0.4.8 była w dwóch PR-ach naraz).
 - **Przed każdym commitem:** przejrzyj `git diff --cached` pod kątem nazw z gier właściciela (talie, karty, postacie, nazwy projektów i folderów). W dokumentacji i testach tylko nazwy z `przyklady/`.
@@ -142,34 +142,15 @@ Właściciel zwraca uwagę na czas pracy – mniej czekania, mniej czytania na �
 - Kopia projektu do testu u siebie: `device_stage_files` (do 50 plików na wywołanie; pliki lądują w `/mnt/user-data/uploads/<Folder>/…`), bez `*.indd`, `*.pdf`, `Export/`, `.historia/`, `.generator/`. Potem `scripts/testuj.sh /mnt/user-data/uploads/<Folder>/Szablony/gra.txt`. Danych gier nie kopiuj do repozytorium.
 - Gdy aplikacja właściciela jest otwarta na projekcie (od v0.4.11), PDF/obrazki/raport/stan rób **zleceniami z pliku** (`docs/aplikacja.md`, „Zlecenia z pliku”) – wynik jest z jego wersji aplikacji, bez kopiowania plików. Zlecenia wykonują się tylko w wersji, która je zna: przy braku `wynik-<polecenie>.json` po ~10 s sprawdź wersję aplikacji (`wersjaAplikacji` w `wynik-stan.json` albo zapytaj).
 
-## Kolejka (do zrobienia)
+## Zadania (GitHub Issues)
 
-Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione punkty przechodzą do „Zrobione”, nowe dostają kolejny numer.
+Od 12.10.2026 kolejka zadań to **issues**: https://github.com/DarkenPL/KarKa/issues. Ten plik ich nie powtarza – lista: `gh api "repos/DarkenPL/KarKa/issues?state=open&per_page=100" --jq '.[] | select(.pull_request|not) | "#\(.number) \(.title) [\([.labels[].name]|join(", "))]"'`.
 
-37. **Wspólne arkusze dla talii o różnych rewersach (druk A4)** – **wysoki priorytet** (prośba właściciela 11.10.2026). Dziś `buildPrint` daje każdej talii (talia + rozmiar karty) osobne arkusze, bo arkusz rewersów to jeden rewers powtórzony w całej siatce. Projekt z wieloma małymi taliami (np. talie zleceń rozdzielone według rewersu, po 1–7 kart) drukuje się na prawie pustych arkuszach: u właściciela 131 kart → 67 stron A4 zamiast ok. 36.
-   - Plan: karty o tym samym rozmiarze układane kolejno na wspólnych arkuszach; arkusz rewersów składany **miejsce po miejscu** – na każdej pozycji rewers talii karty z odpowiadającej pozycji awersu, w odbiciu lustrzanym dla druku dwustronnego. Drukarka właściciela odwraca kartkę **wzdłuż dłuższej krawędzi** → w rzędzie kolumny w odwrotnej kolejności (por. pkt 29).
-   - Decyzje właściciela (11.10.2026): **karty idą ciągiem** (następna talia zaczyna się zaraz po poprzedniej, bez nowego rzędu); **puste miejsca zostają puste** (bez rewersu); opcja w oknie Druk i PDF („Talie na wspólnych arkuszach”) **domyślnie włączona**, z kluczem w zleceniu `pdf`.
-   - Do ustalenia przy realizacji: talia bez rewersu (puste miejsce na arkuszu rewersów), wpływ na przesunięcie rewersów (pkt 5) i znaczniki cięcia (siatka jak dziś).
-   - Układy `pojedyncze` i `drukarnia` bez zmian (tam strona = karta). Łączy się z pkt 29 (rewersy zależne od karty) – ten sam mechanizm „rewers per pozycja”.
-   - Test: przykład z kilkoma taliami po kilka kart – liczba stron, rewers na właściwej pozycji (lustro), zrzuty arkuszy awersów i rewersów.
-1. **Aplikacja – dalszy rozwój** (pomysły):
-   - wersja na Windows – **odłożona** (decyzja 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na `windows-latest`, test na żywym Windows),
-   - podpis i notaryzacja Apple (wymaga konta Apple Developer),
-   - skojarzenie folderów z aplikacją (przeciąganie na ikonę w Docku).
-2. Pola tekstowe z wysokością „auto” (rosnące z treścią do limitu) – pomysł.
-3. Edytor – etap 2 (bez decyzji): przesuwanie pól myszką na karcie z zapisem liczb do szablonu; ewentualnie podpowiadanie komend i nazw kolumn.
-4. **Spad w druku A4** (reszta pkt 4): spad jest już w układzie „Drukarnia” (pkt 33, `kartaZeSpadem`); w A4 i „osobnych stronach” – do decyzji (komenda `SPAD` albo pole w oknie). **Czeka na próbny wydruk u właściciela.**
-12. **Arkusz Google jako dane**: `DANE` z opublikowanego arkusza Google (CSV z linku), wymaga internetu; odświeżanie co jakiś czas.
-19. **Statystyki talii**: rozkład wartości kolumn (koszty, kolory, ikony, punkty) z uwzględnieniem kopii, wykresy w panelu jak Raport.
-20. **Porównanie z dowolną wersją z historii** (reszta pkt 20; „przed/teraz” od ostatniego PDF jest zrobione).
-21. **Eksport do Tabletop Simulator**: arkusze 10×7 kart w JPG (ostatnie pole = rewers ukryty lub osobny plik rewersu), liczba kart na arkusz podana do importu.
-22. **Katalog kart do PDF** (reszta): strony A4 ze zmniejszonymi kartami i podpisami – do instrukcji i dla testerów; katalog JPG jest zrobiony (pkt 30, `katalogPng`). Makieta (11.10.2026, decyzja właściciela: A4, projekt ~156 kart na 2 stronach): każda karta raz z „×kopie”, talie po kolei od rewersu (niebieska ramka), „(ciąg dalszy)” przy przejściu strony, nagłówek z nazwą projektu, numerem strony i datą; liczba stron = ⌈pozycje / 78⌉, skala automatyczna – największa (≤ 60%), przy której mieści się w tej liczbie stron. Czeka na akceptację makiety.
-25. **Pełna wersja konsolowa (CLI)** – odłożona: `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia, `--json`), `pdf`, `jpg`, `png <ID…>`. Część z historią zrobiona (pkt 26). Uwaga: w powłoce Linux na Macu właściciela (Ubuntu 22.04 arm64, Node 22, Xvfb, bez roota) Electron nie wystartuje – brak GTK3 i `libXss`, ports.ubuntu.com zablokowane; alternatywa: Chromium bez GTK z npm (np. `@sparticuz/chromium`) + `puppeteer-core`, albo renderowanie w środowisku Claude na kopii plików.
-29. **Rewersy zależne od karty** – **odłożone** (decyzja 10.10.2026). Plan: `[Kolumny]` i `jeśli=` w sekcji `[REWERS]` (rewers bez kolumn = wspólny jak dziś); podgląd z przełącznikiem rewersów, osobne pliki rewersów w eksporcie obrazków, w playingcards.io rewers dynamiczny (`cardTypes[…]['image-back']`), wykrywanie zmian także po rewersie. Druk A4: arkusz rewersów jako lustro arkusza awersów – drukarka właściciela odwraca kartkę **wzdłuż dłuższej krawędzi** (kolumny w odwrotnej kolejności). Sposób określania rewersu (kolumny w `[REWERS]` czy kolumna z obrazkiem) – do ustalenia.
-34. **CMYK w PDF dla drukarni** (reszta pkt 33, „na razie się nie przejmujemy” – 10.10.2026): `printToPDF` daje tylko RGB; konwersja przez Ghostscript (AGPL – nie dołączamy; opcja, gdy zainstalowany z Homebrew).
-### Roadmapa (niski priorytet)
-
-- **Generator stołów playingcards.io**: pełny stół z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania). Pierwszy krok – nowy pokój z taliami na stosach – zrobiony (pkt 27). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText (przykłady pól w pokoju właściciela).
+- **Tytuł:** dawne punkty kolejki mają numer w tytule (`[pkt 37] …`) – właściciel tak się do nich odwołuje. Nowe zadania nie dostają już numeru punktu, tylko numer issue (`#51`).
+- **Etykiety:** rodzaj – `funkcja`, `błąd`, `dokumentacja`; obszar – `obszar: druk`, `eksport`, `edytor`, `szablony`, `aplikacja`, `aktualizacje`, `zlecenia`; `priorytet: wysoki`; stan – `stan: pomysł`, `stan: czeka na decyzję` (decyzja albo test właściciela), `stan: odłożone` (świadomie odłożone – nie proponować bez pytania). Etykiety `dependencies` i `github_actions` zostają dla Dependabota.
+- **Treść:** plan, decyzje właściciela z datą, „do ustalenia”, test. Nowe decyzje – komentarz w issue (albo poprawka treści). Repozytorium i issues są **publiczne**: bez nazw talii, kart i projektów z gier właściciela.
+- **Realizacja:** start tylko na sygnał właściciela. PR z `Closes #N` (zamyka issue po scaleniu) + wpis w „Zrobione” poniżej (historia wersji z notatkami technicznymi).
+- **Przeniesienie (12.10.2026):** pkt 37 → #34, pkt 1 → #35 (Windows), #36 (podpis Apple), #37 (skojarzenie folderów), pkt 2 → #38, 3 → #39, 4 → #40, 12 → #41, 19 → #42, 20 → #43, 21 → #44, 22 → #45, 25 → #46, 29 → #47, 34 → #48, roadmapa (stół playingcards.io) → #49, ikona z kawią → #50 (pkt 38).
 
 ## Zrobione
 
