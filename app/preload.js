@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('generatorApp', {
   otworzPrzyklad: (nazwa) => ipcRenderer.invoke('projekt:przyklad', nazwa),
   pokazFolder: () => ipcRenderer.invoke('projekt:pokaz'),
   zapiszPdf: (nazwa) => ipcRenderer.invoke('pdf:zapisz', nazwa),
+  zapiszPdfZlecenia: (plik) => ipcRenderer.invoke('zlecenie:pdf', plik),
   zapiszSzablon: (tekst) => ipcRenderer.invoke('edytor:zapisz', tekst),
   edytorZmiany: (czy) => ipcRenderer.invoke('edytor:zmiany', !!czy),
   odciski: () => ipcRenderer.invoke('druk:odciski'),

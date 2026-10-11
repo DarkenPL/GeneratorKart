@@ -341,8 +341,9 @@ $('filtr').onchange = applyFilter;
 
 // Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików (jedno sprawdzenie naraz).
 let SPRAWDZANIE = false;
+let ZLECENIE_TRWA = false, ZLECENIE_Z_DYSKU = false;   // zlecenie z pliku – bez automatycznego odświeżania w trakcie
 setInterval(async () => {
-  if (SPRAWDZANIE || !AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA) return;
+  if (SPRAWDZANIE || !AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA || ZLECENIE_TRWA) return;
   SPRAWDZANIE = true;
   try {
     const stamp = await serverStamp();
@@ -1066,6 +1067,7 @@ async function zbudujTeraz() {
   for (const a of u.querySelectorAll('[data-linia]')) a.onclick = (e) => { e.preventDefault(); idzDoLinii(+a.dataset.linia); };
   u.classList.toggle('widoczne', warn.size > 0);
   if (!$('raport').hidden) pokazRaport(true);
+  window.zbudowano = true;                       // zlecenia z pliku czekają na pierwsze karty
 }
 
 // ── Raport projektu ─────────────────────────────────────────────────────────
@@ -1449,8 +1451,12 @@ $('wyborCzysc').onclick = () => {
 // Talie ukryte filtrem podglądu też się liczą – o taliach decyduje okno.
 function kartyEksportu(o = {}) {
   const pomin = new Set(o.pominTalie || []);
+  // Zlecenia z pliku: o.talie – tylko te talie, o.id – tylko te ID (bez wielkości liter i polskich znaków).
+  const tylkoTalie = new Set((o.talie || []).map(plain)), tylkoId = new Set((o.id || []).map((x) => plain(String(x))));
   let k = [...$('podglad').querySelectorAll('.talia')].filter((s) => !pomin.has(s.dataset.talia))
+    .filter((s) => !tylkoTalie.size || tylkoTalie.has(plain(s.dataset.talia)))
     .flatMap((s) => [...s.querySelectorAll('.karta:not(.rewers)')]);
+  if (tylkoId.size) k = k.filter((x) => tylkoId.has(plain(x.dataset.id || '')));
   if (o.ktore === 'zaznaczone') k = k.filter((x) => x.classList.contains('wybrana'));
   if (o.ktore === 'zmienione') k = k.filter((x) => x.classList.contains('zmieniona') || x.classList.contains('nowa'));
   return k;
@@ -1688,7 +1694,7 @@ async function eksportObrazkow(o = {}) {
       if (!folder) { status('Eksport obrazków anulowany.'); return; }
       const talie = new Set(karty.map((k) => k.dataset.talia));
       const rewersy = o.rewersy === false ? [] : [...$('podglad').querySelectorAll('.siatka .karta.rewers')].filter((k) => talie.has(k.dataset.talia));
-      const els = karty.concat(rewersy);
+      const els = karty.concat(rewersy), nazwy = [];
       // NazwaProjektu_NazwaTalii_NumerKarty_NumerKopii.jpg, rewers: NazwaProjektu_NazwaTalii_rewers.jpg
       const bezZnakow = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
       const slowo = (t) => bezZnakow(t).split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'X';
@@ -1700,13 +1706,15 @@ async function eksportObrazkow(o = {}) {
         const name = przed + (el.classList.contains('rewers') ? 'rewers' : numer(el.dataset.id) + '_' + (el.dataset.kopia || 1)) + '.' + format;
         const blob = await obrazKarty(el, { dpi, format });
         await APP.eksportPlik(name, new Uint8Array(await blob.arrayBuffer()));
+        nazwy.push(name);
       }
       status(`Zapisano ${els.length} plików ${FMT} (${dpi} dpi) w ${folder}`);
-      punktHistorii(`eksport ${FMT} ${dpi} dpi`);
-      APP.eksportKoniec();
-      return { folder, pliki: els.length };
+      punktHistorii(`eksport ${FMT} ${dpi} dpi` + (o.zlecenie ? ' (zlecenie)' : ''));
+      if (!o.zlecenie) APP.eksportKoniec();                 // zlecenie z pliku – bez otwierania Findera
+      return { folder, pliki: els.length, nazwy };
     } catch (e) {
       status('Eksport obrazków nie powiódł się: ' + ((e && e.message) || e));
+      if (o.zlecenie) throw e;
     }
   });
 }
@@ -1823,6 +1831,169 @@ async function zlecenieKatalogu(o = {}) {
 }
 Object.assign(window, { katalogPng, zapiszKatalog, oknoKatalogu, zlecenieKatalogu });
 
+// ── Zlecenia z pliku dla całej gry (pkt 35) ─────────────────────────────────
+// Aplikacja (main.js) co 3 s szuka plików .generator/zlecenia/<polecenie> w otwartym projekcie i woła
+// wykonajZlecenie(polecenie, { klucz: 'wartość' }). Brak klucza = ostatnie ustawienie z okna (USTAWIENIA_OKIEN)
+// albo domyślne; zlecenie tych ustawień nie zmienia. Przy niezapisanych zmianach w edytorze karty powstają
+// z wersji szablonu na dysku (wynik: niezapisaneZmiany = true), a po zleceniu wraca podgląd z edytora.
+const KLUCZE_ZLECEN = {
+  katalog: ['talie', 'id'],
+  stan: [],
+  raport: [],
+  pdf: ['uklad', 'ciecie', 'rewersy', 'szkic', 'spad', 'talie', 'id', 'tylkozmienione', 'plik'],
+  obrazki: ['dpi', 'format', 'talie', 'id', 'rewersy'],
+  pcio: ['dpi', 'talie'],
+};
+const ALIASY_ZLECEN = { talia: 'talie', rewers: 'rewersy', zmienione: 'tylkozmienione', rozdzielczosc: 'dpi' };
+const OKNO_ZLECENIA = { pdf: 'druk', obrazki: 'obrazki', pcio: 'pcio' };
+const nazwyTalii = () => [...$('podglad').querySelectorAll('.talia')].map((s) => s.dataset.talia);
+
+function opcjeZlecenia(polecenie, surowe = {}) {
+  const dozwolone = KLUCZE_ZLECEN[polecenie];
+  if (!dozwolone) throw new Error(`nieznane zlecenie „${polecenie}” (są: ${Object.keys(KLUCZE_ZLECEN).join(', ')})`);
+  const bledy = [], ostrzezenia = [], v = {};
+  for (const [k0, wart] of Object.entries(surowe)) {
+    const k1 = plain(k0).replace(/_/g, ''), k = ALIASY_ZLECEN[k1] || k1;
+    if (!dozwolone.includes(k)) { ostrzezenia.push(`nieznany klucz „${k0}” – pominięty`); continue; }
+    v[k] = String(wart).trim();
+  }
+  const okno = OKNO_ZLECENIA[polecenie];
+  const o = okno ? { ...OKNA[okno].domyslne, ...(USTAWIENIA_OKIEN[okno] || {}) } : {};
+  const lista = (x) => x.split(',').map((y) => y.trim()).filter(Boolean);
+  const tak = (k) => {
+    const x = plain(v[k]);
+    if (/^(tak|t|true|1|yes)$/.test(x)) return true;
+    if (/^(nie|n|false|0|no)$/.test(x)) return false;
+    bledy.push(`${k}: „${v[k]}” – wpisz tak albo nie`);
+  };
+  const wybor = (k, mozliwe, mapa = {}) => {
+    const x = mapa[plain(v[k])] || plain(v[k]);
+    if (mozliwe.includes(x)) return x;
+    bledy.push(`${k}: „${v[k]}” – możliwe: ${mozliwe.join(', ')}`);
+  };
+  const liczba = (k, min, max) => {
+    const x = parseFloat(v[k].replace(',', '.'));
+    if (Number.isFinite(x) && x >= min && x <= max) return x;
+    bledy.push(`${k}: „${v[k]}” – liczba od ${min} do ${max}`);
+  };
+  if (v.talie !== undefined) {
+    o.talie = lista(v.talie); o.pominTalie = [];
+    const sa = nazwyTalii(), jest = new Set(sa.map(plain));
+    for (const t of o.talie) if (!jest.has(plain(t))) bledy.push(`nie ma talii „${t}” (są: ${sa.join(', ')})`);
+  }
+  if (v.id !== undefined) o.id = lista(v.id);
+  if (v.uklad !== undefined) o.uklad = wybor('uklad', ['a4', 'pojedyncze', 'drukarnia'], { osobne: 'pojedyncze' });
+  if (v.ciecie !== undefined) o.ciecie = wybor('ciecie', ['znaczniki', 'nozyczki', 'oba'], { linie: 'nozyczki' });
+  if (v.rewersy !== undefined) o.rewersy = tak('rewersy');
+  if (v.szkic !== undefined) o.szkic = tak('szkic');
+  if (v.spad !== undefined) o.spad = liczba('spad', 0, 10);
+  if (v.dpi !== undefined) o.dpi = Math.round(liczba('dpi', 50, 600) || 0);
+  if (v.format !== undefined) o.format = wybor('format', ['jpg', 'png'], { jpeg: 'jpg' });
+  if (v.plik !== undefined) o.plik = v.plik;
+  if (polecenie === 'pdf') o.ktore = v.tylkozmienione !== undefined && tak('tylkozmienione') ? 'zmienione' : 'wszystkie';
+  if (polecenie === 'obrazki') o.ktore = 'wszystkie';
+  if (bledy.length) throw new Error(bledy.join('; '));
+  return { o, ostrzezenia };
+}
+
+// Uwagi, karty za długie i stan edytora – wspólne pola wyniku każdego zlecenia.
+function stanZlecenia() {
+  return {
+    uwagi: ($('uwagi').innerText || '').split('\n').map((x) => x.trim()).filter((x) => x && x !== 'Uwagi:'),
+    zaDlugie: [...$('podglad').querySelectorAll('.karta.za-dlugi:not(.rewers)')].map((k) => k.title).filter((t, i, a) => a.indexOf(t) === i),
+    niezapisaneZmiany: !!ED.zmiany,
+  };
+}
+
+// Talie i karty (każdy wiersz danych raz, z liczbą kopii) ze stanem względem ostatniego PDF.
+function stanKart() {
+  const talie = [...$('podglad').querySelectorAll('.talia')].map((s) => {
+    const nazwa = s.dataset.talia, wiersze = new Map();
+    for (const k of s.querySelectorAll('.karta:not(.rewers)')) {
+      let w = wiersze.get(k.dataset.row);
+      if (!w) {
+        const przed = nazwa + ' ' + k.dataset.id;
+        w = { id: k.dataset.id, nazwa: k.title.startsWith(przed) ? k.title.slice(przed.length).trim() : k.title, kopie: 0 };
+        wiersze.set(k.dataset.row, w);
+      }
+      w.kopie++;
+      if (k.classList.contains('zmieniona')) w.zmieniona = true;
+      if (k.classList.contains('nowa')) w.nowa = true;
+      if (k.classList.contains('za-dlugi')) w.zaDluga = true;
+    }
+    const karty = [...wiersze.values()];
+    return { nazwa, rewers: !!s.querySelector('.karta.rewers'), karty: karty.length, kopie: karty.reduce((a, k) => a + k.kopie, 0), lista: karty };
+  });
+  const jakie = (cecha) => talie.flatMap((t) => t.lista.filter((k) => k[cecha]).map((k) => `${t.nazwa} ${k.id}`));
+  return { projekt: PROJEKT, wersja: WERSJA || null, ostatniPdf: ODCISKI ? ODCISKI.data : null,
+    karty: talie.reduce((a, t) => a + t.karty, 0), kopie: talie.reduce((a, t) => a + t.kopie, 0),
+    zmienione: ODCISKI ? jakie('zmieniona') : null, nowe: ODCISKI ? jakie('nowa') : null, talie };
+}
+
+// Raport projektu (to samo co panel Raport) jako lista sekcji z pozycjami tekstowymi.
+async function raportJson() {
+  const d = document.createElement('div');
+  d.innerHTML = await raportProjektu();
+  return [...d.querySelectorAll('h3')].map((h) => {
+    const nast = h.nextElementSibling;
+    const pozycje = nast && nast.tagName === 'UL' ? [...nast.querySelectorAll('li')].map((li) => li.textContent.trim()) : [];
+    return { tytul: h.textContent.trim(), ok: !!(nast && nast.classList.contains('ok')), pozycje };
+  });
+}
+
+const ZADANIA_ZLECEN = {
+  async katalog(o) {
+    const r = await zapiszKatalog({ talie: o.talie, id: o.id }, 'zlecenie');
+    return { ok: !!r, ...(r || {}) };
+  },
+  async stan() { return { ok: true, ...stanKart() }; },
+  async raport() { return { ok: true, raport: await raportJson() }; },
+  async pdf(o) {
+    const karty = kartyEksportu(o);
+    if (!karty.length) throw new Error(o.ktore === 'zmienione' ? 'brak kart zmienionych od ostatniego PDF' : 'brak kart do PDF – sprawdź talie i id');
+    const plik = await zapiszPdf({ ...o, zlecenie: true });
+    if (!plik) throw new Error('PDF nie został zapisany');
+    return { ok: true, pliki: [plik], karty: karty.length, strony: $('druk').querySelectorAll('.arkusz').length || null };
+  },
+  async obrazki(o) {
+    const r = await eksportObrazkow({ ...o, zlecenie: true });
+    if (!r) throw new Error('brak kart do eksportu – sprawdź talie i id');
+    return { ok: true, pliki: r.nazwy.map((n) => r.folder + '/' + n) };
+  },
+  async pcio(o) {
+    const r = await exportPcio({ ...o, zlecenie: true });
+    if (!r) throw new Error('brak kart do pokoju playingcards.io');
+    return { ok: true, pliki: [r.plik], talie: r.talie, karty: r.karty };
+  },
+};
+
+async function wykonajZlecenie(polecenie, surowe = {}) {
+  let o, ostrzezenia = [];
+  try { ({ o, ostrzezenia } = opcjeZlecenia(polecenie, surowe)); }
+  catch (e) { return { ok: false, pliki: [], blad: String(e.message || e), ...stanZlecenia() }; }
+  const zDysku = !!(SZABLON && ED.zmiany);
+  let wynik;
+  ZLECENIE_TRWA = true;
+  try {
+    if (zDysku) { ZLECENIE_Z_DYSKU = true; await loadFromServer(); }
+    else await KOLEJKA_BUDOWY;
+    if (o.id) {
+      const sa = new Set([...$('podglad').querySelectorAll('.karta:not(.rewers)')].map((k) => plain(k.dataset.id || '')));
+      for (const id of o.id) if (!sa.has(plain(id))) ostrzezenia.push(`nie ma karty o ID „${id}”`);
+    }
+    try { wynik = { pliki: [], ...(await ZADANIA_ZLECEN[polecenie](o)) }; }
+    catch (e) { wynik = { ok: false, pliki: [], blad: String((e && e.message) || e) }; }
+    Object.assign(wynik, stanZlecenia(), { status: $('status').textContent });
+  } finally {
+    if (zDysku) { ZLECENIE_Z_DYSKU = false; try { await podgladNaZywo(); } catch (e) { /* podgląd odświeży się sam */ } }
+    ZLECENIE_TRWA = false;
+  }
+  if (ostrzezenia.length) wynik.ostrzezenia = ostrzezenia;
+  wynik.opcje = { ...o };
+  return wynik;
+}
+Object.assign(window, { wykonajZlecenie, opcjeZlecenia, stanKart, raportJson });
+
 // ── Eksport do playingcards.io ───────────────────────────────────────────────
 // Tworzy nowy pokój (.pcio): każda talia to osobny stos (holder) z kartami zakrytymi,
 // stosy w rzędach obok siebie. Resztę stołu właściciel ustawia sam w playingcards.io.
@@ -1913,7 +2084,7 @@ async function eksportujPcio(o = {}) {
   const nazwa = PROJEKT + ' – playingcards.pcio';
   const zapisany = await APP.zapiszPcio(nazwa, dane);
   if (!zapisany) { status('Eksport do playingcards.io anulowany.'); return; }
-  punktHistorii('playingcards.io');
+  punktHistorii('playingcards.io' + (o.zlecenie ? ' (zlecenie)' : ''));
   status(`Zapisano ${zapisany} (${(dane.length / 1048576).toFixed(1)} MB) · ${report.join(' · ')} · w playingcards.io: Edit Table → Import room`);
   return { plik: zapisany, talie: report, holdery: widgets.filter((w) => w.type === 'holder').length,
            karty: widgets.filter((w) => w.type === 'card').length, obrazki: assets.size };
@@ -1994,6 +2165,7 @@ function ustawZmiany(z) {
 }
 // Wywoływane przy każdym wczytaniu szablonu z dysku; zwraca tekst, z którego budujemy karty.
 function edytorZDysku(dysk) {
+  if (ZLECENIE_Z_DYSKU) return dysk;                       // zlecenie z pliku: karty z wersji na dysku
   if (ED.dysk === null || !ED.zmiany) {
     if (dysk !== edPole.value) {
       const [a, b] = [edPole.selectionStart, edPole.selectionEnd];
@@ -2087,11 +2259,12 @@ async function zapiszPdf(o = {}) {
     + (o.ktore === 'zaznaczone' ? ' – wybrane' : '') + (o.ktore === 'zmienione' ? ' – zmienione' : '') + (o.szkic ? ' – szkic' : '');
   status('Zapisywanie PDF…');
   try {
-    const plik = await APP.zapiszPdf(nazwa);
+    // Zlecenie z pliku: zapis bez okna – o.plik (ścieżka w projekcie) albo nazwa jak przy ręcznym zapisie.
+    const plik = o.zlecenie ? await APP.zapiszPdfZlecenia(o.plik || nazwa + '.pdf') : await APP.zapiszPdf(nazwa);
     status(plik ? 'Zapisano PDF: ' + plik : 'Zapis PDF anulowany.');
-    if (plik) { await zapamietajDruk(karty); punktHistorii({ pojedyncze: 'PDF – osobne strony', drukarnia: 'PDF – drukarnia' }[o.uklad] || 'PDF A4'); }
+    if (plik) { await zapamietajDruk(karty); punktHistorii(({ pojedyncze: 'PDF – osobne strony', drukarnia: 'PDF – drukarnia' }[o.uklad] || 'PDF A4') + (o.zlecenie ? ' (zlecenie)' : '')); }
     return plik;
-  } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); }
+  } catch (e) { status('Nie udało się zapisać PDF: ' + e.message); if (o.zlecenie) throw e; }
 }
 window.zapiszPdf = zapiszPdf;
 
