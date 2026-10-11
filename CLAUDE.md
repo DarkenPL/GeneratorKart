@@ -7,6 +7,7 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 Wnioski z porównania sesji z 9–11.10.2026 (łączone PR-y, kolizja wersji, nazwy talii właściciela w dokumentacji). Nad projektem pracuje równolegle kilka sesji Claude.
 
 - **Przed startem:** sprawdź otwarte PR-y i gałęzie (`gh api repos/DarkenPL/KarKa/pulls?state=open`, `git branch -r`). Gdy inna sesja pracuje nad tym samym punktem – zapytaj właściciela, nie rób tego drugi raz.
+- **Sesje z projektów gier** (prototypy u właściciela) zmieniają w repozytorium **tylko `CLAUDE.md`**: dopisują punkty do kolejki i poprawiają punkty, które same dodały. Bez zmian w kodzie i bez podnoszenia wersji (decyzja właściciela 11.10.2026).
 - **Start zadania tylko na wyraźny sygnał** („zrób”, „startuj”). „Dopisz do kolejki” = tylko wpis. Prośba o plik lokalny ≠ zmiana w repozytorium (PR #18).
 - **Jedno zadanie = jedna gałąź z aktualnego `origin/main` = jeden PR.** Nigdy PR zawierający inny niescalony PR (#20 ⊃ #19, #23 ⊃ #22 – właściciel zamykał duplikaty). Gdy nowe zadanie wymaga niescalonego PR-a – poczekaj na scalenie albo zapytaj.
 - **Wersja:** dopiero po sprawdzeniu `main` i otwartych PR-ów – kolejna wolna podwersja (0.4.8 była w dwóch PR-ach naraz).
@@ -145,6 +146,12 @@ Właściciel zwraca uwagę na czas pracy – mniej czekania, mniej czytania na �
 
 Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione punkty przechodzą do „Zrobione”, nowe dostają kolejny numer.
 
+37. **Wspólne arkusze dla talii o różnych rewersach (druk A4)** – **wysoki priorytet** (prośba właściciela 11.10.2026). Dziś `buildPrint` daje każdej talii (talia + rozmiar karty) osobne arkusze, bo arkusz rewersów to jeden rewers powtórzony w całej siatce. Projekt z wieloma małymi taliami (np. talie zleceń rozdzielone według rewersu, po 1–7 kart) drukuje się na prawie pustych arkuszach: u właściciela 131 kart → 67 stron A4 zamiast ok. 36.
+   - Plan: karty o tym samym rozmiarze układane kolejno na wspólnych arkuszach; arkusz rewersów składany **miejsce po miejscu** – na każdej pozycji rewers talii karty z odpowiadającej pozycji awersu, w odbiciu lustrzanym dla druku dwustronnego. Drukarka właściciela odwraca kartkę **wzdłuż dłuższej krawędzi** → w rzędzie kolumny w odwrotnej kolejności (por. pkt 29).
+   - Decyzje właściciela (11.10.2026): **karty idą ciągiem** (następna talia zaczyna się zaraz po poprzedniej, bez nowego rzędu); **puste miejsca zostają puste** (bez rewersu); opcja w oknie Druk i PDF („Talie na wspólnych arkuszach”) **domyślnie włączona**, z kluczem w zleceniu `pdf`.
+   - Do ustalenia przy realizacji: talia bez rewersu (puste miejsce na arkuszu rewersów), wpływ na przesunięcie rewersów (pkt 5) i znaczniki cięcia (siatka jak dziś).
+   - Układy `pojedyncze` i `drukarnia` bez zmian (tam strona = karta). Łączy się z pkt 29 (rewersy zależne od karty) – ten sam mechanizm „rewers per pozycja”.
+   - Test: przykład z kilkoma taliami po kilka kart – liczba stron, rewers na właściwej pozycji (lustro), zrzuty arkuszy awersów i rewersów.
 1. **Aplikacja – dalszy rozwój** (pomysły):
    - wersja na Windows – **odłożona** (decyzja 9.10.2026; szacunek: jedno podejście, instalator NSIS x64, zadanie CI na `windows-latest`, test na żywym Windows),
    - podpis i notaryzacja Apple (wymaga konta Apple Developer),
