@@ -2,6 +2,20 @@
 
 Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj przy każdej większej zmianie.
 
+## Sposób pracy sesji (przeczytaj najpierw)
+
+Wnioski z porównania sesji z 9–11.10.2026 (łączone PR-y, kolizja wersji, nazwy talii właściciela w dokumentacji). Nad projektem pracuje równolegle kilka sesji Claude.
+
+- **Przed startem:** sprawdź otwarte PR-y i gałęzie (`gh api repos/DarkenPL/GeneratorKart/pulls?state=open`, `git branch -r`). Gdy inna sesja pracuje nad tym samym punktem – zapytaj właściciela, nie rób tego drugi raz.
+- **Start zadania tylko na wyraźny sygnał** („zrób”, „startuj”). „Dopisz do kolejki” = tylko wpis. Prośba o plik lokalny ≠ zmiana w repozytorium (PR #18).
+- **Jedno zadanie = jedna gałąź z aktualnego `origin/main` = jeden PR.** Nigdy PR zawierający inny niescalony PR (#20 ⊃ #19, #23 ⊃ #22 – właściciel zamykał duplikaty). Gdy nowe zadanie wymaga niescalonego PR-a – poczekaj na scalenie albo zapytaj.
+- **Wersja:** dopiero po sprawdzeniu `main` i otwartych PR-ów – kolejna wolna podwersja (0.4.8 była w dwóch PR-ach naraz).
+- **Przed każdym commitem:** przejrzyj `git diff --cached` pod kątem nazw z gier właściciela (talie, karty, postacie, nazwy projektów i folderów). W dokumentacji i testach tylko nazwy z `przyklady/`.
+- **Testy sprawdzają wygląd, nie tylko istnienie pliku:** obejrzyj wynik (zrzut, katalog, strona PDF), zanim powiesz „działa”. Błąd czcionek w JPG przetrwał od v0.4.2 do v0.4.9, bo test sprawdzał tylko, czy JPG powstał.
+- **Wszystko po polsku** – także krótkie zdania robocze między narzędziami.
+- **Krótkie sesje:** jedno zadanie na sesję, start od tego pliku. Bardzo długie sesje gubią zasady po streszczeniu kontekstu. Nowe wnioski dopisuj tutaj albo w „Jak pracować szybko”.
+- `pkill -f` / `pgrep -f` z wzorcem, który występuje w tym samym poleceniu, zabija własną powłokę – zabijaj procesy osobnym poleceniem albo po PID.
+
 ## Zasady
 
 - **Bez danych gier użytkownika w repozytorium.** Właściciel trzyma swoje projekty gier lokalnie i nie chce ich udostępniać. W repozytorium są tylko generator, dokumentacja i zmyślone przykłady.
@@ -195,5 +209,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
 - **v0.4.9** – przykłady 04-karawana i 05-zaklecia (funkcje nieobecne w 01–03); katalog: JPG, rewers przed awersami; **poprawka czcionek w obrazkach kart** (`cssCzcionek`, wcześniej JPG/PNG/playingcards.io/katalog miały czcionkę zastępczą); test PNG 300 dpi liczy szerokość z najwęższej karty. Jednostronicowy PDF „wszystkie karty” – makieta pokazana właścicielowi, czeka na decyzję.
 - **v0.4.10** – kolejka: pkt 35 (zlecenia z pliku dla całej gry: `pdf`, `obrazki`, `pcio`, `raport`, `stan`).
 - **v0.4.11** – `app/scripts/testuj.sh` (testy przykładów równolegle) i „Jak pracować szybko” w tym pliku. 35. Zlecenia z pliku dla całej gry: `stan`, `raport`, `pdf`, `obrazki`, `pcio` (obok `katalog`), wynik `wynik-<polecenie>.json`, opis w `docs/aplikacja.md` („Zlecenia z pliku”). PDF ze zlecenia: nazwa domyślna jak przy ręcznym zapisie (nie `– karty.pdf`), żeby A4 i drukarnia się nie nadpisywały.
+- **v0.4.12** – „Sposób pracy sesji” na początku tego pliku (wnioski z porównania sesji).
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.
