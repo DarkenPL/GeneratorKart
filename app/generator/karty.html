@@ -341,16 +341,21 @@ $('filtr').onchange = applyFilter;
 
 // Automatyczne odświeżanie: co 1,5 s sprawdzamy daty zmian wczytanych plików (jedno sprawdzenie naraz).
 let SPRAWDZANIE = false;
+let TIK_UKRYTE = 0;
 let ZLECENIE_TRWA = false, ZLECENIE_Z_DYSKU = false;   // zlecenie z pliku – bez automatycznego odświeżania w trakcie
-setInterval(async () => {
-  if (SPRAWDZANIE || !AUTO_ODSWIEZANIE || document.hidden || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA || ZLECENIE_TRWA) return;
+async function sprawdzZmianyPlikow(teraz = false) {
+  // Okno ukryte (także całkiem zasłonięte innym oknem albo na innym biurku – macOS) – rzadziej, co ~9 s (issue #30).
+  if (!teraz && document.hidden && ++TIK_UKRYTE % 6) return;
+  if (SPRAWDZANIE || !AUTO_ODSWIEZANIE || !serverPaths.length || PODGLAD_WERSJI || EKSPORT_TRWA || ZLECENIE_TRWA) return;
   SPRAWDZANIE = true;
   try {
     const stamp = await serverStamp();
     if (lastStamp && stamp !== lastStamp) await loadFromServer();
     lastStamp = lastStamp && stamp !== lastStamp ? await serverStamp() : stamp;
   } finally { SPRAWDZANIE = false; }
-}, 1500);
+}
+setInterval(sprawdzZmianyPlikow, 1500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sprawdzZmianyPlikow(true); });   // powrót do okna – od razu
 
 // ── CSV / XLSX ───────────────────────────────────────────────────────────────
 
@@ -1980,8 +1985,17 @@ async function wykonajZlecenie(polecenie, surowe = {}) {
   let wynik;
   ZLECENIE_TRWA = true;
   try {
-    if (zDysku) { ZLECENIE_Z_DYSKU = true; await loadFromServer(); }
-    else await KOLEJKA_BUDOWY;
+    if (zDysku) { ZLECENIE_Z_DYSKU = true; await loadFromServer(); lastStamp = await serverStamp(); }
+    else {
+      // Zlecenie zawsze na aktualnych plikach z dysku – także gdy automatyczne odświeżanie stoi
+      // (okno zasłonięte, odświeżanie wyłączone w menu Widok; issue #30).
+      while (SPRAWDZANIE) await new Promise((r) => setTimeout(r, 50));
+      await KOLEJKA_BUDOWY;
+      if (serverPaths.length) {
+        const stamp = await serverStamp();
+        if (stamp !== lastStamp) { await loadFromServer(); lastStamp = await serverStamp(); }
+      }
+    }
     if (o.id) {
       const sa = new Set([...$('podglad').querySelectorAll('.karta:not(.rewers)')].map((k) => plain(k.dataset.id || '')));
       for (const id of o.id) if (!sa.has(plain(id))) ostrzezenia.push(`nie ma karty o ID „${id}”`);

@@ -553,7 +553,8 @@ function utworzOkno() {
   okno = new BrowserWindow({
     width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'KarKa',
     backgroundColor: '#ece9e4', show: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
+      backgroundThrottling: false },   // zasłonięte okno: timery (odświeżanie, siatka historii) bez dławienia Chromium
   });
   okno.once('ready-to-show', () => okno.show());
   okno.webContents.once('did-finish-load', potwierdzStart);
@@ -885,6 +886,17 @@ async function trybTestowy(folder, wynik) {
     z.edytor = stanEd && { niezapisane: stanEd.niezapisaneZmiany, projekt: stanEd.projekt, projektEd, poZleceniu: { ...poEd, projekt: await js('PROJEKT') } };
     await js("(() => { const p = document.getElementById('edPole'); p.value = ED.dysk; p.dispatchEvent(new Event('input')); })()");
     await czekaj(1500);
+    // Issue #30: odświeżanie stoi (okno zasłonięte / wyłączone w menu) – zlecenie i tak bierze plik z dysku.
+    const tekstSzablonu = fs.readFileSync(szablon, 'utf8');
+    await js('ustawAuto(false)');
+    fs.writeFileSync(szablon, tekstSzablonu.replace(/^PROJEKT(\s*)=(\s*)/m, 'PROJEKT$1=$2ZDYSKU '));
+    await czekaj(2500);
+    const przedZleceniem = await js('PROJEKT');
+    const stanDysk = await zlec('stan');
+    fs.writeFileSync(szablon, tekstSzablonu);
+    await js('ustawAuto(true)');
+    await czekaj(2500);
+    z.zDysku = { przedZleceniem, wZleceniu: stanDysk && stanDysk.projekt, poPrzywroceniu: await js('PROJEKT') };
     z.ustawieniaBezZmian = JSON.stringify(await js('USTAWIENIA_OKIEN')) === ustPrzed;
     z.pozostale = fs.readdirSync(zl).filter((n) => POLECENIA.includes(n));
     z.ok = !!(z.stan && z.stan.ok && z.stan.karty > 0 && z.stan.talie > 0 && z.stan.wersja
@@ -898,7 +910,8 @@ async function trybTestowy(folder, wynik) {
       && (z.obrazki.ostrzezenia || []).some((x) => x.includes('nie-ma-takiej'))
       && z.pcio && z.pcio.ok && z.pcio.sa && z.pcio.karty > 0
       && z.edytor && z.edytor.niezapisane && !/ZMIANA/.test(z.edytor.projekt) && /ZMIANA/.test(z.edytor.projektEd) && /ZMIANA/.test(z.edytor.poZleceniu.projekt) && z.edytor.poZleceniu.zmiany && z.edytor.poZleceniu.tekst
-      && z.ustawieniaBezZmian && !z.pozostale.length);
+      && z.ustawieniaBezZmian && !z.pozostale.length
+      && !/ZDYSKU/.test(z.zDysku.przedZleceniem) && /ZDYSKU/.test(z.zDysku.wZleceniu) && !/ZDYSKU/.test(z.zDysku.poPrzywroceniu));
     z.nazwaKarty = nazwaKarty;
     zlecenia = z;
   }
