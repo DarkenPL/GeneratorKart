@@ -1,4 +1,4 @@
-# Notatki projektu – Generator kart
+# Notatki projektu – KarKa (Kawia Karciana, dawniej Generator kart)
 
 Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj przy każdej większej zmianie.
 
@@ -6,7 +6,7 @@ Plik dla Claude (i ludzi): stan projektu, decyzje i lista pomysłów. Aktualizuj
 
 Wnioski z porównania sesji z 9–11.10.2026 (łączone PR-y, kolizja wersji, nazwy talii właściciela w dokumentacji). Nad projektem pracuje równolegle kilka sesji Claude.
 
-- **Przed startem:** sprawdź otwarte PR-y i gałęzie (`gh api repos/DarkenPL/GeneratorKart/pulls?state=open`, `git branch -r`). Gdy inna sesja pracuje nad tym samym punktem – zapytaj właściciela, nie rób tego drugi raz.
+- **Przed startem:** sprawdź otwarte PR-y i gałęzie (`gh api repos/DarkenPL/KarKa/pulls?state=open`, `git branch -r`). Gdy inna sesja pracuje nad tym samym punktem – zapytaj właściciela, nie rób tego drugi raz.
 - **Start zadania tylko na wyraźny sygnał** („zrób”, „startuj”). „Dopisz do kolejki” = tylko wpis. Prośba o plik lokalny ≠ zmiana w repozytorium (PR #18).
 - **Jedno zadanie = jedna gałąź z aktualnego `origin/main` = jeden PR.** Nigdy PR zawierający inny niescalony PR (#20 ⊃ #19, #23 ⊃ #22 – właściciel zamykał duplikaty). Gdy nowe zadanie wymaga niescalonego PR-a – poczekaj na scalenie albo zapytaj.
 - **Wersja:** dopiero po sprawdzeniu `main` i otwartych PR-ów – kolejna wolna podwersja (0.4.8 była w dwóch PR-ach naraz).
@@ -55,7 +55,7 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
 - **Aktualizacje** (v0.5.0; opis dla użytkownika: `docs/aplikacja.md`, „Aktualizacje”):
   - `package.json` → `main: start.js` (**rozrusznik**, zmienia się tylko z pełną aktualizacją – trzymać prosty). `nakladka.js` `wybierzNakladke(<userData>/kod)`: nakładka tylko gdy `nakladka.json.electron === process.versions.electron` i wersja > wbudowanej; znacznik `start-<wersja>` przed startem, `potwierdzStart()` (did-finish-load) go usuwa, zastany znacznik → plik `zepsuta` i start z paczki; wyjątek przy `require` nakładki → `zepsuta` + `app.relaunch()`. `global.GENERATOR_KOD` → w main `KOD`, `WERSJA` (zamiast `app.getVersion()`), `ZASOBY` obok kodu albo w `Resources`; `FOLDERY_PRZYKLADOW` – przykłady z paczki i nakładki tylko do odczytu. `--bez-nakladki`.
   - `aktualizacje.js`: `sprawdz` (`releases/latest` + `aktualizacja.json`; `GENERATOR_KART_AKTUALIZACJE` = inny adres – testy), `rodzaj` `kod` gdy ten sam Electron, inaczej `pelna`; `pobierz` (SHA-256), `zainstalujKod` (ditto/unzip → `kod-nowy` → `kod`), `przygotujPelna` (ZIP `.app`, `codesign --verify`), `zaplanujPodmiane` (skrypt bash czeka na pid, `mv` z zapasem, `xattr -dr`, `open`), `moznaPodmienic`. W main: `net.fetch`, `sprawdzAktualizacje({cicho})` (start po 4 s – nie w trybie testowym; menu „Sprawdź aktualizacje…”; `ustawienia().pominWersje`), `zainstalujAktualizacje`, `zrestartuj`, `will-quit` → podmiana bez restartu, `zlecenieAktualizacji()` (plik `aktualizacja`, `instaluj`, `restart`; wynik przed restartem).
-  - Wydanie (workflow): `Generator-kart.dmg` + `Generator-kart.zip` (ditto `--keepParent`) + `kod.zip` i `aktualizacja.json` (`scripts/paczka-kodu.js`: `build.files` bez `start.js` + `zasoby/`). Nowy plik kodu w `app/` → dopisać do `build.files`, inaczej nie trafi ani do paczki, ani do nakładki.
+  - Wydanie (workflow): `KarKa.dmg` + `KarKa.zip` (ditto `--keepParent`) + `kod.zip` i `aktualizacja.json` (`scripts/paczka-kodu.js`: `build.files` bez `start.js` + `zasoby/`). Nowy plik kodu w `app/` → dopisać do `build.files`, inaczej nie trafi ani do paczki, ani do nakładki.
   - Testy: `scripts/test-aktualizacje.js` (serwer udający GitHuba; `--electron`: zlecenie instaluje nakładkę, następny start z nakładki – `--test-aktualizacja`), w CI także nakładka w zbudowanej `.app`. Wynik trybu testowego ma `kod: { zrodlo, wersja }`.
 - **`preload.js`** wystawia `window.generatorApp` (info, otworzSzablon, przyklady, zapiszPdf, eksport…). Bez niego `karty.html` pokazuje tylko informację, że działa w aplikacji.
 - **`scripts/zasoby.js`** buduje `app/zasoby/` z `generator/karty.html`, `przyklady/`, bibliotek z `node_modules` i czcionek Fontsource (tylko latin i latin-ext).
@@ -63,8 +63,8 @@ app/                       aplikacja na Maca (Electron); app/generator/karty.htm
 - **Tryb testowy** (`--test-edytor` sprawdza też druk 2 zaznaczonych kart, szkic, raport, „tylko zmienione”, historię wersji ze skrzynką i okna eksportu; poza przykładami też eksport playingcards.io; zrzuty `-edytor.png`, `-historia.png`, `-okno.png`): `[--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>`. Zapisuje PDF i zrzut ekranu, sprawdza JPG i (poza przykładami) eksport do `Export/`, kończy z kodem 0 albo 1.
   - W tym środowisku testuj na **kopii** przykładu (eksport zapisuje `Export/`): `cd app && npm ci && npm run zasoby && cp -r ../przyklady/03-ogrod /tmp/o && xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir=/tmp/ud . --test-pdf /tmp/o /tmp/x.pdf`.
 - **Budowanie:** `.github/workflows/aplikacja-mac.yml` (macos-14):
-  - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `Generator-kart.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
-  - push do `main` → wydanie `v<wersja z app/package.json>` z DMG, `--generate-notes`, `--latest` (tylko gdy takiego wydania jeszcze nie ma; inaczej ostrzeżenie); dawne wydanie `najnowsza` jest usuwane. README linkuje `releases/latest/download/Generator-kart.dmg`;
+  - tylko Apple Silicon: `electron-builder --mac dir --arm64`, podpis ad hoc `codesign -s -`, testy przykładów (na kopiach) na zbudowanej `.app`, potem `--mac dmg --prepackaged` → `KarKa.dmg` (okno z linkiem do Programów), sprawdzenie DMG (`hdiutil attach`, `codesign --verify`), artefakty;
+  - push do `main` → wydanie `v<wersja z app/package.json>` z DMG, `--generate-notes`, `--latest` (tylko gdy takiego wydania jeszcze nie ma; inaczej ostrzeżenie); dawne wydanie `najnowsza` jest usuwane. README linkuje `releases/latest/download/KarKa.dmg`;
   - tag `v*` albo wydanie opublikowane w GitHubie → dołączony DMG.
   - Dependabot (`.github/dependabot.yml`): npm w `app/` co tydzień (Electron osobną grupą), GitHub Actions co miesiąc. html-to-image, JSZip i xlsx są wykluczone, bo ich wersje muszą zgadzać się z adresami CDN w `karty.html`.
   - Sesja Claude nie może tworzyć tagów ani wydań (blokada po stronie GitHuba) – robi to workflow albo właściciel.
@@ -122,7 +122,7 @@ Właściciel zwraca uwagę na czas pracy – mniej czekania, mniej czytania na �
 **Start sesji**
 - `git clone --depth 1` → `cd app && npm ci && npm run zasoby` (≈ 1 min). Mapa `karty.html` (≈ 2300 wierszy): `grep -n "^async function\|^function\|^const [A-Z_]* =" app/generator/karty.html`; opis sekcji – „Architektura” wyżej. Czytaj tylko potrzebne fragmenty.
 - Płytki klon ma w `remote.origin.fetch` tylko `main` – po wypchnięciu własnej gałęzi `git status` nie widzi jej na serwerze i hook zgłasza „unpushed commit”. Od razu po `git push -u`: `git config --add remote.origin.fetch '+refs/heads/<gałąź>:refs/remotes/origin/<gałąź>' && git fetch -q origin`.
-- `gh pr list` nie działa (GraphQL zablokowany) – tylko REST: `gh api repos/DarkenPL/GeneratorKart/pulls …`.
+- `gh pr list` nie działa (GraphQL zablokowany) – tylko REST: `gh api repos/DarkenPL/KarKa/pulls …`.
 
 **Pętla pracy**
 - Test uruchamia kopię `app/zasoby/karty.html`, nie `app/generator/karty.html` – po każdej zmianie `npm run zasoby` (robi to `scripts/testuj.sh`). Zapomniane = test starego kodu.
@@ -132,7 +132,7 @@ Właściciel zwraca uwagę na czas pracy – mniej czekania, mniej czytania na �
 - Błędy, które już raz kosztowały czas: `window.x = () => x()` (rekurencja, test wisi); zmienna lokalna o nazwie globalnej `szablon` w `main.js` (v0.4.0 – ReferenceError, domyślne menu); eksport bez `naWylacznosc()` (losowo padał co kilka przebiegów); odcisk plików z nieposortowanej listy (pętla odświeżania, v0.4.4); `html-to-image` bez `fontEmbedCSS` (czcionka zastępcza, v0.4.9).
 
 **CI i PR**
-- Workflow macOS trwa ≈ 8–10 min. Nie czekaj na niego bezczynnie w pętli: otwórz PR, napisz właścicielowi wynik testów lokalnych, a CI sprawdź raz na końcu (`gh api "repos/DarkenPL/GeneratorKart/actions/runs?branch=<gałąź>&per_page=1" --jq '.workflow_runs[0]|.status+" "+(.conclusion//"")'`). Gdy padnie: `…/actions/runs/<id>/jobs` → `…/actions/jobs/<id>/logs`.
+- Workflow macOS trwa ≈ 8–10 min. Nie czekaj na niego bezczynnie w pętli: otwórz PR, napisz właścicielowi wynik testów lokalnych, a CI sprawdź raz na końcu (`gh api "repos/DarkenPL/KarKa/actions/runs?branch=<gałąź>&per_page=1" --jq '.workflow_runs[0]|.status+" "+(.conclusion//"")'`). Gdy padnie: `…/actions/runs/<id>/jobs` → `…/actions/jobs/<id>/logs`.
 - Drobna poprawka do otwartego, niescalonego PR-a = commit na tę samą gałąź (bez nowego podbicia wersji).
 
 **Praca na Macu właściciela (podłączone foldery)**
@@ -161,14 +161,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
 25. **Pełna wersja konsolowa (CLI)** – odłożona: `generator-kart <polecenie> <szablon.txt>` – ten sam silnik bez okna (na Linuksie przez Xvfb). Polecenia: `sprawdz` (Uwagi + raport, kod wyjścia, `--json`), `pdf`, `jpg`, `png <ID…>`. Część z historią zrobiona (pkt 26). Uwaga: w powłoce Linux na Macu właściciela (Ubuntu 22.04 arm64, Node 22, Xvfb, bez roota) Electron nie wystartuje – brak GTK3 i `libXss`, ports.ubuntu.com zablokowane; alternatywa: Chromium bez GTK z npm (np. `@sparticuz/chromium`) + `puppeteer-core`, albo renderowanie w środowisku Claude na kopii plików.
 29. **Rewersy zależne od karty** – **odłożone** (decyzja 10.10.2026). Plan: `[Kolumny]` i `jeśli=` w sekcji `[REWERS]` (rewers bez kolumn = wspólny jak dziś); podgląd z przełącznikiem rewersów, osobne pliki rewersów w eksporcie obrazków, w playingcards.io rewers dynamiczny (`cardTypes[…]['image-back']`), wykrywanie zmian także po rewersie. Druk A4: arkusz rewersów jako lustro arkusza awersów – drukarka właściciela odwraca kartkę **wzdłuż dłuższej krawędzi** (kolumny w odwrotnej kolejności). Sposób określania rewersu (kolumny w `[REWERS]` czy kolumna z obrazkiem) – do ustalenia.
 34. **CMYK w PDF dla drukarni** (reszta pkt 33, „na razie się nie przejmujemy” – 10.10.2026): `printToPDF` daje tylko RGB; konwersja przez Ghostscript (AGPL – nie dołączamy; opcja, gdy zainstalowany z Homebrew).
-36. **Nowa nazwa aplikacji: KarKa** – pełna nazwa **Kawia Karciana** (decyzja właściciela 11.10.2026; wcześniej rozważany „Talimat”). Kawia (świnka morska) może być maskotką/ikoną. Start na sygnał, proponowana wersja 0.6. Do zrobienia:
-   - `productName` („KarKa”), tytuły okien, menu („O aplikacji KarKa”), komunikaty, README, `docs/`, DMG `KarKa.dmg` (link „latest” w README), tytuł wydania; pełna nazwa „Kawia Karciana” w oknie O aplikacji i README; `appId` – do decyzji (zmiana = nowa tożsamość, macOS zapyta o foldery);
-   - **przeniesienie danych:** folder danych zależy od nazwy (`~/Library/Application Support/Generator kart` → `KarKa`) – przy pierwszym starcie skopiować `ustawienia.json`, `odciski/`, `eksport/` (bez `kod/`);
-   - **aktualizacja:** nowej nazwy `.app` nie da się wprowadzić nakładką – manifest musi wymusić pełną aktualizację (np. `wymusPelna: true` w `aktualizacja.json`, obsługa w `aktualizacje.sprawdz` już w 0.5.x, zanim wyjdzie 0.6), a `zaplanujPodmiane` – zapisać `KarKa.app` obok i usunąć `Generator kart.app`;
-   - nazwa repozytorium (GitHub przekierowuje stare adresy, także API) i adres w `aktualizacje.js`; folder zleceń `.generator/` zostaje (zgodność);
-   - ikona aplikacji: kawia (własny rysunek albo grafika na wolnej licencji);
-   - kolizje: nie znaleziono programu do kart o nazwie KarKa (11.10.2026).
-
 ### Roadmapa (niski priorytet)
 
 - **Generator stołów playingcards.io**: pełny stół z opisu w szablonie (np. sekcja `[STÓŁ]`: talie, stosy, pola gry, miejsca graczy, żetony, przyciski tasowania i zbierania). Pierwszy krok – nowy pokój z taliami na stosach – zrobiony (pkt 27). Format: ZIP z `schemaVersion` (8), `widgets.json`, `userassets/`; typy widgetów: card, cardDeck, holder, piece, seat, automationButton, hand, labelText (przykłady pól w pokoju właściciela).
@@ -217,6 +209,6 @@ Numery są stałe (właściciel odwołuje się do nich w rozmowie) – zrobione 
 - **v0.4.10** – kolejka: pkt 35 (zlecenia z pliku dla całej gry: `pdf`, `obrazki`, `pcio`, `raport`, `stan`).
 - **v0.4.11** – `app/scripts/testuj.sh` (testy przykładów równolegle) i „Jak pracować szybko” w tym pliku. 35. Zlecenia z pliku dla całej gry: `stan`, `raport`, `pdf`, `obrazki`, `pcio` (obok `katalog`), wynik `wynik-<polecenie>.json`, opis w `docs/aplikacja.md` („Zlecenia z pliku”). PDF ze zlecenia: nazwa domyślna jak przy ręcznym zapisie (nie `– karty.pdf`), żeby A4 i drukarnia się nie nadpisywały.
 - **v0.4.12** – „Sposób pracy sesji” na początku tego pliku (wnioski z porównania sesji).
-- **v0.5.0 „Gołąb pocztowy”** – 1. Automatyczne aktualizacje: mała (nakładka kodu ≈ 0,8 MB w Application Support, bez zmiany podpisu i pytań macOS) albo pełna (ZIP `.app` ≈ 120 MB, podmiana po zamknięciu) – przy starcie, z menu i zleceniem `aktualizacja`; rozrusznik `start.js` z ochroną przed zepsutą nakładką. Wersje 0.4.x – raz ręcznie z DMG. Repozytorium publiczne (historia sprawdzona przed upublicznieniem; dawne nazwy talii właściciela zostały tylko w historii commita 7322127). `testuj.sh` bierze ostatni wiersz JSON (ostrzeżenia X11 na wyjściu przy testach równoległych).
+- **v0.5.0 „Gołąb pocztowy”** – 36. **Nowa nazwa: KarKa (Kawia Karciana)** (wcześniej rozważany „Talimat”): `productName`/menu/okna/DMG `KarKa.dmg`/`KarKa.zip`, `appId` bez zmian (`io.github.generatorkart` – decyzja właściciela), repozytorium `DarkenPL/KarKa` (zmianę nazwy robi właściciel; stare adresy przekierowują), `aktualizacje.przeniesDane` – przy pierwszym starcie ustawienia z `Application Support/Generator kart` (bez ostatnich projektów z przykładów starej `.app`); nazwę wprowadzono od razu w 0.5.0, bo 0.4.x i tak instaluje się ręcznie z DMG (bez wymuszania pełnej aktualizacji). Folder zleceń `.generator/` bez zmian. Ikona z kawią – do zrobienia (pomysł). 1. Automatyczne aktualizacje: mała (nakładka kodu ≈ 0,8 MB w Application Support, bez zmiany podpisu i pytań macOS) albo pełna (ZIP `.app` ≈ 120 MB, podmiana po zamknięciu) – przy starcie, z menu i zleceniem `aktualizacja`; rozrusznik `start.js` z ochroną przed zepsutą nakładką. Wersje 0.4.x – raz ręcznie z DMG. Repozytorium publiczne (historia sprawdzona przed upublicznieniem; dawne nazwy talii właściciela zostały tylko w historii commita 7322127). `testuj.sh` bierze ostatni wiersz JSON (ostrzeżenia X11 na wyjściu przy testach równoległych).
 
 Kolejność i start każdego zadania ustala właściciel – nie zaczynać bez jego sygnału.

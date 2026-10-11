@@ -3,7 +3,7 @@
 // Źródło: najnowsze wydanie na GitHubie (repozytorium publiczne – bez tokenu). Wydanie ma pliki:
 //   aktualizacja.json  – manifest: { wersja, electron, kod: { plik, sha256, rozmiar }, pelna: { … } }
 //   kod.zip            – sam kod aplikacji (≈ 1 MB) → nakładka w <dane aplikacji>/kod (nakladka.js)
-//   Generator-kart.zip – cała aplikacja (≈ 120 MB) → podmiana w Programach po zamknięciu
+//   KarKa.zip – cała aplikacja (≈ 120 MB) → podmiana w Programach po zamknięciu
 // Nakładka wystarcza, gdy wydanie ma tego samego Electrona co działająca aplikacja; inaczej pełna podmiana.
 // Pobrane pliki sprawdzamy sumą SHA-256 z manifestu. Plik pobrany przez aplikację nie dostaje
 // atrybutu kwarantanny, więc Gatekeeper nie pyta (zatwierdzenie tylko przy pierwszej instalacji z DMG).
@@ -15,8 +15,8 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const { porownajWersje } = require('./nakladka');
 
-const ADRES = process.env.GENERATOR_KART_AKTUALIZACJE || 'https://api.github.com/repos/DarkenPL/GeneratorKart/releases/latest';
-const NAGLOWKI = { 'User-Agent': 'Generator-kart', Accept: 'application/vnd.github+json' };
+const ADRES = process.env.KARKA_AKTUALIZACJE || 'https://api.github.com/repos/DarkenPL/KarKa/releases/latest';
+const NAGLOWKI = { 'User-Agent': 'KarKa', Accept: 'application/vnd.github+json' };
 
 // → { obecna, najnowsza, dostepna, rodzaj: 'kod' | 'pelna', rozmiar, manifest, pliki, strona, opis }
 async function sprawdz({ wersja, electron, fetch = globalThis.fetch, adres = ADRES }) {
@@ -94,7 +94,7 @@ function folderAplikacji(execPath = process.execPath) {
 async function przygotujPelna(info, dane, opcje = {}) {
   const { manifest, pliki } = info;
   const pobrane = path.join(dane, 'pobrane');
-  const zip = await pobierz(pliki[manifest.pelna.plik], path.join(pobrane, `Generator-kart-${manifest.wersja}.zip`), { ...manifest.pelna, ...opcje });
+  const zip = await pobierz(pliki[manifest.pelna.plik], path.join(pobrane, `KarKa-${manifest.wersja}.zip`), { ...manifest.pelna, ...opcje });
   const cel = path.join(pobrane, `pelna-${manifest.wersja}`);
   rozpakuj(zip, cel);
   fs.rmSync(zip, { force: true });
@@ -123,7 +123,7 @@ function zaplanujPodmiane({ nowa, stara, pid = process.pid, uruchom = true, dane
   const skrypt = path.join(dane, 'pobrane', 'podmiana.sh');
   fs.mkdirSync(path.dirname(skrypt), { recursive: true });
   fs.writeFileSync(skrypt, `#!/bin/bash
-# Podmiana aplikacji Generator kart po jej zamknięciu (aktualizacje.js).
+# Podmiana aplikacji KarKa po jej zamknięciu (aktualizacje.js).
 exec >> ${q(log)} 2>&1
 echo "$(date) podmiana: ${nowa} → ${stara}"
 for i in $(seq 1 600); do kill -0 ${pid} 2>/dev/null || break; sleep 0.2; done
@@ -145,4 +145,23 @@ function uruchomPodmiane(skrypt) {
   spawn('/bin/bash', [skrypt], { detached: true, stdio: 'ignore' }).unref();
 }
 
-module.exports = { sprawdz, pobierz, rozpakuj, zainstalujKod, przygotujPelna, folderAplikacji, moznaPodmienic, zaplanujPodmiane, uruchomPodmiane, ADRES };
+// Zmiana nazwy Generator kart → KarKa (0.5.0): dane aplikacji leżą w folderze o nazwie aplikacji.
+// Przy pierwszym starcie KarKi kopiujemy ustawienia (ostatnie projekty, okna druku i eksportu, odciski PDF)
+// ze starego folderu. Ostatnie projekty wskazujące przykłady w starej aplikacji pomijamy.
+function przeniesDane(stary, nowy) {
+  try {
+    if (!stary || path.resolve(stary) === path.resolve(nowy)) return false;
+    if (fs.existsSync(path.join(nowy, 'ustawienia.json')) || !fs.existsSync(path.join(stary, 'ustawienia.json'))) return false;
+    fs.mkdirSync(nowy, { recursive: true });
+    const u = JSON.parse(fs.readFileSync(path.join(stary, 'ustawienia.json'), 'utf8'));
+    u.ostatnie = (u.ostatnie || []).filter((p) => !/\/Generator kart\.app\//.test(String(p)));
+    delete u.pominWersje;
+    fs.writeFileSync(path.join(nowy, 'ustawienia.json'), JSON.stringify(u, null, 2));
+    for (const d of ['odciski', 'eksport']) {
+      if (fs.existsSync(path.join(stary, d))) fs.cpSync(path.join(stary, d), path.join(nowy, d), { recursive: true, force: false });
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+module.exports = { przeniesDane, sprawdz, pobierz, rozpakuj, zainstalujKod, przygotujPelna, folderAplikacji, moznaPodmienic, zaplanujPodmiane, uruchomPodmiane, ADRES };

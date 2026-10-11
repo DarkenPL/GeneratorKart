@@ -22,10 +22,10 @@ const wyniki = [];
 const ok = (nazwa, warunek, info = '') => { wyniki.push(`${warunek ? 'ok ' : 'BŁĄD'} ${nazwa}${info ? ' – ' + info : ''}`); if (!warunek) process.exitCode = 1; };
 
 // Wydanie: pełna paczka z udawaną .app, kod.zip z wersją 9.9.9, manifest.
-fs.mkdirSync(path.join(T, 'pelna', 'Generator kart.app', 'Contents'), { recursive: true });
-fs.writeFileSync(path.join(T, 'pelna', 'Generator kart.app', 'Contents', 'nowa.txt'), NOWA);
+fs.mkdirSync(path.join(T, 'pelna', 'KarKa.app', 'Contents'), { recursive: true });
+fs.writeFileSync(path.join(T, 'pelna', 'KarKa.app', 'Contents', 'nowa.txt'), NOWA);
 fs.mkdirSync(SRV, { recursive: true });
-assert.strictEqual(spawnSync('zip', ['-qr', path.join(SRV, 'Generator-kart.zip'), 'Generator kart.app'], { cwd: path.join(T, 'pelna') }).status, 0);
+assert.strictEqual(spawnSync('zip', ['-qr', path.join(SRV, 'KarKa.zip'), 'KarKa.app'], { cwd: path.join(T, 'pelna') }).status, 0);
 const pk = spawnSync(process.execPath, [path.join(__dirname, 'paczka-kodu.js'), SRV, '--wersja', NOWA], { encoding: 'utf8' });
 ok('paczka-kodu.js', pk.status === 0, (pk.stdout + pk.stderr).trim());
 let manifest = JSON.parse(fs.readFileSync(path.join(SRV, 'aktualizacja.json'), 'utf8'));
@@ -37,7 +37,7 @@ const serwer = http.createServer((req, res) => {
   if (req.url === '/latest') {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ tag_name: 'v' + NOWA, html_url: adres + '/strona', body: '## What\'s Changed\n* Coś nowego by @ktos in https://x',
-      assets: ['aktualizacja.json', 'kod.zip', 'Generator-kart.zip'].map((n) => ({ name: n, browser_download_url: `${adres}/pliki/${n}` })) }));
+      assets: ['aktualizacja.json', 'kod.zip', 'KarKa.zip'].map((n) => ({ name: n, browser_download_url: `${adres}/pliki/${n}` })) }));
   }
   const n = decodeURIComponent(req.url.replace('/pliki/', ''));
   if (n === 'aktualizacja.json' && zepsujSume) return res.end(JSON.stringify({ ...manifest, kod: { ...manifest.kod, sha256: '0'.repeat(64) } }));
@@ -53,7 +53,7 @@ const serwer = http.createServer((req, res) => {
 
   // Porównanie wersji
   ok('porownajWersje', porownajWersje('0.4.10', '0.4.9') > 0 && porownajWersje('1.0', '1.0.0') === 0 && porownajWersje('0.4.12', '0.4.13') < 0);
-  ok('folderAplikacji', akt.folderAplikacji('/Applications/Generator kart.app/Contents/MacOS/Generator kart') === '/Applications/Generator kart.app'
+  ok('folderAplikacji', akt.folderAplikacji('/Applications/KarKa.app/Contents/MacOS/KarKa') === '/Applications/KarKa.app'
     && akt.folderAplikacji('/home/x/node_modules/electron/dist/electron') === null);
 
   // Sprawdzanie
@@ -96,7 +96,7 @@ const serwer = http.createServer((req, res) => {
   if (process.platform !== 'darwin') {
     const nowa = await akt.przygotujPelna(innyElectron, dane);
     ok('przygotujPelna', fs.readFileSync(path.join(nowa, 'Contents', 'nowa.txt'), 'utf8') === NOWA);
-    const stara = path.join(T, 'Programy', 'Generator kart.app');
+    const stara = path.join(T, 'Programy', 'KarKa.app');
     fs.mkdirSync(path.join(stara, 'Contents'), { recursive: true });
     fs.writeFileSync(path.join(stara, 'Contents', 'stara.txt'), 'stara');
     ok('moznaPodmienic', akt.moznaPodmienic(stara) && !akt.moznaPodmienic(null));
@@ -109,6 +109,16 @@ const serwer = http.createServer((req, res) => {
       && !fs.existsSync(path.join(stara, 'Contents', 'stara.txt')) && !fs.existsSync(stara + '.stara-wersja') && /gotowe/.test(log) && /otwieram/.test(log)
       && !fs.existsSync(skrypt));
   }
+
+  // Przeniesienie danych po zmianie nazwy (Generator kart → KarKa)
+  const st = path.join(T, 'Generator kart'), nw = path.join(T, 'KarKa');
+  fs.mkdirSync(path.join(st, 'odciski'), { recursive: true });
+  fs.writeFileSync(path.join(st, 'ustawienia.json'), JSON.stringify({ ostatnie: ['/x/gra/Szablony/gra.txt', '/Applications/Generator kart.app/Contents/Resources/zasoby/przyklady/01-wyprawa/Szablony/wyprawa.txt'], auto: false, pominWersje: '1.0.0' }));
+  fs.writeFileSync(path.join(st, 'odciski', 'a.json'), '{}');
+  const przeniesiono = akt.przeniesDane(st, nw);
+  const un = JSON.parse(fs.readFileSync(path.join(nw, 'ustawienia.json'), 'utf8'));
+  ok('przeniesienie danych', przeniesiono && un.ostatnie.length === 1 && un.auto === false && !un.pominWersje && fs.existsSync(path.join(nw, 'odciski', 'a.json')));
+  ok('przeniesienie tylko raz', akt.przeniesDane(st, nw) === false && akt.przeniesDane(path.join(T, 'brak'), path.join(T, 'nowy2')) === false);
 
   if (process.argv.includes('--electron')) await testElectron(ADRES);
   serwer.close();
@@ -123,7 +133,7 @@ async function testElectron(ADRES) {
   const ud = path.join(T, 'ud');
   const uruchom = (folder, extra = []) => new Promise((ok) => {
     const p = spawn('xvfb-run', ['-a', bin, '--no-sandbox', `--user-data-dir=${ud}`, APP, ...extra, '--test-pdf', folder, path.join(T, path.basename(folder) + '.pdf')],
-      { env: { ...process.env, GENERATOR_KART_AKTUALIZACJE: ADRES } });
+      { env: { ...process.env, KARKA_AKTUALIZACJE: ADRES } });
     let out = ''; p.stdout.on('data', (d) => { out += d; }); p.on('close', () => {
       try { ok(JSON.parse(out.split('\n').filter((l) => l.startsWith('{')).pop())); } catch (e) { ok({ blad: out.slice(-500) }); }
     });

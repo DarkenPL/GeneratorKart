@@ -2,14 +2,14 @@
 ;  {{NAZWA}} – szablon kart
 ;
 ;  Ten plik opisuje wygląd kart. Zmieniaj go w edytorze tekstu i zapisuj –
-;  Generator kart od razu pokaże zmiany.
+;  KarKa od razu pokaże zmiany.
 ;
 ;  • Wymiary w mm, (0, 0) = lewy górny róg karty.
 ;  • [Kolumna]   – wartość z pliku karty.csv (np. [Nazwa]).
 ;  • {znacznik}  – ikona z pliku ikony.csv (np. {moneta}).
 ;  • ; komentarz – wszystko po średniku jest pomijane.
 ;
-;  Wszystkie komendy: https://github.com/DarkenPL/GeneratorKart/blob/main/docs/komendy.md
+;  Wszystkie komendy: https://github.com/DarkenPL/KarKa/blob/main/docs/komendy.md
 ; ═══════════════════════════════════════════════════════════════════
 
 ; ── Wspólne dla wszystkich talii ─────────────────────────────────

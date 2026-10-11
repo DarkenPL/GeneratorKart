@@ -1,4 +1,4 @@
-{{NAZWA}} – projekt Generatora kart
+{{NAZWA}} – projekt KarKi (Kawia Karciana)
 
 karty.csv          – karty: jeden wiersz = jedna karta (Ilość = liczba kopii)
 ikony.csv          – ikony używane w tekście, np. {moneta}
@@ -8,4 +8,4 @@ Export/            – tu trafiają obrazki z „Eksport JPG”
 
 karty.csv możesz edytować w Numbers albo Excelu – zapisz jako CSV (UTF-8).
 Szablon edytuj jako zwykły tekst (TextEdit: Format → Zamień na zwykły tekst).
-Dokumentacja: https://github.com/DarkenPL/GeneratorKart
+Dokumentacja: https://github.com/DarkenPL/KarKa

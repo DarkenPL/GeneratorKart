@@ -1,5 +1,5 @@
 'use strict';
-// Generator kart – aplikacja na macOS (Electron).
+// KarKa (Kawia Karciana, dawniej Generator kart) – aplikacja na macOS (Electron).
 // Okno pokazuje generator (generator/karty.html). Pliki projektu podaje lokalny serwer (serwer.js),
 // a biblioteki i czcionki są w aplikacji. Projekt otwiera się przez wskazanie pliku szablonu.
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session, net } = require('electron');
@@ -15,7 +15,7 @@ const KOD = global.GENERATOR_KOD || { zrodlo: 'paczka', dir: __dirname, wersja: 
 const WERSJA = KOD.wersja;
 const ZASOBY = fs.existsSync(path.join(__dirname, 'zasoby', 'karty.html')) ? path.join(__dirname, 'zasoby') : path.join(process.resourcesPath, 'zasoby');
 const PRZYKLADY = path.join(ZASOBY, 'przyklady');
-const DOKUMENTACJA = 'https://github.com/DarkenPL/GeneratorKart#readme';
+const DOKUMENTACJA = 'https://github.com/DarkenPL/KarKa#readme';
 
 let okno = null;
 let szablon = null;          // otwarty plik szablonu (.txt)
@@ -25,6 +25,8 @@ let testowy = false;         // tryb testowy (CI) – bez otwierania okien Finde
 let zmiany = false;          // niezapisane zmiany w edytorze szablonu
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
+// Pierwszy start po zmianie nazwy (Generator kart → KarKa): ustawienia ze starego folderu danych.
+aktualizacje.przeniesDane(path.join(app.getPath('appData'), 'Generator kart'), app.getPath('userData'));
 const plikUstawien = () => path.join(app.getPath('userData'), 'ustawienia.json');
 function ustawienia() {
   try { return JSON.parse(fs.readFileSync(plikUstawien(), 'utf8')); } catch (e) { return { ostatnie: [] }; }
@@ -94,7 +96,7 @@ async function otworzSzablon(plik) {
     app.addRecentDocument(szablon);
   }
   if (okno) {
-    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – Generator kart` : 'Generator kart');
+    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – KarKa` : 'KarKa');
     if (szablon) okno.setRepresentedFilename(szablon);
     const rel = szablon ? path.relative(projekt, szablon).split(path.sep).join('/') : '';
     okno.loadURL(`http://127.0.0.1:${port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
@@ -343,7 +345,7 @@ ipcMain.handle('historia:przywroc', (e, czas) => {
 
 // ── Aktualizacje ─────────────────────────────────────────────────────────────
 // Sprawdzanie: przy starcie (bez komunikatu, gdy brak nowej wersji albo internetu), z menu
-// (Generator kart → Sprawdź aktualizacje…) i zleceniem z pliku .generator/zlecenia/aktualizacja.
+// (KarKa → Sprawdź aktualizacje…) i zleceniem z pliku .generator/zlecenia/aktualizacja.
 // Mała aktualizacja = nakładka kodu (restart), pełna = podmiana aplikacji po zamknięciu (aktualizacje.js).
 const AKT = { trwa: false, podmiana: null };     // podmiana: { nowa, stara, wersja } – czeka na zamknięcie aplikacji
 const MB = (b) => (b / 1048576).toLocaleString('pl-PL', { maximumFractionDigits: b < 10485760 ? 1 : 0 }) + ' MB';
@@ -468,18 +470,18 @@ function zbudujMenu() {
   // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
   const menu = [
     {
-      label: 'Generator kart',
+      label: 'KarKa',
       submenu: [
-        { role: 'about', label: 'O aplikacji Generator kart' },
+        { role: 'about', label: 'O aplikacji KarKa' },
         { label: 'Sprawdź aktualizacje…', enabled: !AKT.trwa, click: () => sprawdzAktualizacje({ cicho: false }) },
         { type: 'separator' },
         { role: 'services', label: 'Usługi' },
         { type: 'separator' },
-        { role: 'hide', label: 'Ukryj Generator kart' },
+        { role: 'hide', label: 'Ukryj KarKę' },
         { role: 'hideOthers', label: 'Ukryj pozostałe' },
         { role: 'unhide', label: 'Pokaż wszystkie' },
         { type: 'separator' },
-        { role: 'quit', label: 'Zakończ Generator kart' },
+        { role: 'quit', label: 'Zakończ KarKę' },
       ],
     },
     {
@@ -549,7 +551,7 @@ function zbudujMenu() {
 // ── Okno ────────────────────────────────────────────────────────────────────
 function utworzOkno() {
   okno = new BrowserWindow({
-    width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'Generator kart',
+    width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'KarKa',
     backgroundColor: '#ece9e4', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -886,7 +888,7 @@ async function trybTestowy(folder, wynik) {
     z.nazwaKarty = nazwaKarty;
     zlecenia = z;
   }
-  // Aktualizacja zleceniem z pliku (--test-aktualizacja, serwer testowy w GENERATOR_KART_AKTUALIZACJE;
+  // Aktualizacja zleceniem z pliku (--test-aktualizacja, serwer testowy w KARKA_AKTUALIZACJE;
   // scripts/test-aktualizacje.js --electron): samo sprawdzenie, potem instalacja nakładki (bez restartu w teście).
   let aktualizacja = null;
   if (process.argv.includes('--test-aktualizacja') && !jestPrzykladem(szablon)) {
@@ -936,7 +938,7 @@ app.whenReady().then(async () => {
   przekierujCdn();
   let nazwaWydania = '';
   try { nazwaWydania = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).nazwaWydania || ''; } catch (e) { /* bez nazwy */ }
-  app.setAboutPanelOptions({ applicationName: 'Generator kart', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
+  app.setAboutPanelOptions({ applicationName: 'KarKa', credits: 'Kawia Karciana – generator kart do gier (dawniej Generator kart)', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
     version: `${KOD.zrodlo === 'nakładka' ? 'kod z aktualizacji, ' : ''}Electron ${process.versions.electron}` });
   utworzOkno();
 

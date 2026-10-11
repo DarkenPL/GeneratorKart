@@ -2,7 +2,7 @@
 // Pliki aktualizacji do wydania (aktualizacje.js):
 //   node scripts/paczka-kodu.js <folder>  →  <folder>/kod.zip i <folder>/aktualizacja.json
 // kod.zip = pliki aplikacji z package.json → build.files (bez rozrusznika start.js) + zasoby/ (npm run zasoby).
-// aktualizacja.json opisuje też pełną paczkę <folder>/Generator-kart.zip, jeśli istnieje (ditto z .app w CI).
+// aktualizacja.json opisuje też pełną paczkę <folder>/KarKa.zip, jeśli istnieje (ditto z .app w CI).
 // Opcja --wersja X nadpisuje wersję w paczce (tylko do testów).
 const fs = require('fs');
 const path = require('path');
@@ -43,8 +43,8 @@ const ROZRUSZNIK = ['start.js'];
 
   const manifest = { wersja, electron, data: new Date().toISOString(),
     kod: { plik: 'kod.zip', sha256: sha(kod), rozmiar: fs.statSync(kod).size } };
-  const pelna = path.join(cel, 'Generator-kart.zip');
-  if (fs.existsSync(pelna)) manifest.pelna = { plik: 'Generator-kart.zip', sha256: sha(pelna), rozmiar: fs.statSync(pelna).size };
+  const pelna = path.join(cel, 'KarKa.zip');
+  if (fs.existsSync(pelna)) manifest.pelna = { plik: 'KarKa.zip', sha256: sha(pelna), rozmiar: fs.statSync(pelna).size };
   fs.writeFileSync(path.join(cel, 'aktualizacja.json'), JSON.stringify(manifest, null, 1) + '\n');
-  console.log(`kod.zip ${(manifest.kod.rozmiar / 1048576).toFixed(2)} MB` + (manifest.pelna ? `, Generator-kart.zip ${(manifest.pelna.rozmiar / 1048576).toFixed(0)} MB` : '') + `, wersja ${wersja}, Electron ${electron}`);
+  console.log(`kod.zip ${(manifest.kod.rozmiar / 1048576).toFixed(2)} MB` + (manifest.pelna ? `, KarKa.zip ${(manifest.pelna.rozmiar / 1048576).toFixed(0)} MB` : '') + `, wersja ${wersja}, Electron ${electron}`);
 })().catch((e) => { console.error(e.message || e); process.exit(1); });

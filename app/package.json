@@ -1,9 +1,9 @@
 {
-  "name": "generator-kart",
-  "productName": "Generator kart",
+  "name": "karka",
+  "productName": "KarKa",
   "version": "0.5.0",
   "nazwaWydania": "Gołąb pocztowy",
-  "description": "Generator kart do gier – karty z arkusza CSV/XLSX i szablonu tekstowego",
+  "description": "KarKa (Kawia Karciana) – generator kart do gier: karty z arkusza CSV/XLSX i szablonu tekstowego",
   "main": "start.js",
   "private": true,
   "scripts": {
@@ -22,8 +22,8 @@
   },
   "build": {
     "appId": "io.github.generatorkart",
-    "productName": "Generator kart",
-    "copyright": "Generator kart",
+    "productName": "KarKa",
+    "copyright": "KarKa – Kawia Karciana",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -67,8 +67,8 @@
     },
     "publish": null,
     "dmg": {
-      "artifactName": "Generator-kart.${ext}",
-      "title": "Generator kart",
+      "artifactName": "KarKa.${ext}",
+      "title": "KarKa",
       "window": {
         "width": 540,
         "height": 380
@@ -90,6 +90,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DarkenPL/GeneratorKart.git"
+    "url": "https://github.com/DarkenPL/KarKa.git"
   }
 }
