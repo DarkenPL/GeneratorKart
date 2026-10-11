@@ -137,13 +137,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           wersja="v$(node -p "require('./package.json').version")"
+          nazwa="$(node -p "require('./package.json').nazwaWydania || ''")"
           if gh release view "$wersja" >/dev/null 2>&1; then
             echo "::warning::Wydanie $wersja już istnieje – podnieś wersję w app/package.json, żeby opublikować nowe DMG."
             exit 0
           fi
           # Wydanie powstaje od razu z plikiem, więc link „latest” w README nigdy nie wskazuje pustego wydania.
           gh release create "$wersja" dist/Generator-kart.dmg dist/Generator-kart.zip dist/kod.zip dist/aktualizacja.json --latest --target "$GITHUB_SHA" \
-            --title "Generator kart ${wersja#v}" --generate-notes \
+            --title "Generator kart ${wersja#v}${nazwa:+ „$nazwa”}" --generate-notes \
             --notes "Aplikacja na macOS (Apple Silicon: M1–M4). Pierwsze uruchomienie: prawy przycisk → Otwórz (instrukcja: docs/aplikacja.md)."
           # Dawne wydanie „najnowsza” (nadpisywane przy każdej zmianie) nie jest już potrzebne.
           gh release delete najnowsza --yes --cleanup-tag 2>/dev/null || true

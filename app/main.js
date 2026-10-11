@@ -934,7 +934,9 @@ app.whenReady().then(async () => {
   await new Promise((ok) => serwer.listen(0, '127.0.0.1', ok));
   port = serwer.address().port;
   przekierujCdn();
-  app.setAboutPanelOptions({ applicationName: 'Generator kart', applicationVersion: WERSJA,
+  let nazwaWydania = '';
+  try { nazwaWydania = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).nazwaWydania || ''; } catch (e) { /* bez nazwy */ }
+  app.setAboutPanelOptions({ applicationName: 'Generator kart', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
     version: `${KOD.zrodlo === 'nakładka' ? 'kod z aktualizacji, ' : ''}Electron ${process.versions.electron}` });
   utworzOkno();
 

@@ -23,7 +23,7 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
 
 ## Aktualizacje
 
-Od wersji 0.4.13 aplikacja aktualizuje się sama – bez ponownego pobierania DMG i bez ponownego odblokowywania. Wersje 0.4.12 i starsze trzeba raz zainstalować z DMG ręcznie.
+Od wersji 0.5.0 („Gołąb pocztowy”) aplikacja aktualizuje się sama – bez ponownego pobierania DMG i bez ponownego odblokowywania. Wersje 0.4.x trzeba raz zaktualizować ręcznie – pobrać i zainstalować DMG.
 
 - **Kiedy sprawdza:** przy każdym uruchomieniu (po kilku sekundach; bez komunikatu, gdy nie ma nowej wersji albo internetu), z menu **Generator kart → Sprawdź aktualizacje…** i [zleceniem z pliku](#zlecenia-z-pliku) `aktualizacja`.
 - Gdy jest nowa wersja, okno pokazuje, co się zmieniło: **Zainstaluj**, **Później** albo **Pomiń tę wersję** (przy starcie aplikacja nie zapyta o nią ponownie; z menu – tak).
@@ -34,7 +34,7 @@ Od wersji 0.4.13 aplikacja aktualizuje się sama – bez ponownego pobierania DM
 - Gdyby nowa wersja kodu nie uruchomiła się poprawnie, przy następnym starcie aplikacja wraca do wersji z Programów.
 - Pełna podmiana wymaga prawa zapisu w folderze aplikacji (konto administratora przy `/Applications`). Bez niego okno proponuje pobranie DMG ze strony wydania.
 
-Wersję i źródło kodu pokazuje **Generator kart → O aplikacji Generator kart** („kod z aktualizacji” = mała aktualizacja).
+Wersję, nazwę wydania i źródło kodu pokazuje **Generator kart → O aplikacji Generator kart** („kod z aktualizacji” = mała aktualizacja).
 
 ## Praca
 
