@@ -31,7 +31,7 @@ test1() {
     n=$cel; cp -r "../przyklady/$n" "$TMP/$n"; arg="$TMP/$n"
   fi
   timeout 400 xvfb-run -a ./node_modules/.bin/electron --no-sandbox --user-data-dir="$TMP/ud-$n" \
-    --enable-logging=file --log-file="$TMP/$n.log" . $EDYTOR --test-pdf "$arg" "$TMP/$n.pdf" 2>/dev/null | tail -1 > "$TMP/$n.json"
+    --enable-logging=file --log-file="$TMP/$n.log" . $EDYTOR --test-pdf "$arg" "$TMP/$n.pdf" 2>/dev/null | grep "^{" | tail -1 > "$TMP/$n.json"
   python3 - "$n" "$TMP/$n.json" "$TMP/$n.log" <<'PY'
 import json, sys, re
 n, plik, log = sys.argv[1:]

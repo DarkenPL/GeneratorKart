@@ -21,6 +21,21 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
    xattr -dr com.apple.quarantine "/Applications/Generator kart.app"
    ```
 
+## Aktualizacje
+
+Od wersji 0.4.13 aplikacja aktualizuje się sama – bez ponownego pobierania DMG i bez ponownego odblokowywania. Wersje 0.4.12 i starsze trzeba raz zainstalować z DMG ręcznie.
+
+- **Kiedy sprawdza:** przy każdym uruchomieniu (po kilku sekundach; bez komunikatu, gdy nie ma nowej wersji albo internetu), z menu **Generator kart → Sprawdź aktualizacje…** i [zleceniem z pliku](#zlecenia-z-pliku) `aktualizacja`.
+- Gdy jest nowa wersja, okno pokazuje, co się zmieniło: **Zainstaluj**, **Później** albo **Pomiń tę wersję** (przy starcie aplikacja nie zapyta o nią ponownie; z menu – tak).
+- **Mała aktualizacja** (prawie zawsze, ok. 1 MB): pobiera się sam kod Generatora (silnik kart, okna, przykłady) do `~/Library/Application Support/Generator kart/kod`, a aplikacja uruchamia się ponownie. Aplikacja w Programach się nie zmienia, więc macOS o nic nie pyta.
+- **Pełna aktualizacja** (ok. 120 MB): gdy nowa wersja ma nowszy Electron (silnik okna), pobiera się cała aplikacja. Po pobraniu aplikacja zamyka się, podmienia w Programach i uruchamia od nowa. macOS może wtedy raz zapytać o dostęp do folderów z projektami.
+- Przed ponownym uruchomieniem aplikacja pyta o niezapisane zmiany w edytorze szablonu.
+- Pobrane pliki są sprawdzane sumą kontrolną SHA-256 z wydania; uszkodzony plik nie zostanie zainstalowany.
+- Gdyby nowa wersja kodu nie uruchomiła się poprawnie, przy następnym starcie aplikacja wraca do wersji z Programów.
+- Pełna podmiana wymaga prawa zapisu w folderze aplikacji (konto administratora przy `/Applications`). Bez niego okno proponuje pobranie DMG ze strony wydania.
+
+Wersję i źródło kodu pokazuje **Generator kart → O aplikacji Generator kart** („kod z aktualizacji” = mała aktualizacja).
+
 ## Praca
 
 1. **Plik → Nowy projekt… (⌘N)** tworzy folder gry o podanej nazwie, z gotowym szablonem (`Szablony/gra.txt`), plikiem kart (`karty.csv`), ikonami, przykładowym obrazkiem i krótką instrukcją (`CZYTAJ.txt`), i od razu go otwiera. Wystarczy zmieniać pliki.
@@ -103,6 +118,7 @@ Otwarta aplikacja wykonuje polecenia zapisane w plikach – bez klikania. Służ
 | `obrazki` | eksport JPG/PNG do `Export/` | `dpi` (150 / 300), `format` (jpg / png), `talie`, `id`, `rewersy` |
 | `pcio` | pokój playingcards.io w folderze projektu | `dpi`, `talie` |
 | `katalog` | katalog talii (JPG) do `.generator/katalog/` | `talie`, `id` |
+| `aktualizacja` | sprawdza, czy jest nowa wersja aplikacji; z `instaluj = tak` instaluje ją i uruchamia aplikację ponownie | `instaluj` (domyślnie `nie`), `restart` (domyślnie `tak`) |
 
 - `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10).
 - Brak klucza = ostatnie ustawienie z okna (Druk i PDF, Eksport obrazków, playingcards.io) albo domyślne. Zlecenie tych ustawień nie zmienia. Wyjątek: zlecenie zawsze bierze wszystkie karty (nie „zaznaczone”), chyba że `tylkoZmienione = tak`.
@@ -130,6 +146,7 @@ Wynik `wynik-pdf.json` (skrót):
 - Wspólne pola wyniku: `ok`, `pliki` (ścieżki względem folderu projektu; w katalogu – nazwy w `folder`), `uwagi`, `zaDlugie` (karty z za długim tekstem), `niezapisaneZmiany`, `blad`, `wersjaAplikacji`, `opcje` (opcje po uzupełnieniu z okna), `ostrzezenia` (np. nieznany klucz, brak karty o podanym ID).
 - Błędna wartość (np. `uklad = plakat`, nieistniejąca talia) – zlecenie nie jest wykonane: `ok: false` i opis w `blad`.
 - `katalog` zapisuje wynik także w dawnym `wynik.json` (zgodność ze starszymi wersjami).
+- `aktualizacja`: wynik (`wersjaAplikacji`, `najnowsza`, `dostepna`, `rodzaj` – `kod` albo `pelna`, `rozmiar`, `zainstalowano`, `restart`) powstaje przed ponownym uruchomieniem. Gdy edytor ma niezapisane zmiany albo `restart = nie`, nowa wersja uruchomi się przy następnym starcie (pełna – po zamknięciu aplikacji). Zlecenie nie pokazuje okien z pytaniami.
 
 ## Dla deweloperów
 
@@ -145,6 +162,7 @@ npm run dist       # budowanie .app (na macOS)
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
 - Tryb testowy: `Generator kart [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- Aktualizacje: `app/start.js` (rozrusznik – wybiera kod z paczki albo nakładkę), `app/nakladka.js`, `app/aktualizacje.js`; pliki do wydania robi `app/scripts/paczka-kodu.js` (`kod.zip`, `aktualizacja.json`), a workflow dokłada `Generator-kart.zip` (`ditto` z `.app`). Test: `node app/scripts/test-aktualizacje.js [--electron]`. `--bez-nakladki` uruchamia kod z paczki.
 - `app/scripts/testuj.sh [przykład… | szablon.txt]`: na Linuksie z Xvfb przebudowuje zasoby i uruchamia tryb testowy na kopiach przykładów (domyślnie wszystkich, równolegle); wypisuje wiersz na projekt i kończy z kodem 0 albo 1.
 - `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` tworzy wydanie `v<wersja>` z DMG (wersja z `app/package.json`).
 

@@ -3,6 +3,7 @@
 #   (link w README: releases/latest/download/Generator-kart.dmg); wersja już wydana → tylko ostrzeżenie,
 # - tag v* albo wydanie opublikowane ręcznie na GitHubie → plik dołączony do tego wydania,
 # - pull request → tylko budowanie i testy (plik w Artifacts).
+# Do wydania trafiają też pliki aktualizacji (app/aktualizacje.js): aktualizacja.json, kod.zip, Generator-kart.zip.
 name: Aplikacja macOS
 
 on:
@@ -48,6 +49,9 @@ jobs:
       - name: Test – historia wersji (moduł)
         run: node scripts/test-historia.js
 
+      - name: Test – aktualizacje (moduł, nakładka, ditto)
+        run: node scripts/test-aktualizacje.js
+
       - name: Budowanie (Apple Silicon)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -74,6 +78,20 @@ jobs:
           "$bin" --user-data-dir="$RUNNER_TEMP/ud" --test-nowy "$RUNNER_TEMP/Złota Wyprawa, \"edycja\"" --test-pdf - "$RUNNER_TEMP/test/nowy.pdf" | tee "$RUNNER_TEMP/test/nowy.json"
           grep -q '"ok":true' "$RUNNER_TEMP/test/nowy.json"
 
+      - name: Test – nakładka kodu w zbudowanej aplikacji
+        run: |
+          bin="dist/mac-arm64/Generator kart.app/Contents/MacOS/Generator kart"
+          ud="$RUNNER_TEMP/ud-nakladka"
+          node scripts/paczka-kodu.js "$RUNNER_TEMP/nakladka" --wersja 99.0.0
+          mkdir -p "$ud/kod" && ditto -x -k "$RUNNER_TEMP/nakladka/kod.zip" "$ud/kod"
+          node -e "const m=require('$RUNNER_TEMP/nakladka/aktualizacja.json');require('fs').writeFileSync('$ud/kod/nakladka.json',JSON.stringify({wersja:m.wersja,electron:m.electron}))"
+          cp -R ../przyklady/01-wyprawa "$RUNNER_TEMP/nakladka-01"
+          "$bin" --user-data-dir="$ud" --test-pdf "$RUNNER_TEMP/nakladka-01" "$RUNNER_TEMP/test/nakladka.pdf" | tee "$RUNNER_TEMP/test/nakladka.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/test/nakladka.json"
+          grep -q '"zrodlo":"nakładka","wersja":"99.0.0"' "$RUNNER_TEMP/test/nakladka.json"
+          test ! -e "$ud/kod/start-99.0.0"
+          codesign --verify --deep --strict "dist/mac-arm64/Generator kart.app"   # paczka nietknięta
+
       - name: DMG (okno „przeciągnij do Programów”)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -88,10 +106,23 @@ jobs:
           test -L "$RUNNER_TEMP/dmg/Applications"
           hdiutil detach "$RUNNER_TEMP/dmg"
 
+      - name: Pliki aktualizacji (kod.zip, Generator-kart.zip, aktualizacja.json)
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "dist/mac-arm64/Generator kart.app" dist/Generator-kart.zip
+          node scripts/paczka-kodu.js dist
+          cat dist/aktualizacja.json
+          # Pełna paczka rozpakowana przez ditto ma ważny podpis (tak samo robi aktualizator).
+          mkdir -p "$RUNNER_TEMP/rozpak" && ditto -x -k dist/Generator-kart.zip "$RUNNER_TEMP/rozpak"
+          codesign --verify --deep --strict "$RUNNER_TEMP/rozpak/Generator kart.app"
+
       - uses: actions/upload-artifact@v6
         with:
           name: Generator-kart
-          path: app/dist/Generator-kart.dmg
+          path: |
+            app/dist/Generator-kart.dmg
+            app/dist/Generator-kart.zip
+            app/dist/kod.zip
+            app/dist/aktualizacja.json
           compression-level: 0
 
       - uses: actions/upload-artifact@v6
@@ -111,7 +142,7 @@ jobs:
             exit 0
           fi
           # Wydanie powstaje od razu z plikiem, więc link „latest” w README nigdy nie wskazuje pustego wydania.
-          gh release create "$wersja" dist/Generator-kart.dmg --latest --target "$GITHUB_SHA" \
+          gh release create "$wersja" dist/Generator-kart.dmg dist/Generator-kart.zip dist/kod.zip dist/aktualizacja.json --latest --target "$GITHUB_SHA" \
             --title "Generator kart ${wersja#v}" --generate-notes \
             --notes "Aplikacja na macOS (Apple Silicon: M1–M4). Pierwsze uruchomienie: prawy przycisk → Otwórz (instrukcja: docs/aplikacja.md)."
           # Dawne wydanie „najnowsza” (nadpisywane przy każdej zmianie) nie jest już potrzebne.
@@ -122,7 +153,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/Generator-kart.dmg \
+          gh release create "$GITHUB_REF_NAME" dist/Generator-kart.dmg dist/Generator-kart.zip dist/kod.zip dist/aktualizacja.json \
             --title "Generator kart $GITHUB_REF_NAME" \
             --notes "Aplikacja na macOS (Apple Silicon: M1–M4). Pierwsze uruchomienie: docs/aplikacja.md."
 
@@ -130,4 +161,4 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart.dmg --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/Generator-kart.dmg dist/Generator-kart.zip dist/kod.zip dist/aktualizacja.json --clobber
