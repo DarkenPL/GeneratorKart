@@ -64,6 +64,7 @@ Wersję, nazwę wydania i źródło kodu pokazuje **KarKa → O aplikacji KarKa*
    - **Obrazki:** rozdzielczość 150 dpi (ekran, playtesty online) albo 300 dpi (druk, drukarnie), format JPG albo PNG (przezroczyste zaokrąglone rogi), które karty, talie, rewersy jako osobne pliki.
    - **Druk i PDF:** układ, linie cięcia, spad, rewersy, **szkic** (bez teł i obrazków, czarny tekst – oszczędza tusz), które karty, talie; przyciski **Drukuj…** i **Zapisz PDF**.
      - Układy: **A4** (karty 1:1 w siatce, po każdym arkuszu arkusz rewersów), **każda karta na osobnej stronie** i **Drukarnia**.
+     - **Przesunięcie rewersów** (A4, od 0.5.1): drukarki przy druku dwustronnym często przesuwają drugą stronę o 1–2 mm. Wydrukuj próbny arkusz, przyłóż kartkę do światła i zmierz, o ile rewersy uciekły; w oknie wpisz korektę w mm (np. rewers 1 mm za bardzo w prawo → „w prawo” −1, 0,5 mm za nisko → „w dół” −0,5). Okno zapamiętuje ją dla projektu.
      - **Linie cięcia** (układ A4): znaczniki na marginesie (gilotyna, nóż), przerywane szare linie wzdłuż krawędzi każdej karty (nożyczki) albo jedno i drugie. Arkusz rewersów nie ma linii.
      - **Drukarnia** (PDF dla drukarni, np. Printnet): jedna strona na kopię karty, kolejno awers, rewers, awers, rewers…; strona większa od karty o **spad** z każdej strony (domyślnie 2 mm – karta 63×88 mm daje stronę 67×92 mm); bez znaczników cięcia i bez zaokrąglonych rogów (rogi wycina drukarnia). Tło karty sięga do krawędzi strony; prostokąty i obrazki (`dopasuj=wypełnij` albo `rozciągnij`) dotykające krawędzi karty są przedłużone o spad. Teksty, ikony, linie i obwódka karty zostają na miejscu, więc trzymaj je min. 3 mm od krawędzi. PDF jest w RGB – drukarnia przelicza go do CMYK.
      - Drukarnie chcą obrazków min. **300 dpi** w rozmiarze na karcie – Raport pokazuje obrazki o mniejszej rozdzielczości.
@@ -118,13 +119,13 @@ Otwarta aplikacja wykonuje polecenia zapisane w plikach – bez klikania. Służ
 |---|---|---|
 | `stan` | talie i karty (ID, nazwa, kopie), karty zmienione i nowe od ostatniego PDF, Uwagi – bez plików | – |
 | `raport` | Raport projektu (powtórzone ID, puste pola, nieużywane kolumny, obrazki poniżej 300 dpi, nieużywane ikony i obrazki) – bez plików | – |
-| `pdf` | jak **Plik → Zapisz PDF**; zapamiętuje wydruk (potem „tylko zmienione” i Porównaj) | `uklad` (a4 / pojedyncze / drukarnia), `ciecie` (znaczniki / nozyczki / oba), `rewersy`, `szkic`, `spad`, `talie`, `id`, `tylkoZmienione`, `plik` |
+| `pdf` | jak **Plik → Zapisz PDF**; zapamiętuje wydruk (potem „tylko zmienione” i Porównaj) | `uklad` (a4 / pojedyncze / drukarnia), `ciecie` (znaczniki / nozyczki / oba), `rewersy`, `szkic`, `spad`, `przesuniecieX`, `przesuniecieY`, `talie`, `id`, `tylkoZmienione`, `plik` |
 | `obrazki` | eksport JPG/PNG do `Export/` | `dpi` (150 / 300), `format` (jpg / png), `talie`, `id`, `rewersy` |
 | `pcio` | pokój playingcards.io w folderze projektu | `dpi`, `talie` |
 | `katalog` | katalog talii (JPG) do `.generator/katalog/` | `talie`, `id` |
 | `aktualizacja` | sprawdza, czy jest nowa wersja aplikacji; z `instaluj = tak` instaluje ją i uruchamia aplikację ponownie | `instaluj` (domyślnie `nie`), `restart` (domyślnie `tak`) |
 
-- `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10).
+- `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10); `przesuniecieX`/`przesuniecieY` – przesunięcie rewersów w mm (−10…10, plus = w prawo / w dół).
 - Brak klucza = ostatnie ustawienie z okna (Druk i PDF, Eksport obrazków, playingcards.io) albo domyślne. Zlecenie tych ustawień nie zmienia. Wyjątek: zlecenie zawsze bierze wszystkie karty (nie „zaznaczone”), chyba że `tylkoZmienione = tak`.
 - `plik` (PDF): ścieżka w folderze projektu, np. `plik = Druk/playtest 3.pdf`. Bez niej nazwa jak przy ręcznym zapisie (`Projekt – karty A4.pdf`, `Projekt – drukarnia.pdf`…) w folderze projektu.
 - Gdy w edytorze szablonu są niezapisane zmiany, zlecenie używa szablonu z dysku, a potem wraca podgląd z edytora (w wyniku `niezapisaneZmiany: true`).
