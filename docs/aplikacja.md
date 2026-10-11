@@ -84,8 +84,52 @@ Plik budowany jest automatycznie po każdej zmianie w gałęzi `main`, a każda 
   - Pliki o tych samych nazwach są nadpisywane, inne pliki w `Export` zostają.
 - **Eksport do playingcards.io** zapisuje nowy pokój (`NazwaProjektu – playingcards.pcio`) w folderze projektu – każda talia jako osobny stos ([opis](playingcards.md)).
 - **Katalog talii** (**Plik → Eksport → Katalog talii (JPG)…**): dla każdej talii obrazek JPG – najpierw rewers (niebieska ramka), potem siatka zmniejszonych awersów z podpisami (ID, nazwa, liczba kopii) – do przeglądu całej talii, instrukcji i dla testerów. Pliki `NazwaProjektu_NazwaTalii.jpg` w `Export/katalog`; obrazek ma najwyżej ok. 2000×2000 px, więc duże talie dzielą się na kilka plików (`_1`, `_2`…). Karty z za długim tekstem mają czerwoną ramkę.
-  - **Zlecenie z pliku** (np. od Claude, bez klikania): plik `.generator/zlecenia/katalog` w folderze projektu. Może być pusty albo zawierać wiersze `talie = Rośliny, Pogoda` i `id = 1, 7`. Otwarta aplikacja w ciągu kilku sekund robi katalog do `.generator/katalog/`, usuwa plik zlecenia i zapisuje `.generator/zlecenia/wynik.json` (pliki, talie, Uwagi, karty za długie, czy edytor ma niezapisane zmiany). Działa tylko poza przykładami.
+  - Katalog można też zamówić bez klikania – [zlecenie z pliku](#zlecenia-z-pliku) `katalog`.
 - **Przykłady** są tylko do odczytu. Eksport obrazków pyta wtedy o folder. Żeby zmieniać przykład, skopiuj jego folder z repozytorium i otwórz szablon kopii.
+
+## Zlecenia z pliku
+
+Otwarta aplikacja wykonuje polecenia zapisane w plikach – bez klikania. Służy to np. Claude, który pracuje na plikach gry i chce dostać PDF, obrazki albo raport z **Twojej** aplikacji (ta sama wersja, te same czcionki, zapamiętany wydruk do „tylko zmienione”).
+
+1. W folderze projektu utwórz plik `.generator/zlecenia/<polecenie>` (bez rozszerzenia), np. `.generator/zlecenia/pdf`.
+2. Plik może być pusty albo zawierać wiersze `klucz = wartość` (wiersze zaczynające się od `#` albo `;` są pomijane).
+3. W ciągu kilku sekund aplikacja wykonuje zlecenie, **usuwa plik zlecenia** i zapisuje wynik `.generator/zlecenia/wynik-<polecenie>.json`. Kilka zleceń naraz wykonuje po kolei.
+
+| Polecenie | Co robi | Klucze |
+|---|---|---|
+| `stan` | talie i karty (ID, nazwa, kopie), karty zmienione i nowe od ostatniego PDF, Uwagi – bez plików | – |
+| `raport` | Raport projektu (powtórzone ID, puste pola, nieużywane kolumny, obrazki poniżej 300 dpi, nieużywane ikony i obrazki) – bez plików | – |
+| `pdf` | jak **Plik → Zapisz PDF**; zapamiętuje wydruk (potem „tylko zmienione” i Porównaj) | `uklad` (a4 / pojedyncze / drukarnia), `ciecie` (znaczniki / nozyczki / oba), `rewersy`, `szkic`, `spad`, `talie`, `id`, `tylkoZmienione`, `plik` |
+| `obrazki` | eksport JPG/PNG do `Export/` | `dpi` (150 / 300), `format` (jpg / png), `talie`, `id`, `rewersy` |
+| `pcio` | pokój playingcards.io w folderze projektu | `dpi`, `talie` |
+| `katalog` | katalog talii (JPG) do `.generator/katalog/` | `talie`, `id` |
+
+- `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10).
+- Brak klucza = ostatnie ustawienie z okna (Druk i PDF, Eksport obrazków, playingcards.io) albo domyślne. Zlecenie tych ustawień nie zmienia. Wyjątek: zlecenie zawsze bierze wszystkie karty (nie „zaznaczone”), chyba że `tylkoZmienione = tak`.
+- `plik` (PDF): ścieżka w folderze projektu, np. `plik = Druk/playtest 3.pdf`. Bez niej nazwa jak przy ręcznym zapisie (`Projekt – karty A4.pdf`, `Projekt – drukarnia.pdf`…) w folderze projektu.
+- Gdy w edytorze szablonu są niezapisane zmiany, zlecenie używa szablonu z dysku, a potem wraca podgląd z edytora (w wyniku `niezapisaneZmiany: true`).
+- Zlecenia `pdf`, `obrazki` i `pcio` dodają punkt w historii wersji z dopiskiem „(zlecenie)”.
+- Działa tylko poza przykładami i tylko w projekcie otwartym w aplikacji.
+
+Przykład – zlecenie `.generator/zlecenia/pdf`:
+
+```
+uklad = a4
+ciecie = nozyczki
+talie = Rośliny
+tylkoZmienione = tak
+```
+
+Wynik `wynik-pdf.json` (skrót):
+
+```json
+{ "zlecenie": "pdf", "ok": true, "pliki": ["Ogród – karty A4 – zmienione.pdf"], "karty": 4, "strony": 2,
+  "uwagi": [], "zaDlugie": [], "niezapisaneZmiany": false, "blad": null, "wersjaAplikacji": "0.4.11" }
+```
+
+- Wspólne pola wyniku: `ok`, `pliki` (ścieżki względem folderu projektu; w katalogu – nazwy w `folder`), `uwagi`, `zaDlugie` (karty z za długim tekstem), `niezapisaneZmiany`, `blad`, `wersjaAplikacji`, `opcje` (opcje po uzupełnieniu z okna), `ostrzezenia` (np. nieznany klucz, brak karty o podanym ID).
+- Błędna wartość (np. `uklad = plakat`, nieistniejąca talia) – zlecenie nie jest wykonane: `ok: false` i opis w `blad`.
+- `katalog` zapisuje wynik także w dawnym `wynik.json` (zgodność ze starszymi wersjami).
 
 ## Dla deweloperów
 
@@ -101,6 +145,7 @@ npm run dist       # budowanie .app (na macOS)
 - `app/serwer.js`: lokalny serwer HTTP, który podaje pliki projektu.
 - `app/scripts/zasoby.js`: kopiuje generator, przykłady, biblioteki i czcionki do `app/zasoby/`.
 - Tryb testowy: `Generator kart [--test-nowy <nowy folder>] [--test-edytor] --test-pdf <szablon.txt|folder|-> <wynik.pdf>` otwiera projekt, sprawdza eksport JPG (poza przykładami także do `Export/`), zapisuje PDF i zrzut ekranu, a potem kończy z kodem 0 albo 1. `-` oznacza ekran powitalny.
+- `app/scripts/testuj.sh [przykład… | szablon.txt]`: na Linuksie z Xvfb przebudowuje zasoby i uruchamia tryb testowy na kopiach przykładów (domyślnie wszystkich, równolegle); wypisuje wiersz na projekt i kończy z kodem 0 albo 1.
 - `.github/workflows/aplikacja-mac.yml`: budowanie i testy na macOS. Po każdej zmianie w `main` tworzy wydanie `v<wersja>` z DMG (wersja z `app/package.json`).
 
 ### Wydania

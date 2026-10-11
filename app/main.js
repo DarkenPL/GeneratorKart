@@ -264,41 +264,67 @@ setInterval(() => {
   if (!historiaDostepna() || !okno) return;
   try { if (historia.sprawdzSkrzynke(projekt)) okno.webContents.send('historia:zmiana'); } catch (e) { /* spróbujemy za chwilę */ }
 }, 3000);
-// Zlecenia z rozmowy (np. od Claude): plik .generator/zlecenia/katalog w folderze projektu.
-// Treść (opcjonalnie): wiersze „talie = A, B” i „id = 1, 7”. Otwarta aplikacja robi katalog PNG
-// do .generator/katalog/, zapisuje wynik.json (pliki, Uwagi, karty za długie) i usuwa zlecenie.
+// Zlecenia z pliku (np. od Claude): .generator/zlecenia/<polecenie> w folderze otwartego projektu.
+// Polecenia: katalog, stan, raport, pdf, obrazki, pcio. Treść (opcjonalnie): wiersze „klucz = wartość”
+// (puste wiersze i komentarze # / ; pomijane). Otwarta aplikacja wykonuje zlecenia po kolei (jedno naraz),
+// usuwa plik zlecenia i zapisuje wynik-<polecenie>.json (katalog także dawny wynik.json).
 const FOLDER_ZLECEN = ['.generator', 'zlecenia'];
+const POLECENIA = ['katalog', 'stan', 'raport', 'pdf', 'obrazki', 'pcio'];
 let zlecenieTrwa = false;
 function czytajZlecenie(tekst) {
   const o = {};
-  for (const w of String(tekst).split(/\r?\n/)) {
-    const m = /^\s*(talie|talia|id)\s*[=:]\s*(.*)$/i.exec(w);
-    if (!m) continue;
-    const lista = m[2].split(',').map((x) => x.trim()).filter(Boolean);
-    if (/^id$/i.test(m[1])) o.id = lista; else o.talie = lista;
+  for (const w of String(tekst).replace(/^\uFEFF/, '').split(/\r?\n/)) {
+    if (/^\s*([#;]|$)/.test(w)) continue;
+    const m = /^\s*([^=:]+?)\s*[=:]\s*(.*?)\s*$/.exec(w);
+    if (m) o[m[1]] = m[2];
   }
   return o;
 }
+async function wykonajPlikZlecenia(polecenie) {
+  const folder = path.join(projekt, ...FOLDER_ZLECEN), plik = path.join(folder, polecenie);
+  let tekst;
+  try { if (!fs.statSync(plik).isFile()) return false; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return false; }
+  // Strona jeszcze się wczytuje – spróbujemy przy następnym sprawdzeniu.
+  const gotowa = await okno.webContents.executeJavaScript('!!(window.wykonajZlecenie && window.zbudowano)').catch(() => false);
+  if (!gotowa) return false;
+  const wyniki = [path.join(folder, `wynik-${polecenie}.json`)];
+  if (polecenie === 'katalog') wyniki.push(path.join(folder, 'wynik.json'));     // zgodność z v0.4.6–0.4.10
+  const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), wersjaAplikacji: app.getVersion() };
+  let wynik;
+  try {
+    wyniki.forEach((w) => fs.rmSync(w, { force: true }));
+    const surowe = czytajZlecenie(tekst);
+    const w = await okno.webContents.executeJavaScript(`wykonajZlecenie(${JSON.stringify(polecenie)}, ${JSON.stringify(surowe)})`);
+    wynik = { ...naglowek, ok: false, pliki: [], blad: null, ...w };
+    const wzgledna = (p) => (typeof p === 'string' && path.isAbsolute(p) ? path.relative(projekt, p) : p);
+    wynik.pliki = (wynik.pliki || []).map(wzgledna);
+    if (wynik.folder) wynik.folder = wzgledna(wynik.folder);
+  } catch (e) {
+    wynik = { ...naglowek, ok: false, pliki: [], blad: String((e && e.message) || e) };
+  }
+  try {
+    fs.rmSync(plik, { force: true });                     // najpierw zlecenie – plik wyniku = koniec pracy
+    for (const w of wyniki) fs.writeFileSync(w, JSON.stringify(wynik, null, 1));
+  } catch (e) { /* trudno – folder zniknął */ }
+  return true;
+}
 async function sprawdzZlecenia() {
   if (zlecenieTrwa || !historiaDostepna() || !okno) return;
-  const plik = path.join(projekt, ...FOLDER_ZLECEN, 'katalog');
-  let tekst;
-  try { if (!fs.statSync(plik).isFile()) return; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return; }
   zlecenieTrwa = true;
-  const wynikPlik = path.join(projekt, ...FOLDER_ZLECEN, 'wynik.json');
-  try {
-    fs.rmSync(wynikPlik, { force: true });
-    const opcje = czytajZlecenie(tekst);
-    const w = await okno.webContents.executeJavaScript(`window.zlecenieKatalogu ? zlecenieKatalogu(${JSON.stringify(opcje)}) : { ok: false, blad: 'strona nie jest gotowa' }`);
-    const wynik = { zlecenie: 'katalog', opcje, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), ...w };
-    if (wynik.folder) wynik.folder = path.relative(projekt, wynik.folder);
-    fs.rmSync(plik, { force: true });                     // najpierw zlecenie – wynik.json = koniec pracy
-    fs.writeFileSync(wynikPlik, JSON.stringify(wynik, null, 1));
-  } catch (e) {
-    try { fs.rmSync(plik, { force: true }); fs.writeFileSync(wynikPlik, JSON.stringify({ zlecenie: 'katalog', ok: false, blad: String(e.message || e) }, null, 1)); } catch (e2) { /* trudno */ }
-  } finally { zlecenieTrwa = false; }
+  try { for (const p of POLECENIA) if (projekt) await wykonajPlikZlecenia(p); }
+  finally { zlecenieTrwa = false; }
 }
 setInterval(sprawdzZlecenia, 3000);
+// PDF ze zlecenia: zapis bez okna, tylko w folderze projektu (domyślna nazwa jak przy ręcznym zapisie).
+ipcMain.handle('zlecenie:pdf', async (e, nazwa) => {
+  if (!zlecenieTrwa || !historiaDostepna()) throw new Error('zapis PDF bez okna działa tylko w zleceniu z pliku');
+  let cel = path.resolve(projekt, String(nazwa || 'karty.pdf'));
+  if (!/\.pdf$/i.test(cel)) cel += '.pdf';
+  const rel = path.relative(projekt, cel);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('plik PDF musi być w folderze projektu');
+  fs.mkdirSync(path.dirname(cel), { recursive: true });
+  return pdfDoPliku(e.sender, cel);
+});
 ipcMain.handle('historia:przywroc', (e, czas) => {
   if (!historiaDostepna()) return { blad: 'Przykłady nie mają historii.' };
   if (zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
@@ -654,6 +680,69 @@ async function trybTestowy(folder, wynik) {
     katalog.ok = pngA.length > 0 && szer > 300 && szer <= 2000 && !!w && w.ok && pngB === w.pliki.length && pngB > 0
       && katalog.b.talie.length === 1 && katalog.b.talie[0] === talia && katalog.zlecenieUsuniete;
   }
+  // Zlecenia z pliku dla całej gry (--test-edytor, poza przykładami): stan, raport, pdf, obrazki, pcio,
+  // dwa zlecenia naraz, błędne opcje, „tylko zmienione”, niezapisany edytor (karty z dysku), ustawienia okien bez zmian.
+  let zlecenia = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const zl = path.join(projekt, ...FOLDER_ZLECEN);
+    fs.mkdirSync(zl, { recursive: true });
+    const czytaj = (p) => { try { return JSON.parse(fs.readFileSync(path.join(zl, `wynik-${p}.json`), 'utf8')); } catch (e) { return null; } };
+    const czekajNa = async (pol) => { let w = null; for (let i = 0; i < 240 && !w; i++) { await czekaj(500); w = czytaj(pol); } return w; };
+    const zlec = async (pol, tresc = '') => { fs.rmSync(path.join(zl, `wynik-${pol}.json`), { force: true }); fs.writeFileSync(path.join(zl, pol), tresc); return czekajNa(pol); };
+    const ustPrzed = JSON.stringify(await js('USTAWIENIA_OKIEN'));
+    const pierwsza = await js("(() => { const k = document.querySelector('#podglad .karta:not(.rewers)'); return { talia: k.dataset.talia, id: k.dataset.id }; })()");
+    const z = { talia: pierwsza.talia };
+    // Dwa naraz: stan i raport.
+    fs.writeFileSync(path.join(zl, 'raport'), '');
+    const stan = await zlec('stan', '# komentarz\n');
+    const raport = await czekajNa('raport');
+    z.stan = stan && { ok: stan.ok, karty: stan.karty, talie: (stan.talie || []).length, wersja: stan.wersjaAplikacji, ostatniPdf: stan.ostatniPdf };
+    z.raport = raport && { ok: raport.ok, sekcje: (raport.raport || []).length, pierwsza: raport.raport && raport.raport[0] && raport.raport[0].tytul };
+    // PDF jednej talii bez rewersów do wskazanego pliku; potem „tylko zmienione” = brak kart.
+    const pdf = await zlec('pdf', `uklad = a4\nrewersy = nie\ntalia = ${pierwsza.talia}\nplik = Export/zlecenie.pdf\nkolor = czerwony\n`);
+    const pdfPlik = path.join(projekt, 'Export', 'zlecenie.pdf');
+    z.pdf = pdf && { ok: pdf.ok, pliki: pdf.pliki, strony: pdf.strony, rozmiar: fs.existsSync(pdfPlik) ? fs.statSync(pdfPlik).size : 0, ostrzezenia: pdf.ostrzezenia };
+    const pdfZm = await zlec('pdf', 'tylkoZmienione = tak\n');
+    z.pdfZmienione = pdfZm && { ok: pdfZm.ok, blad: pdfZm.blad };
+    const zle = await zlec('pdf', 'uklad = plakat\ntalie = Nie ma takiej\n');
+    z.bledne = zle && { ok: zle.ok, blad: zle.blad };
+    const stan2 = await zlec('stan');
+    z.stanPoPdf = stan2 && { ostatniPdf: !!stan2.ostatniPdf, zmienione: stan2.zmienione };
+    // Obrazki: jedna karta (wszystkie kopie) PNG bez rewersu.
+    const obr = await zlec('obrazki', `format = png\ndpi = 150\ntalie = ${pierwsza.talia}\nid = ${pierwsza.id}, nie-ma-takiej\nrewersy = nie\n`);
+    z.obrazki = obr && { ok: obr.ok, pliki: obr.pliki, sa: (obr.pliki || []).every((p) => fs.existsSync(path.join(projekt, p))), ostrzezenia: obr.ostrzezenia };
+    // playingcards.io jednej talii.
+    const pcio = await zlec('pcio', `talie = ${pierwsza.talia}\n`);
+    z.pcio = pcio && { ok: pcio.ok, pliki: pcio.pliki, sa: (pcio.pliki || []).every((p) => fs.existsSync(path.join(projekt, p))), karty: pcio.karty };
+    // Niezapisany edytor: zmiana tytułu kart w edytorze; zlecenie widzi wersję z dysku, edytor zostaje bez zmian.
+    const nazwaKarty = await js("document.querySelector('#podglad .karta:not(.rewers)').title");
+    await js("(() => { const p = document.getElementById('edPole'); p.value = p.value.replace(/^PROJEKT(\\s*)=(\\s*)/m, 'PROJEKT$1=$2ZMIANA ') + '\\n; zmiana z testu\\n'; p.dispatchEvent(new Event('input')); })()");
+    await czekaj(1500);
+    const projektEd = await js('PROJEKT');
+    const stanEd = await zlec('stan');
+    await czekaj(1500);
+    const poEd = await js("({ zmiany: ED.zmiany, tekst: edytorTekst().includes('zmiana z testu') })");
+    z.edytor = stanEd && { niezapisane: stanEd.niezapisaneZmiany, projekt: stanEd.projekt, projektEd, poZleceniu: { ...poEd, projekt: await js('PROJEKT') } };
+    await js("(() => { const p = document.getElementById('edPole'); p.value = ED.dysk; p.dispatchEvent(new Event('input')); })()");
+    await czekaj(1500);
+    z.ustawieniaBezZmian = JSON.stringify(await js('USTAWIENIA_OKIEN')) === ustPrzed;
+    z.pozostale = fs.readdirSync(zl).filter((n) => POLECENIA.includes(n));
+    z.ok = !!(z.stan && z.stan.ok && z.stan.karty > 0 && z.stan.talie > 0 && z.stan.wersja
+      && z.raport && z.raport.ok && z.raport.sekcje > 0
+      && z.pdf && z.pdf.ok && z.pdf.rozmiar > 1000 && z.pdf.pliki[0] === path.join('Export', 'zlecenie.pdf') && z.pdf.strony >= 1
+      && (z.pdf.ostrzezenia || []).some((x) => x.includes('kolor'))
+      && z.pdfZmienione && !z.pdfZmienione.ok && /zmienionych/.test(z.pdfZmienione.blad)
+      && z.bledne && !z.bledne.ok && /uklad/.test(z.bledne.blad) && /Nie ma takiej/.test(z.bledne.blad)
+      && z.stanPoPdf && z.stanPoPdf.ostatniPdf && Array.isArray(z.stanPoPdf.zmienione)
+      && z.obrazki && z.obrazki.ok && z.obrazki.pliki.length >= 1 && z.obrazki.sa && z.obrazki.pliki.every((p) => /\.png$/.test(p))
+      && (z.obrazki.ostrzezenia || []).some((x) => x.includes('nie-ma-takiej'))
+      && z.pcio && z.pcio.ok && z.pcio.sa && z.pcio.karty > 0
+      && z.edytor && z.edytor.niezapisane && !/ZMIANA/.test(z.edytor.projekt) && /ZMIANA/.test(z.edytor.projektEd) && /ZMIANA/.test(z.edytor.poZleceniu.projekt) && z.edytor.poZleceniu.zmiany && z.edytor.poZleceniu.tekst
+      && z.ustawieniaBezZmian && !z.pozostale.length);
+    z.nazwaKarty = nazwaKarty;
+    zlecenia = z;
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
@@ -662,8 +751,8 @@ async function trybTestowy(folder, wynik) {
   const menuOk = menu.includes('Plik') && menu.includes('Widok') && !!plik && plik.submenu.items.some((i) => i.label === 'Zapisz szablon');
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
-    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, menu, pdf: wynik, ok }) + '\n');
+    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, menu, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
