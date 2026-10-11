@@ -137,14 +137,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           wersja="v$(node -p "require('./package.json').version")"
-          nazwa="$(node -p "require('./package.json').nazwaWydania || ''")"
+          # Tytuł z nazwą serii. Uwaga: bash 3.2 na macOS przy „$nazwa”” wciągał bajty cudzysłowu do nazwy zmiennej
+          # (w 0.5.0 wyszło „KarKa 0.5.0 „��”) – tytuł składa node.
+          tytul="$(node -p "const p=require('./package.json'); 'KarKa ' + p.version + (p.nazwaWydania ? ' „' + p.nazwaWydania + '”' : '')")"
           if gh release view "$wersja" >/dev/null 2>&1; then
             echo "::warning::Wydanie $wersja już istnieje – podnieś wersję w app/package.json, żeby opublikować nowe DMG."
             exit 0
           fi
           # Wydanie powstaje od razu z plikiem, więc link „latest” w README nigdy nie wskazuje pustego wydania.
           gh release create "$wersja" dist/KarKa.dmg dist/KarKa.zip dist/kod.zip dist/aktualizacja.json --latest --target "$GITHUB_SHA" \
-            --title "KarKa ${wersja#v}${nazwa:+ „$nazwa”}" --generate-notes \
+            --title "$tytul" --generate-notes \
             --notes "Aplikacja na macOS (Apple Silicon: M1–M4). Pierwsze uruchomienie: prawy przycisk → Otwórz (instrukcja: docs/aplikacja.md)."
           # Dawne wydanie „najnowsza” (nadpisywane przy każdej zmianie) nie jest już potrzebne.
           gh release delete najnowsza --yes --cleanup-tag 2>/dev/null || true

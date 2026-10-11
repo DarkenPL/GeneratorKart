@@ -804,6 +804,20 @@ async function trybTestowy(folder, wynik) {
     })()`);
     drukarnia.raport = /Obrazki poniżej 300 dpi/.test(await wc.executeJavaScript('raportProjektu()'));
     drukarnia.ok = drukarnia.strony === drukarnia.oczekiwane && drukarnia.rozmiar === drukarnia.karta && drukarnia.znaczniki === 0 && drukarnia.raport;
+    // Przesunięcie rewersów (A4): siatka rewersów o +1,5 / −2 mm względem awersów, awersy bez zmian.
+    drukarnia.przesuniecie = await wc.executeJavaScript(`(() => {
+      buildPrint({ uklad: 'a4', przesuniecieX: 1.5, przesuniecieY: -2, karty: kartyEksportu({}) });
+      const a = document.querySelectorAll('#druk .arkusz .uklad');
+      if (a.length < 2) return { brak: true };
+      const d = (x, y) => Math.round((parseFloat(x) - parseFloat(y)) * 100) / 100;
+      const r = { dx: d(a[1].style.left, a[0].style.left), dy: d(a[1].style.top, a[0].style.top) };
+      buildPrint({ uklad: 'a4', karty: kartyEksportu({}) });
+      const b = document.querySelectorAll('#druk .arkusz .uklad');
+      r.bez = d(b[1].style.left, b[0].style.left) === 0 && d(b[1].style.top, b[0].style.top) === 0;
+      return r;
+    })()`);
+    const pr = drukarnia.przesuniecie;
+    drukarnia.ok = drukarnia.ok && (pr.brak || (pr.dx === 1.5 && pr.dy === -2 && pr.bez));
   }
   // Katalog (--test-edytor, poza przykładami): A – Export/katalog; B – zlecenie z pliku → wynik.json.
   let katalog = null;

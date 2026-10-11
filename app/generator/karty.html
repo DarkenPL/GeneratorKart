@@ -1610,6 +1610,9 @@ function buildPrint(o = {}) {
         // Arkusz rewersów: ta sama siatka co awersy, zapełniona w całości – pasuje przy każdym obracaniu kartki.
         const bs = document.createElement('div'); bs.className = 'arkusz'; bs.style.cssText = sheet.style.cssText;
         const bu = u.cloneNode(false);
+        // Korekta przesunięcia drukarki przy druku dwustronnym (pkt 5): cała siatka rewersów o X/Y mm.
+        const px = Math.min(10, Math.max(-10, num(o.przesuniecieX) || 0)), py = Math.min(10, Math.max(-10, num(o.przesuniecieY) || 0));
+        if (px || py) { bu.style.left = mm(x0 + px); bu.style.top = mm(y0 + py); }
         for (let j = 0; j < used * usedCols; j++) bu.appendChild(printCard(back, w, h));
         bs.appendChild(bu); druk.appendChild(bs);
       }
@@ -1840,7 +1843,7 @@ const KLUCZE_ZLECEN = {
   katalog: ['talie', 'id'],
   stan: [],
   raport: [],
-  pdf: ['uklad', 'ciecie', 'rewersy', 'szkic', 'spad', 'talie', 'id', 'tylkozmienione', 'plik'],
+  pdf: ['uklad', 'ciecie', 'rewersy', 'szkic', 'spad', 'przesunieciex', 'przesunieciey', 'talie', 'id', 'tylkozmienione', 'plik'],
   obrazki: ['dpi', 'format', 'talie', 'id', 'rewersy'],
   pcio: ['dpi', 'talie'],
 };
@@ -1887,6 +1890,8 @@ function opcjeZlecenia(polecenie, surowe = {}) {
   if (v.rewersy !== undefined) o.rewersy = tak('rewersy');
   if (v.szkic !== undefined) o.szkic = tak('szkic');
   if (v.spad !== undefined) o.spad = liczba('spad', 0, 10);
+  if (v.przesunieciex !== undefined) o.przesuniecieX = liczba('przesunieciex', -10, 10);
+  if (v.przesunieciey !== undefined) o.przesuniecieY = liczba('przesunieciey', -10, 10);
   if (v.dpi !== undefined) o.dpi = Math.round(liczba('dpi', 50, 600) || 0);
   if (v.format !== undefined) o.format = wybor('format', ['jpg', 'png'], { jpeg: 'jpg' });
   if (v.plik !== undefined) o.plik = v.plik;
@@ -2277,8 +2282,8 @@ const OKNA = {
     domyslne: { dpi: 150, format: 'jpg', ktore: 'wszystkie', rewersy: true, pominTalie: [] },
     przyciski: [['ok', 'Eksportuj']],
     opis: 'Każda karta jako osobny plik w folderze Export projektu.' },
-  druk: { tytul: 'Druk i PDF', pola: ['uklad', 'ciecie', 'spad', 'rewersy', 'szkic', 'ktore', 'talie'],
-    domyslne: { uklad: 'a4', ciecie: 'znaczniki', spad: 2, rewersy: true, szkic: false, ktore: 'wszystkie', pominTalie: [] },
+  druk: { tytul: 'Druk i PDF', pola: ['uklad', 'ciecie', 'spad', 'rewersy', 'przesuniecie', 'szkic', 'ktore', 'talie'],
+    domyslne: { uklad: 'a4', ciecie: 'znaczniki', spad: 2, rewersy: true, przesuniecieX: 0, przesuniecieY: 0, szkic: false, ktore: 'wszystkie', pominTalie: [] },
     przyciski: [['drukuj', 'Drukuj…'], ['pdf', 'Zapisz PDF']] },
   katalog: { tytul: 'Katalog talii', pola: ['talie'], domyslne: { pominTalie: [] },
     przyciski: [['ok', 'Zapisz katalog']],
@@ -2301,6 +2306,11 @@ function poleOkna(nazwa, rodzaj, u) {
       ['drukarnia', 'Drukarnia <span class="opis">– strona na kopię: awers, rewers, awers…; ze spadem, bez znaczników</span>']]);
     case 'ciecie': return radio('Linie cięcia <span class="opis">(układ A4)</span>', 'ciecie', [['znaczniki', 'Znaczniki na marginesie <span class="opis">– gilotyna, nóż</span>'],
       ['nozyczki', 'Przerywane linie wzdłuż kart <span class="opis">– nożyczki</span>'], ['oba', 'Jedno i drugie']]);
+    case 'przesuniecie': {
+      const pole = (n, t) => `${t} <input type="number" name="${n}" min="-10" max="10" step="0.1" value="${esc(u[n] ?? 0)}" style="width:4.5em"> mm`;
+      return `<fieldset><legend>Przesunięcie rewersów <span class="opis">(układ A4, druk dwustronny)</span></legend><label>${pole('przesuniecieX', 'w prawo')}</label> <label>${pole('przesuniecieY', 'w dół')}</label>` +
+        '<div class="opis">Gdy po wydruku rewersy są przesunięte względem awersów, wpisz korektę: np. rewers 1 mm za bardzo w prawo → „w prawo” −1.</div></fieldset>';
+    }
     case 'spad': return `<fieldset><legend>Spad <span class="opis">(układ Drukarnia)</span></legend><label><input type="number" name="spad" min="0" max="10" step="0.5" value="${esc(u.spad ?? 2)}" style="width:4em"> mm <span class="opis">– tło i elementy przy krawędzi wychodzą poza linię cięcia</span></label></fieldset>`;
     case 'rewersy': return pole('rewersy', rodzaj === 'druk' ? 'Rewersy <span class="opis">– po każdym arkuszu kart arkusz rewersów (druk dwustronny)</span>' : 'Rewersy talii <span class="opis">– osobne pliki</span>');
     case 'szkic': return pole('szkic', 'Szkic <span class="opis">– bez teł i obrazków, tekst czarny (oszczędza tusz)</span>');
@@ -2341,6 +2351,10 @@ function otworzOkno(rodzaj, domyslna) {
           const pola = [...form.querySelectorAll('[name=talia]')];
           o.pominTalie = pola.filter((x) => !x.checked).map((x) => x.value);
         } else if (['rewersy', 'szkic'].includes(p)) o[p] = !!form.querySelector(`[name=${p}]`)?.checked;
+        else if (p === 'przesuniecie') for (const n of ['przesuniecieX', 'przesuniecieY']) {
+          const v = parseFloat(String(form.querySelector(`[name=${n}]`)?.value ?? '').replace(',', '.'));
+          o[n] = Number.isNaN(v) ? (u[n] || 0) : Math.round(Math.min(10, Math.max(-10, v)) * 10) / 10;
+        }
         else if (p === 'spad') { const v = parseFloat(String(form.querySelector('[name=spad]')?.value ?? '').replace(',', '.')); o.spad = Number.isNaN(v) ? u.spad : Math.min(10, Math.max(0, v)); }
         else { const x = form.querySelector(`[name=${p}]:checked`); o[p] = x ? (p === 'dpi' ? +x.value : x.value) : u[p]; }
       }
