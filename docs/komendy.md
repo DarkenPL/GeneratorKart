@@ -31,7 +31,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 | `WERSJA = v0.3` | Wersja projektu, do wstawienia na kartę polem `[_wersja]` (patrz [Pola wbudowane](#pola-wbudowane)). |
 | `STAŁA = margines, 4` | Stała: `[=margines]` w dowolnej komendzie zostaje zamienione na `4`. Wygodne dla powtarzanych liczb i kolorów (`STAŁA = złoty, #C9A227` → `kolor=[=złoty]`). Stała działa w całym pliku szablonu, także w taliach i rewersach. |
 | `NAZWA = Przedmioty` | Nazwa talii (podgląd, pliki JPG, eksport). Domyślnie nazwa z `[TALIA …]` albo z nazwy pliku. |
-| `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. |
+| `DANE = przedmioty.csv, przedmioty.xlsx` | Plik(i) z kartami. Pierwszy znaleziony wygrywa. Plik może leżeć w podfolderze projektu: `DANE = dane/przedmioty.csv`. |
 | `KARTA = 63, 88, zaokrąglenie=3, obwódka=0.7, kolor_obwódki=#222222` | Szerokość i wysokość karty w mm. Opcjonalnie zaokrąglone rogi i obwódka całej karty (rysowana na wierzchu). W sekcji `[REWERS]` ustawia tylko rogi i obwódkę rewersu; rozmiar jest zawsze jak awersu. |
 | `KOLOR = las, #7BA05B` | Nazwany kolor (paleta wspólna dla wszystkich szablonów). Nazwy można używać w danych i szablonie zamiast kodu, np. `TŁO = [Kolor] \| las`, a także jako ikony-prostokąta `{kolor-las}` (`{kolor-las-mix}` jest w połowie biały). |
 | `PCIO`, `STÓŁ` | Nieużywane (dawny eksport do istniejącego pokoju playingcards.io). Teraz eksport tworzy nowy pokój bez dodatkowych komend – patrz [playingcards.md](playingcards.md). |
@@ -40,6 +40,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 
 - Pierwszy wiersz zawiera nazwy kolumn.
 - Separator to `;` albo `,` (wykrywany sam). Kodowanie UTF-8.
+- Gdy pliku nie ma pod ścieżką z `DANE`, KarKa zgłasza Uwagę „Nie znaleziono plików z kartami”. Plik przeniesiony do podfolderu trzeba wskazać pełną ścieżką.
 - W pliku XLSX czytany jest pierwszy arkusz. Inny arkusz wskażesz po `#`: `DANE = gra.xlsx#Wydarzenia` (nazwa bez względu na wielkość liter i polskie znaki). Dzięki temu kilka talii może mieć dane w jednym pliku.
 - Kolumna **`Ilość`** określa liczbę kopii karty: `0` pomija kartę, a brak kolumny oznacza 1.
 - Kolumna **`ID`** służy jako numer karty (podgląd, nazwy plików JPG), a **`Nazwa`** jako podpis karty w podglądzie i uwagach.

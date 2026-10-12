@@ -904,8 +904,10 @@ function copies(r) {
   return Number.isNaN(n) ? 1 : Math.max(0, n);       // 0 = karta pominięta
 }
 
-// Plik talii: najpierw w głównym folderze, a jeśli go tam nie ma – w dowolnym podfolderze
-// (np. gdy archiwum rozpakowało się do osobnego folderu).
+// Plik talii: najpierw dokładnie pod ścieżką z DANE (także w podfolderze, np. `dane/karty.csv`),
+// a jeśli go tam nie ma – zapasowo plik o tej nazwie w podfolderze, o ile jest już wczytany (pozostałość po
+// wersji przeglądarkowej, która wczytywała cały folder; aplikacja pobiera tylko pliki wskazane w szablonie,
+// więc w praktyce brak pliku = Uwaga „Nie znaleziono…”). Uwagę o podfolderze daje tylko ten zapas (issue #52).
 // DANE = gra.xlsx#Arkusz → ['gra.xlsx', 'Arkusz']
 const plikDanych = (n) => { const m = /^(.+?\.xlsx)\s*#\s*(.+)$/i.exec(String(n).trim()); return m ? [m[1], m[2]] : [String(n).trim(), '']; };
 function znajdzDane(names) {
@@ -913,7 +915,7 @@ function znajdzDane(names) {
   for (const n of names) {
     const [p, a] = plikDanych(n);
     const hit = [...files.keys()].find((k) => k.split('/').pop() === norm(p));
-    if (hit) return { name: hit, arkusz: a };
+    if (hit) return { name: hit, arkusz: a, zapas: true, podany: p };
   }
   return null;
 }
@@ -989,9 +991,9 @@ async function zbudujTeraz() {
 
   for (const talia of TALIE) {
     if (!talia.dane.length) { warn.add(`${talia.plik}, talia „${talia.nazwa}”: brak komendy DANE (plik z kartami)`); continue; }
-    const { name, arkusz } = znajdzDane(talia.dane) || {};
+    const { name, arkusz, zapas, podany } = znajdzDane(talia.dane) || {};
     if (!name) { missing.push(`${talia.nazwa} (${talia.dane[0]})`); continue; }
-    if (name.includes('/')) warn.add(`${talia.nazwa}: plik znaleziono w podfolderze (${name}) – najlepiej przenieś go do głównego folderu projektu.`);
+    if (zapas) warn.add(`${talia.nazwa}: pliku ${podany} nie ma pod ścieżką z DANE – użyto ${name}. Wpisz w DANE pełną ścieżkę (${name}) albo przenieś plik na miejsce.`);
     let rows;
     try { rows = await readTable(files.get(name), arkusz); }
     catch (e) { warn.add(talia.nazwa + ': błąd odczytu ' + name + ' – ' + e.message); continue; }
