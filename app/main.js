@@ -934,6 +934,32 @@ async function trybTestowy(folder, wynik) {
       && inst && inst.ok && inst.zainstalowano && inst.restart && (inst.ostrzezenia || []).length === 1
       && fs.existsSync(path.join(app.getPath('userData'), 'kod', 'main.js')));
   }
+  // Dane w podfolderze (issue #52, --test-edytor, poza przykładami): jawna ścieżka w DANE → bez Uwagi;
+  // plik przeniesiony do podfolderu bez zmiany DANE → Uwaga „Nie znaleziono plików z kartami”.
+  let podfolder = null;
+  if (process.argv.includes('--test-edytor') && !jestPrzykladem(szablon)) {
+    const js = (k) => wc.executeJavaScript(k);
+    const tekst = fs.readFileSync(szablon, 'utf8');
+    const m = /^\s*DANE\s*=\s*([^;#\n,/]+?\.(?:csv|xlsx))/mi.exec(tekst);
+    if (m) {
+      const plik = m[1].trim(), zrodlo = path.join(projekt, plik), zapas = zrodlo + '.test-schowany';
+      const naDANE = new RegExp('^(\\s*DANE\\s*=\\s*)' + plik.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gmi');
+      const stan = async () => { await js('odswiezKarty()'); await czekaj(300);
+        return { uwagi: await js("document.getElementById('uwagi').innerText"), status: await js("document.getElementById('status').textContent") }; };
+      fs.mkdirSync(path.join(projekt, 'dane-test'), { recursive: true });
+      fs.copyFileSync(zrodlo, path.join(projekt, 'dane-test', plik));
+      fs.renameSync(zrodlo, zapas);
+      fs.writeFileSync(szablon, tekst.replace(naDANE, '$1dane-test/' + plik));
+      const jawna = await stan();
+      fs.writeFileSync(szablon, tekst);
+      const zapasowa = await stan();
+      fs.renameSync(zapas, zrodlo); fs.rmSync(path.join(projekt, 'dane-test'), { recursive: true, force: true });
+      const koniec = await stan();
+      podfolder = { plik, jawna: jawna.uwagi.slice(0, 200), zapasowa: zapasowa.uwagi.slice(0, 300), koniec: koniec.uwagi.slice(0, 200) };
+      podfolder.ok = / kart /.test(jawna.status) && !jawna.uwagi.trim()
+        && /Nie znaleziono plików z kartami/.test(zapasowa.uwagi) && !/podfolder/.test(zapasowa.uwagi) && !koniec.uwagi.trim();
+    }
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
@@ -943,8 +969,8 @@ async function trybTestowy(folder, wynik) {
     && Menu.getApplicationMenu().items[0].submenu.items.some((i) => i.label === 'Sprawdź aktualizacje…');
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
-    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
+    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok) && (!podfolder || podfolder.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
