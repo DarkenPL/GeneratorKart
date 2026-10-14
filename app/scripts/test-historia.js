@@ -5,6 +5,55 @@ const os = require('os');
 const path = require('path');
 const assert = require('assert');
 const H = require('../historia');
+const { execFileSync } = require('child_process');
+
+// W GitHub Actions błąd także jako adnotacja (widoczna w API bez pobierania logów).
+if (process.env.GITHUB_ACTIONS) process.on('uncaughtException', (e) => {
+  const t = [e.stack || String(e), e.stdout, e.stderr].filter(Boolean).join('\n');
+  console.error(t);
+  console.log('::error title=test-historia::' + t.replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A'));
+  process.exit(1);
+});
+
+// Wariant „bez prawa usuwania” (jak powłoka na Macu bez zgody): unlink/rm rzucają EPERM, reszta działa.
+// Uruchamiany w osobnym procesie z limitem czasu – zawieszenie (dawny błąd przy starej blokadzie) nie blokuje testu.
+if (process.argv[2] === '--bez-usuwania') {
+  const eperm = () => { const e = new Error('EPERM: operation not permitted'); e.code = 'EPERM'; throw e; };
+  fs.unlinkSync = eperm; fs.rmSync = eperm;
+  const d = process.argv[3], T = Date.UTC(2026, 0, 1), M = 60000;
+  const blok = path.join(d, H.FOLDER, 'indeks.lock');
+  fs.writeFileSync(path.join(d, 'k.csv'), '1');
+  assert.strictEqual(H.zapisz(d, ['k.csv'], { powod: 'punkt', etykieta: 'a' }, T), 1);
+  assert.ok(!fs.existsSync(blok) && fs.existsSync(blok + '.wolna'), 'blokada przeniesiona na indeks.lock.wolna');
+  fs.writeFileSync(path.join(d, 'k.csv'), '2');
+  assert.strictEqual(H.zapisz(d, ['k.csv'], { powod: 'punkt', etykieta: 'b' }, T + M), 1, 'drugi punkt zaraz po pierwszym');
+  // stara blokada (> 10 s) – dawniej pętla bez końca
+  fs.writeFileSync(blok, ''); const st = new Date(Date.now() - 20000); fs.utimesSync(blok, st, st);
+  fs.writeFileSync(path.join(d, 'k.csv'), '3');
+  assert.strictEqual(H.zapisz(d, ['k.csv'], { powod: 'punkt', etykieta: 'c' }, T + 2 * M), 1, 'punkt przy starej blokadzie');
+  assert.ok(!fs.existsSync(blok));
+  // świeża blokada (inny program pisze) – po ~5 s błąd „zajęta”, nie zawieszenie
+  // (data w przyszłości – na wolnym komputerze czekanie może trwać > 10 s i blokada uznana byłaby za starą)
+  fs.writeFileSync(blok, ''); const przysz = new Date(Date.now() + 120000); fs.utimesSync(blok, przysz, przysz);
+  assert.throws(() => H.zapisz(d, ['k.csv'], null, T + 3 * M), /zajęta/);
+  fs.renameSync(blok, blok + '.wolna');
+  // skrzynka: punkt powstaje, folder znika ze skrzynki (do zaimportowane/), drugi import nic nie robi
+  const skr = path.join(d, H.FOLDER, H.SKRZYNKA, '2026-01-01T00-30-00');
+  fs.mkdirSync(skr, { recursive: true });
+  fs.writeFileSync(path.join(skr, 'k.csv'), 'ze skrzynki');
+  fs.writeFileSync(path.join(skr, 'opis.txt'), 'Claude: skrzynka\n');
+  assert.strictEqual(H.sprawdzSkrzynke(d, T + 4 * M), 1);
+  assert.deepStrictEqual(fs.readdirSync(path.join(d, H.FOLDER, H.SKRZYNKA)), []);
+  assert.strictEqual(fs.readdirSync(path.join(d, H.FOLDER, H.ZAIMPORTOWANE)).length, 1);
+  assert.strictEqual(H.sprawdzSkrzynke(d, T + 5 * M), 0);
+  assert.deepStrictEqual(H.wczytajIndeks(d).punkty.map((p) => p.etykieta), ['a', 'b', 'c', 'Claude: skrzynka']);
+  // przerzedzanie bez usuwania: kopie znikają z indeksu, pliki zostają (sprzątnie je zapis z prawem usuwania)
+  for (let i = 1; i <= 120; i++) { fs.writeFileSync(path.join(d, 'k.csv'), 'p' + i); H.zapisz(d, ['k.csv'], null, T + (10 + i) * M); }
+  const n = H.wczytajIndeks(d).wersje.length;
+  assert.ok(fs.readdirSync(path.join(d, H.FOLDER, 'pliki')).length > n, 'sieroty w pliki/ (bez prawa usuwania)');
+  console.log('bez-usuwania: OK');
+  process.exit(0);
+}
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
 const pisz = (p, t) => { fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true }); fs.writeFileSync(path.join(dir, p), t); };
@@ -68,7 +117,6 @@ assert.strictEqual(H.zapisz(dir3, ['k.csv']), 1);
 assert.ok(!fs.existsSync(blok));
 
 // 7) Polecenie z konsoli na kopii przykładu.
-const { execFileSync } = require('child_process');
 const cli = (...a) => execFileSync(process.execPath, [path.join(__dirname, '..', 'historia-cli.js'), ...a], { encoding: 'utf8' });
 const dir4 = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
 fs.cpSync(path.join(__dirname, '..', '..', 'przyklady', '01-wyprawa'), dir4, { recursive: true });
@@ -109,4 +157,24 @@ assert.deepStrictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'e
 for (let i = 1; i <= 30; i++) { fs.writeFileSync(path.join(dir5, 'k.csv'), 'z' + i); H.zapisz(dir5, ['k.csv'], siatka, T0 + (61 + i * 61) * MIN); }
 assert.strictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'siatka').length, 24);
 
-console.log('historia: OK (' + w.length + ' kopii po przerzedzeniu; skrzynka, blokada, konsola, siatka, eksporty)');
+// 9) Bez prawa usuwania (osobny proces, limit 2 min – zawieszenie nie blokuje CI), potem sprzątanie przy zapisie z prawem usuwania.
+const dir6 = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
+assert.match(execFileSync(process.execPath, [__filename, '--bez-usuwania', dir6], { encoding: 'utf8', timeout: 120000 }), /bez-usuwania: OK/);
+fs.writeFileSync(path.join(dir6, 'k.csv'), 'z prawem usuwania');
+H.zapisz(dir6, ['k.csv'], { powod: 'punkt', etykieta: 'sprzątanie' }, T0 + 200 * MIN);
+const i6 = H.wczytajIndeks(dir6);
+assert.deepStrictEqual(fs.readdirSync(path.join(dir6, H.FOLDER, 'pliki')).sort(), i6.wersje.map((v) => v.id).sort(), 'w pliki/ tylko kopie z indeksu');
+assert.ok(!fs.existsSync(path.join(dir6, H.FOLDER, 'indeks.lock.wolna')), 'indeks.lock.wolna sprzątnięty');
+assert.ok(!fs.existsSync(path.join(dir6, H.FOLDER, H.ZAIMPORTOWANE)), 'zaimportowane/ sprzątnięte');
+assert.ok(!fs.existsSync(path.join(dir6, H.FOLDER, 'indeks.lock')));
+assert.strictEqual(H.stan(dir6, i6.punkty.find((p) => p.etykieta === 'a').czas)[0].dane.toString(), '1', 'stan z punktu sprzed sprzątania');
+// Uszkodzony indeks: kopie zostają (nie są „spoza indeksu”).
+const dir7 = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
+fs.writeFileSync(path.join(dir7, 'k.csv'), 'x');
+H.zapisz(dir7, ['k.csv'], null, T0);
+fs.writeFileSync(path.join(dir7, H.FOLDER, 'indeks.json'), '{ zepsuty');
+fs.writeFileSync(path.join(dir7, 'k.csv'), 'y');
+H.zapisz(dir7, ['k.csv'], null, T0 + MIN);
+assert.strictEqual(fs.readdirSync(path.join(dir7, H.FOLDER, 'pliki')).length, 2, 'stara kopia nie usunięta przy uszkodzonym indeksie');
+
+console.log('historia: OK (' + w.length + ' kopii po przerzedzeniu; skrzynka, blokada, konsola, siatka, eksporty, bez prawa usuwania)');

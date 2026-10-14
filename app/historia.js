@@ -15,6 +15,7 @@ const MIN = 60 * 1000, GODZ = 60 * MIN, DZIEN = 24 * GODZ;
 const MAKS_OTWARC = 10;            // tyle ostatnich punktów „otwarcie” zostaje
 const MAKS_SIATKA = 24;            // i tyle ostatnich punktów siatki bezpieczeństwa
 const SKRZYNKA = 'przychodzace';   // .historia/przychodzace/<nazwa>/: kopie plików + opis.txt od innych narzędzi
+const ZAIMPORTOWANE = 'zaimportowane'; // tu trafia folder skrzynki po imporcie, gdy nie wolno go usunąć
 
 const skrot = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
 
@@ -22,7 +23,12 @@ function wczytajIndeks(projekt) {
   try {
     const i = JSON.parse(fs.readFileSync(path.join(projekt, FOLDER, 'indeks.json'), 'utf8'));
     return { wersje: i.wersje || [], punkty: i.punkty || [] };
-  } catch (e) { return { wersje: [], punkty: [] }; }
+  } catch (e) {
+    const pusty = { wersje: [], punkty: [] };
+    // Indeks istnieje, ale nie da się go odczytać: nie sprzątaj kopii „spoza indeksu” (byłyby to wszystkie).
+    if (e.code !== 'ENOENT') Object.defineProperty(pusty, 'uszkodzony', { value: true });
+    return pusty;
+  }
 }
 function zapiszIndeks(projekt, indeks) {
   fs.mkdirSync(path.join(projekt, FOLDER, 'pliki'), { recursive: true });
@@ -65,18 +71,29 @@ function przerzedz({ wersje, punkty }, teraz = Date.now()) {
 
 // Blokada indeksu: aplikacja i polecenia z konsoli (historia-cli.js) mogą pisać w tym samym czasie.
 const spij = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const bezPrawaUsuwania = (e) => e && (e.code === 'EPERM' || e.code === 'EACCES');
+// Zdjęcie blokady: usunięcie, a gdy system nie pozwala usuwać (EPERM/EACCES – np. powłoka bez zgody na usuwanie) –
+// przeniesienie na stałą nazwę `indeks.lock.wolna` (nadpisywaną; zostaje najwyżej jeden zbędny plik, sprząta go `posprzataj`).
+function zdejmijBlokade(blok) {
+  try { fs.unlinkSync(blok); } catch (e) {
+    if (e.code === 'ENOENT') return;
+    if (!bezPrawaUsuwania(e)) throw e;
+    fs.renameSync(blok, blok + '.wolna');
+  }
+}
 function zBlokada(projekt, fn) {
   fs.mkdirSync(path.join(projekt, FOLDER), { recursive: true });
   const blok = path.join(projekt, FOLDER, 'indeks.lock');
   for (let i = 0; ; i++) {
     try { fs.closeSync(fs.openSync(blok, 'wx')); break; } catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      try { if (Date.now() - fs.statSync(blok).mtimeMs > 10000) { fs.unlinkSync(blok); continue; } } catch (e2) { continue; }
+      // Limit prób przed obsługą starej blokady: gdy nie da się jej zdjąć, nie kręcimy się bez końca.
       if (i > 100) throw new Error('Historia jest zajęta (plik .historia/indeks.lock)');
+      try { if (Date.now() - fs.statSync(blok).mtimeMs > 10000) { zdejmijBlokade(blok); continue; } } catch (e2) { /* np. ENOENT – próbuj dalej */ }
       spij(50);
     }
   }
-  try { return fn(); } finally { try { fs.unlinkSync(blok); } catch (e) {} }
+  try { return fn(); } finally { try { zdejmijBlokade(blok); } catch (e) {} }
 }
 
 // Pliki w folderze (rekurencyjnie), ścieżki względne z „/”.
@@ -96,7 +113,8 @@ function czasSkrzynki(dir, nazwa) {
   try { return fs.statSync(path.join(dir, 'opis.txt')).mtimeMs; } catch (e) { return fs.statSync(dir).mtimeMs; }
 }
 // Skrzynka: każdy podfolder .historia/przychodzace/ to punkt z opisem (opis.txt) i kopiami plików
-// (ścieżki jak w projekcie, np. Szablony/gra.txt, karty.csv). Po imporcie podfolder jest usuwany.
+// (ścieżki jak w projekcie, np. Szablony/gra.txt, karty.csv). Po imporcie podfolder jest usuwany
+// (bez prawa usuwania – przenoszony do .historia/zaimportowane/).
 function importujSkrzynke(projekt, indeks) {
   const skrzynka = path.join(projekt, FOLDER, SKRZYNKA);
   let nazwy = [];
@@ -120,7 +138,13 @@ function importujSkrzynke(projekt, indeks) {
       indeks.wersje.push({ id, plik, czas, hash: h, rozmiar: dane.length });
     }
     indeks.punkty.push({ czas, powod: 'punkt', etykieta: (opis || nazwa).slice(0, 200) });
-    fs.rmSync(dir, { recursive: true, force: true });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {
+      if (!bezPrawaUsuwania(e)) throw e;
+      // bez prawa usuwania: folder poza skrzynkę, żeby nie wrócił drugi raz (sprząta go później `posprzataj`)
+      const kosz = path.join(projekt, FOLDER, ZAIMPORTOWANE);
+      fs.mkdirSync(kosz, { recursive: true });
+      fs.renameSync(dir, path.join(kosz, nazwa + '-' + crypto.randomBytes(3).toString('hex')));
+    }
     punkty++;
   }
   return punkty;
@@ -137,11 +161,23 @@ function sprawdzSkrzynke(projekt, teraz = Date.now()) {
 }
 function zapiszPrzerzedzony(projekt, indeks, teraz) {
   const po = przerzedz(indeks, teraz);
-  const zostaja = new Set(po.wersje.map((v) => v.id));
-  for (const v of indeks.wersje) if (!zostaja.has(v.id)) {
-    try { fs.unlinkSync(path.join(projekt, FOLDER, 'pliki', v.id)); } catch (e) {}
-  }
   zapiszIndeks(projekt, po);
+  posprzataj(projekt, po, indeks.uszkodzony);
+}
+// Sprzątanie przy każdym zapisie indeksu (pod blokadą): kopie spoza indeksu (przerzedzone – także te, których
+// wcześniej nie dało się usunąć), `indeks.lock.wolna` i folder `zaimportowane/`. Błędy są pomijane – w powłoce
+// bez prawa usuwania nic się nie dzieje, a aplikacja posprząta przy następnym zapisie.
+function posprzataj(projekt, indeks, bezKopii = false) {
+  const dir = path.join(projekt, FOLDER);
+  const usun = (p, o) => { try { fs.rmSync(p, o); } catch (e) {} };
+  if (!bezKopii) {
+    const w = new Set(indeks.wersje.map((v) => v.id));
+    let nazwy = [];
+    try { nazwy = fs.readdirSync(path.join(dir, 'pliki')); } catch (e) {}
+    for (const n of nazwy) if (!w.has(n)) usun(path.join(dir, 'pliki', n), { force: true });
+  }
+  usun(path.join(dir, 'indeks.lock.wolna'), { force: true });
+  usun(path.join(dir, ZAIMPORTOWANE), { recursive: true, force: true });
 }
 
 // Kopiuje pliki, które zmieniły się od ostatniej kopii. `punkt`: { powod, etykieta } – dodatkowo zapamiętuje chwilę.
@@ -220,4 +256,4 @@ function przywrocBezBlokady(projekt, czas, teraz) {
   return zmienione;
 }
 
-module.exports = { FOLDER, SKRZYNKA, wczytajIndeks, zapisz, przerzedz, tresc, stan, przywroc, kopiaZChwili, sprawdzSkrzynke };
+module.exports = { FOLDER, SKRZYNKA, ZAIMPORTOWANE, wczytajIndeks, zapisz, przerzedz, tresc, stan, przywroc, kopiaZChwili, sprawdzSkrzynke };
