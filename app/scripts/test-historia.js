@@ -33,7 +33,8 @@ if (process.argv[2] === '--bez-usuwania') {
   assert.strictEqual(H.zapisz(d, ['k.csv'], { powod: 'punkt', etykieta: 'c' }, T + 2 * M), 1, 'punkt przy starej blokadzie');
   assert.ok(!fs.existsSync(blok));
   // świeża blokada (inny program pisze) – po ~5 s błąd „zajęta”, nie zawieszenie
-  fs.writeFileSync(blok, '');
+  // (data w przyszłości – na wolnym komputerze czekanie może trwać > 10 s i blokada uznana byłaby za starą)
+  fs.writeFileSync(blok, ''); const przysz = new Date(Date.now() + 120000); fs.utimesSync(blok, przysz, przysz);
   assert.throws(() => H.zapisz(d, ['k.csv'], null, T + 3 * M), /zajęta/);
   fs.renameSync(blok, blok + '.wolna');
   // skrzynka: punkt powstaje, folder znika ze skrzynki (do zaimportowane/), drugi import nic nie robi
@@ -156,9 +157,9 @@ assert.deepStrictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'e
 for (let i = 1; i <= 30; i++) { fs.writeFileSync(path.join(dir5, 'k.csv'), 'z' + i); H.zapisz(dir5, ['k.csv'], siatka, T0 + (61 + i * 61) * MIN); }
 assert.strictEqual(H.wczytajIndeks(dir5).punkty.filter((p) => p.powod === 'siatka').length, 24);
 
-// 9) Bez prawa usuwania (osobny proces, limit 30 s), potem sprzątanie przy zapisie z prawem usuwania.
+// 9) Bez prawa usuwania (osobny proces, limit 2 min – zawieszenie nie blokuje CI), potem sprzątanie przy zapisie z prawem usuwania.
 const dir6 = fs.mkdtempSync(path.join(os.tmpdir(), 'historia-'));
-assert.match(execFileSync(process.execPath, [__filename, '--bez-usuwania', dir6], { encoding: 'utf8', timeout: 30000 }), /bez-usuwania: OK/);
+assert.match(execFileSync(process.execPath, [__filename, '--bez-usuwania', dir6], { encoding: 'utf8', timeout: 120000 }), /bez-usuwania: OK/);
 fs.writeFileSync(path.join(dir6, 'k.csv'), 'z prawem usuwania');
 H.zapisz(dir6, ['k.csv'], { powod: 'punkt', etykieta: 'sprzątanie' }, T0 + 200 * MIN);
 const i6 = H.wczytajIndeks(dir6);
