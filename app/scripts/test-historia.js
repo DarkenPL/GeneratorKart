@@ -7,6 +7,14 @@ const assert = require('assert');
 const H = require('../historia');
 const { execFileSync } = require('child_process');
 
+// W GitHub Actions błąd także jako adnotacja (widoczna w API bez pobierania logów).
+if (process.env.GITHUB_ACTIONS) process.on('uncaughtException', (e) => {
+  const t = [e.stack || String(e), e.stdout, e.stderr].filter(Boolean).join('\n');
+  console.error(t);
+  console.log('::error title=test-historia::' + t.replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A'));
+  process.exit(1);
+});
+
 // Wariant „bez prawa usuwania” (jak powłoka na Macu bez zgody): unlink/rm rzucają EPERM, reszta działa.
 // Uruchamiany w osobnym procesie z limitem czasu – zawieszenie (dawny błąd przy starej blokadzie) nie blokuje testu.
 if (process.argv[2] === '--bez-usuwania') {
