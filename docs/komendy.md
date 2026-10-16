@@ -12,7 +12,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 - **Rozmiar czcionki w punktach (pt).**
 - `[Kolumna]` wstawia wartość z pliku danych (CSV/XLSX), np. `[Nazwa]`.
 - `{znacznik}` wstawia ikonę z `ikony.csv` (patrz niżej). Działa też w danych.
-- `"tekst"` w cudzysłowie może zawierać przecinki. `\n` oznacza nową linię, `**pogrubienie**` i `*kursywa*` formatują tekst.
+- `"tekst"` w cudzysłowie może zawierać przecinki. `\n` oznacza nową linię. Formatowanie tekstu (`**pogrubienie**`, `<i>kursywa</i>` i inne) – patrz [Formatowanie tekstu](#formatowanie-tekstu).
 - Komentarz zaczyna się od `;` albo `#` na początku linii. Komentarz na końcu linii zaczyna się od ` ;` (ze spacją przed średnikiem).
 - Nazwy komend i opcji można pisać z polskimi znakami lub bez (`TŁO` = `TLO`, `wyrównanie` = `wyrownanie`). Wielkość liter nie ma znaczenia.
 - Elementy rysowane są w kolejności: następny przykrywa poprzedni.
@@ -46,6 +46,7 @@ KOMENDA = argument, argument, opcja=wartość, flaga
 - Kolumna **`ID`** służy jako numer karty (podgląd, nazwy plików JPG), a **`Nazwa`** jako podpis karty w podglądzie i uwagach.
 - Nazwy tych trzech kolumn można pisać dowolnie: bez polskich znaków i bez względu na wielkość liter (`ilosc`, `Id`, `NAZWA`).
 - Nowa linia w komórce to nowa linia na karcie.
+- W komórce działa formatowanie: `**pogrubienie**`, `~~przekreślenie~~` i znaczniki `<b>`, `<i>`, `<u>`, `<s>`… – patrz [Formatowanie tekstu](#formatowanie-tekstu).
 
 ### Ikony – folder `Ikony` i `ikony.csv`
 
@@ -146,10 +147,48 @@ LINIA = 10, 50, 50, 50, początek=kropka, koniec=strzałka
 | `cień` albo `cień=#00000099` | cień pod tekstem (domyślnie półprzezroczysty czarny) |
 | `grupa=nazwa` | pola z tą samą grupą zmniejszają się razem (na wszystkich kartach talii o tyle samo) i nie mogą na siebie nachodzić, np. koszt z lewej i punkty z prawej w jednym wierszu |
 
-Flagi: `pogrubienie`, `kursywa`, `podkreślenie`, `wersaliki`, `jedna_linia`.
+Flagi: `pogrubienie`, `kursywa`, `podkreślenie`, `wersaliki`, `jedna_linia`, `bez_formatowania` (formatowanie z danych w tym polu zostaje zwykłym tekstem – patrz niżej).
 
 - Za długi tekst zmniejsza się sam. Jeśli nadal się nie mieści, karta dostaje w podglądzie czerwoną ramkę, a w Uwagach pojawia się wpis.
 - Jeśli **wszystkie** `[Kolumny]` w treści są puste, element nie jest rysowany. Na przykład `"**Efekt:** [Efekt]"` znika, gdy Efekt jest pusty.
+
+### Formatowanie tekstu
+
+W tekście szablonu i w komórkach danych (CSV/XLSX) działają:
+
+| Zapis | Wynik | Szablon | Dane |
+|---|---|---|---|
+| `**tekst**` | **pogrubienie** | tak | tak |
+| `*tekst*` | *kursywa* | tak | nie – pojedyncza `*` w danych to zwykły znak (`5*`, przypis) |
+| `~~tekst~~` | ~~przekreślenie~~ | tak | tak |
+| `<b>…</b>`, `<strong>…</strong>` | pogrubienie | tak | tak |
+| `<i>…</i>`, `<em>…</em>` | kursywa | tak | tak |
+| `<u>…</u>` | podkreślenie | tak | tak |
+| `<s>…</s>`, `<del>…</del>`, `<strike>…</strike>` | przekreślenie | tak | tak |
+
+- Znaczniki piszemy **bez atrybutów** (`<b>`, nie `<b class="x">`), wielkość liter nie ma znaczenia (`<B>` = `<b>`). Każdy inny znacznik (`<img>`, `<br>`, `<span>`…) zostaje na karcie zwykłym tekstem.
+- W danych `**…**` i `~~…~~` muszą mieć parę w tej samej komórce. Pojedyncze `*` i `~` to zwykłe znaki.
+- Niedomknięty znacznik (`<b>` bez `</b>`) jest domykany na końcu pola – formatowanie nie przechodzi na inne elementy karty. W Uwagach pojawia się wpis z kartą i kolumną. Zamknięcie bez otwarcia (`</b>` bez `<b>`) zostaje tekstem (też z Uwagą).
+- Ikony działają wewnątrz znaczników: `<b>{moneta} 3</b>`.
+- Raport projektu ma sekcję **„Formatowanie z danych”** – listę kart i kolumn, w których dane zawierają formatowanie. Po aktualizacji z wersji 0.5.4 to właśnie te karty zmieniają wygląd (i pokażą się jako „zmienione od ostatniego PDF”); pozostałe karty wyglądają tak samo.
+- Flaga **`bez_formatowania`** w `TEKST` wyłącza formatowanie z danych w tym polu: gwiazdki, tyldy i znaczniki z komórek zostają zwykłym tekstem. Formatowanie zapisane w samym szablonie nadal działa.
+
+Przykład (dane z nazwą zasady pogrubioną w komórce – bez osobnych elementów z `jeśli=`):
+
+```
+; karty.csv
+ID;Nazwa;Efekt;Cytat
+01;Burza;**Grom:** zadaj 2 obrażenia. <u>Raz na turę.</u>;Ocena: **** (cztery gwiazdki)
+02;Mgła;<b>Ukrycie:</b> <i>przeciwnik</i> nie widzi twoich kart ~~do końca gry~~ do końca rundy.;
+
+; szablon
+TEKST = 4, 50, 55, 22, [Efekt], rozmiar=9
+TEKST = 4, 74, 55, 8, [Cytat], rozmiar=7, kursywa, bez_formatowania   ; gwiazdki z danych dosłownie
+```
+
+Cały przykład: `przyklady/05-zaklecia` (kolumna `Opis` z każdym znacznikiem, kolumna `Cytat` z `bez_formatowania`).
+
+![Formatowanie z danych – przed (0.5.4) i po (0.5.5)](img/formatowanie.jpg)
 
 ### Obrót – `obrót=90`
 Opcja wszystkich elementów (`TEKST`, `OBRAZEK`, `IKONA`, `PROSTOKĄT`, `ELIPSA`): obrót w stopniach zgodnie z ruchem wskazówek zegara, wokół środka pola. Pole podajesz tak jak bez obrotu, np. pionowy napis wzdłuż prawej krawędzi: `TEKST = 35, 40, 40, 8, "Rzadka", obrót=90`. Ujemne wartości obracają w lewo.

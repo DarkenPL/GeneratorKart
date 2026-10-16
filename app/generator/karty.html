@@ -32,7 +32,7 @@
   border: 0.08em solid #222; border-radius: 0.08em;
   background: linear-gradient(to bottom, var(--k) 0 var(--p, 100%), #fff var(--p, 100%) 100%);
 }
-.karta b { font-weight: 600; }
+.karta b, .karta strong { font-weight: 600; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Interfejs (bez wpływu na wydruk)
@@ -511,7 +511,7 @@ function renderText(text, icons, warn) {
 const plain = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
   .toLowerCase().trim().replace(/[\s-]+/g, '_');
 const ELEMENTY = ['tlo', 'prostokat', 'elipsa', 'tekst', 'obrazek', 'ikona', 'linia'];
-const FLAGI = ['jedna_linia', 'pogrubienie', 'kursywa', 'podkreslenie', 'wersaliki'];
+const FLAGI = ['jedna_linia', 'pogrubienie', 'kursywa', 'podkreslenie', 'wersaliki', 'bez_formatowania'];
 
 function stripComment(line) {
   let q = false;
@@ -719,17 +719,55 @@ function liniaSvg(c, tpl, ctx, colorOf) {
   return `<svg class="el linia" style="left:0;top:0;width:${tpl.w}mm;height:${tpl.h}mm;overflow:visible" viewBox="0 0 ${tpl.w} ${tpl.h}"${kr}>${s}</svg>`;
 }
 
+// ── Formatowanie tekstu (issue #55) ─────────────────────────────────────────
+// Szablon: **pogrubienie**, *kursywa*, ~~przekreślenie~~ i znaczniki z ZNACZNIKI_TEKSTU.
+// Dane (CSV/XLSX): **pogrubienie**, ~~przekreślenie~~ (para w obrębie jednej komórki) i te same znaczniki;
+// pojedyncza * i ~ z danych to zwykłe znaki. Flaga bez_formatowania wyłącza formatowanie z danych.
+// Wartości z danych są maskowane znakami sterującymi, żeby wzorce szablonu ich nie łapały:
+//   \u0001 = *   \u0002 / \u0003 = ** otwarcie / zamknięcie   \u0004 / \u0005 = ~~ otwarcie / zamknięcie
+//   \u0006 = ~   \u0007 = <  (tylko przy bez_formatowania – znacznik z danych zostaje tekstem)
+const ZNACZNIKI_TEKSTU = ['b', 'strong', 'i', 'em', 'u', 's', 'del', 'strike'];
+const ZNACZNIK_RE = new RegExp(`&lt;(/?)(${ZNACZNIKI_TEKSTU.join('|')})&gt;`, 'gi');
+const ZNACZNIK_DANYCH_RE = new RegExp(`<(/?)(${ZNACZNIKI_TEKSTU.join('|')})>`, 'i');
+function maskujDane(v, formatowanie) {
+  if (!formatowanie) return v.replace(/\*/g, '\u0001').replace(/~/g, '\u0006').replace(/</g, '\u0007');
+  return v.replace(/\*\*([\s\S]+?)\*\*/g, '\u0002$1\u0003').replace(/~~([\s\S]+?)~~/g, '\u0004$1\u0005')
+    .replace(/\*/g, '\u0001').replace(/~/g, '\u0006');
+}
+const odmaskuj = (s) => s.replace(/[\u0002\u0003]/g, '**').replace(/[\u0004\u0005]/g, '~~')
+  .replace(/\u0001/g, '*').replace(/\u0006/g, '~').replace(/\u0007/g, '<');
+const maFormatowanie = (v) => /\*\*[\s\S]+?\*\*|~~[\s\S]+?~~/.test(v) || ZNACZNIK_DANYCH_RE.test(v);
+// Znaczniki z listy (po esc() jako &lt;b&gt;) → prawdziwe; niedomknięte domykane na końcu pola,
+// zamknięcie bez otwarcia zostaje tekstem. Zwraca { html, niedomkniete[], nadmiarowe[] }.
+function znacznikiTekstu(html) {
+  const stos = [], nadmiarowe = [];
+  const out = html.replace(ZNACZNIK_RE, (m, zam, nazwa) => {
+    const n = nazwa.toLowerCase();
+    if (!zam) { stos.push(n); return `<${n}>`; }
+    const i = stos.lastIndexOf(n);
+    if (i < 0) { nadmiarowe.push(n); return m; }
+    const wewn = stos.splice(i);                      // zamykamy też znaczniki otwarte w środku i otwieramy je ponownie
+    wewn.shift();
+    stos.push(...wewn);
+    return wewn.slice().reverse().map((x) => `</${x}>`).join('') + `</${n}>` + wewn.map((x) => `<${x}>`).join('');
+  });
+  return { html: out + stos.slice().reverse().map((x) => `</${x}>`).join(''), niedomkniete: stos, nadmiarowe };
+}
+
 function renderCard(tpl, cmds, row, ctx) {
   // Wstawia wartości [Kolumna]; „empty” = tekst miał pola i wszystkie były puste.
-  const field = (str) => {
+  // formatowanie: false → dane jak zwykły tekst (bez_formatowania, kolory, ścieżki, warunki).
+  const field = (str, formatowanie = false) => {
     let had = false, any = false;
+    const kolumny = [];
     const s = String(str ?? '').replace(/\[([^\[\]]+)\]/g, (m, k) => {
       had = true; const v = cell(row, k, ctx); if (v.trim() !== '') any = true;
-      return v.replace(/\*/g, '\u0001');                 // gwiazdki z danych nie są pogrubieniem
+      if (formatowanie && maFormatowanie(v)) kolumny.push(k);
+      return maskujDane(v, formatowanie);                // * i ~ z danych to zwykłe znaki (poza parami ** i ~~)
     });
-    return { s, empty: had && !any };
+    return { s, empty: had && !any, kolumny };
   };
-  const value = (str) => field(str).s.replace(/\u0001/g, '*').trim();
+  const value = (str) => odmaskuj(field(str).s).trim();
   const colorOf = (expr) => {
     for (const part of String(expr ?? '').split('|')) {
       const v = value(part); if (!v) continue;
@@ -752,8 +790,20 @@ function renderCard(tpl, cmds, row, ctx) {
     const same = (a !== '' && b !== '' && !Number.isNaN(+a) && !Number.isNaN(+b)) ? +a === +b : a === b;   // 001 = 1
     return m[2] === '=' ? same : !same;
   };
-  const rich = (s) => renderText(s, ctx.icons, ctx.warn)
-    .replace(/\*\*([\s\S]+?)\*\*/g, '<b>$1</b>').replace(/\*([^*]+?)\*/g, '<i>$1</i>').replace(/\u0001/g, '*');
+  const rich = (s, kolumny) => {
+    let h = renderText(s, ctx.icons, ctx.warn)
+      .replace(/\*\*([\s\S]+?)\*\*/g, '<b>$1</b>').replace(/\*([^*]+?)\*/g, '<i>$1</i>');
+    if (h.includes('~~')) h = h.replace(/~~([\s\S]+?)~~/g, '<s>$1</s>');
+    h = h.replace(/\u0001/g, '*').replace(/\u0006/g, '~')
+      .replace(/\u0002/g, '<b>').replace(/\u0003/g, '</b>').replace(/\u0004/g, '<s>').replace(/\u0005/g, '</s>');
+    const lt = (x) => x.replace(/\u0007/g, '&lt;');    // < z danych przy bez_formatowania – zawsze tekst
+    if (!h.includes('&lt;')) return lt(h);
+    const z = znacznikiTekstu(h);
+    const gdzie = `${ctx.label}` + (kolumny.length ? ` (kolumna ${kolumny.map((k) => '[' + k + ']').join(', ')})` : '');
+    if (z.niedomkniete.length) ctx.warn.add(`${gdzie}: niedomknięty znacznik ${z.niedomkniete.map((x) => '<' + x + '>').join(' ')} – domknięty na końcu pola`);
+    if (z.nadmiarowe.length) ctx.warn.add(`${gdzie}: znacznik ${z.nadmiarowe.map((x) => '</' + x + '>').join(' ')} bez otwarcia – zostaje tekstem`);
+    return lt(z.html);
+  };
   const mm = (v) => (String(v).trim().endsWith('%') ? String(v).trim() : num(v) + 'mm');
 
   let bg = '', html = '';
@@ -784,8 +834,9 @@ function renderCard(tpl, cmds, row, ctx) {
       if (o.krycie) st += `opacity:${num(o.krycie)};`;
       html += `<div class="el ksztalt" style="${esc(st)}"></div>`;
     } else if (c.kom === 'tekst') {
-      const tr = field(c.args[4]);
+      const tr = field(c.args[4], !f.has('bez_formatowania'));
       if (tr.empty || tr.s.trim() === '') continue;
+      if (tr.kolumny.length && ctx.formatowanie) for (const k of tr.kolumny) ctx.formatowanie.add(`${ctx.label} – [${k}]`);
       const pt = num(o.rozmiar ?? 10);
       const st = [box, `font-size:${pt}pt`, `line-height:${num(o.interlinia ?? 1.15)}`,
                   `text-align:${ALIGN_H[ph] || 'left'}`, `justify-content:${FLEX_V[pv] || 'flex-start'}`];
@@ -800,7 +851,7 @@ function renderCard(tpl, cmds, row, ctx) {
       if (f.has('wersaliki')) st.push('text-transform:uppercase');
       const cls = 'el tekst' + (f.has('jedna_linia') ? ' jedna-linia' : '');
       const data = ` data-pt="${pt}"` + (o.min ? ` data-min="${num(o.min)}"` : '') + (o.grupa ? ` data-grupa="${esc(o.grupa)}"` : '');
-      html += `<div class="${cls}" style="${esc(st.join(';'))}"${data}><div class="tresc">${rich(tr.s)}</div></div>`;
+      html += `<div class="${cls}" style="${esc(st.join(';'))}"${data}><div class="tresc">${rich(tr.s, tr.kolumny)}</div></div>`;
     } else if (c.kom === 'obrazek') {
       const p = value(c.args[4]);
       if (!p) continue;
@@ -811,7 +862,7 @@ function renderCard(tpl, cmds, row, ctx) {
     } else if (c.kom === 'ikona') {
       const tr = field(c.args[4]);
       if (tr.empty || tr.s.trim() === '') continue;
-      html += `<div class="el ikony" style="${box}align-items:${FLEX_V[pv] || 'center'};justify-content:${FLEX_H[ph] || 'center'};font-size:${h}mm">${renderText(tr.s.replace(/\u0001/g, '*'), ctx.icons, ctx.warn)}</div>`;
+      html += `<div class="el ikony" style="${box}align-items:${FLEX_V[pv] || 'center'};justify-content:${FLEX_H[ph] || 'center'};font-size:${h}mm">${renderText(odmaskuj(tr.s), ctx.icons, ctx.warn)}</div>`;
     }
   }
   const k = (cmds === tpl.rewers && tpl.kartaRewers) || tpl.karta;
@@ -921,7 +972,7 @@ function znajdzDane(names) {
 }
 const findDeckFile = (names) => (znajdzDane(names) || {}).name || null;
 
-let RAPORT = { tekst: '', talie: [], icons: {} };   // dane do raportu projektu (z ostatniego build)
+let RAPORT = { tekst: '', talie: [], icons: {}, formatowanie: new Set() };   // dane do raportu projektu (z ostatniego build)
 let TALIE = [];               // wczytane szablony talii
 const googleFonts = new Set();
 
@@ -959,7 +1010,7 @@ async function zbudujTeraz() {
   const tekstSzablonu = await tplFiles[0][1].text();
 
   TALIE = []; PALETA = {};
-  RAPORT = { tekst: tekstSzablonu, talie: [], icons };
+  RAPORT = { tekst: tekstSzablonu, talie: [], icons, formatowanie: new Set() };
   PROJEKT = SZABLON.split('/').pop().replace(/\.txt$/i, '').trim() || 'NowaGra';
   WERSJA = '';
   const fontCss = [];
@@ -1004,7 +1055,7 @@ async function zbudujTeraz() {
     const wspolneWb = { liczba, wersja: WERSJA, talia: talia.nazwa, projekt: PROJEKT, data: dzis };
     // Numer albo kopia na karcie → każdą kopię rysujemy osobno; inaczej jedna kopia powielona.
     const kazdaKopia = /\[\s*_(numer|kopia)\s*\]/i.test(tekstSzablonu);
-    const base = { warn, icons, plik: `${talia.plik} (${talia.nazwa})` };
+    const base = { warn, icons, plik: `${talia.plik} (${talia.nazwa})`, formatowanie: RAPORT.formatowanie };
     let cards = '', n = 0;
     rows.forEach((r, i) => {
       const label = `${talia.nazwa} ${pole(r, 'ID') || i + 1}${pole(r, 'Nazwa') ? ' ' + pole(r, 'Nazwa') : ''}`;
@@ -1154,6 +1205,10 @@ async function raportProjektu() {
     }
     lista(`Talia ${nazwa}`, el, '');
   }
+
+  // Formatowanie z danych (**…**, ~~…~~, <b>…) – od 0.5.5 działa; lista do sprawdzenia wyglądu.
+  const fmt = [...RAPORT.formatowanie];
+  lista('Formatowanie z danych', fmt.length ? [esc(skrot(fmt))] : [], 'dane nie zawierają formatowania (**…**, ~~…~~, <b>, <i>, <u>, <s>…)');
 
   // Rozdzielczość obrazków w rozmiarze na karcie (drukarnie chcą min. 300 dpi).
   lista('Obrazki poniżej 300 dpi', await obrazkiNiskiejRozdzielczosci(), 'obrazki mają co najmniej 300 dpi w rozmiarze na karcie');

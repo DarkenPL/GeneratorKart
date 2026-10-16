@@ -960,6 +960,40 @@ async function trybTestowy(folder, wynik) {
         && /Nie znaleziono plików z kartami/.test(zapasowa.uwagi) && !/podfolder/.test(zapasowa.uwagi) && !koniec.uwagi.trim();
     }
   }
+  // Formatowanie z danych i znaczniki HTML (issue #55, --test-edytor, bez zmian w plikach projektu):
+  // karta testowa z <b> <i> <u> <s> **…** ~~…~~ <img> i niedomkniętym <b> – z formatowaniem i z bez_formatowania.
+  let formatowanie = null;
+  if (process.argv.includes('--test-edytor')) {
+    formatowanie = await wc.executeJavaScript(`(() => {
+      const t = parseTemplate('[TALIA Test]\\nKARTA = 63, 44, zaokrąglenie=2\\nTŁO = #f4ecd8\\n'
+        + 'TEKST = 3, 3, 57, 18, "<em>Dane:</em> [A]", rozmiar=9\\n'
+        + 'TEKST = 3, 22, 57, 18, "<em>Bez:</em> [A]", rozmiar=9, bez_formatowania\\n', 'test.txt').talie[0];
+      const row = { A: '<b>pogrubienie</b> <i>kursywa</i> <u>podkreślenie</u> <s>przekreślenie</s> **gwiazdki** ~~tyldy~~ <img src=x> 5* <B>niedomknięty' };
+      const warn = new Set(), fmt = new Set();
+      const r = renderCard(t, t.awers, row, { warn, icons: RAPORT.icons, label: 'Test 1', plik: 'test.txt', kolumny: true, formatowanie: fmt, wbudowane: {} });
+      const d = document.createElement('div');
+      d.id = 'test-formatowanie';
+      d.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;background:#fff;padding:8px;display:flex;gap:8px';
+      const stary = parseTemplate('[TALIA Test]\\nKARTA = 63, 44\\nTEKST = 3, 3, 57, 38, [A], rozmiar=9, bez_formatowania\\n', 'test.txt').talie[0];
+      const r0 = renderCard(stary, stary.awers, row, { warn: new Set(), icons: RAPORT.icons, label: 'Test 0', plik: 'test.txt', kolumny: true, wbudowane: {} });
+      d.innerHTML = '<div class="karta" data-talia="Test" title="przed" style="' + esc(r0.style) + 'background:#f4ecd8">' + r0.html + '</div>'
+        + '<div class="karta" data-talia="Test" title="po" style="' + esc(r.style) + '">' + r.html + '</div>';
+      document.body.appendChild(d);
+      fitAll(d);
+      const [z, b] = [...d.querySelectorAll('.karta')[1].querySelectorAll('.el.tekst .tresc')];
+      const h = z.innerHTML, hb = b.innerHTML;
+      const ok = /<b>pogrubienie<\\/b>/.test(h) && /<i>kursywa<\\/i>/.test(h) && /<u>podkreślenie<\\/u>/.test(h) && /<s>przekreślenie<\\/s>/.test(h)
+        && /<b>gwiazdki<\\/b>/.test(h) && /<s>tyldy<\\/s>/.test(h) && /<em>Dane:<\\/em>/.test(h) && !z.querySelector('img') && /&lt;img src=x&gt;/.test(h) && /5\\*/.test(h)
+        && /<b>niedomknięty<\\/b>$/.test(h) && !d.querySelector('.el.tekst b .el, b .tresc')
+        && /<em>Bez:<\\/em>/.test(hb) && !b.querySelector('b, i, u, s') && hb.includes('&lt;b&gt;pogrubienie') && hb.includes('**gwiazdki**') && hb.includes('~~tyldy~~')
+        && [...warn].some((w) => /Test 1 \\(kolumna \\[A\\]\\): niedomknięty znacznik <b>/.test(w)) && fmt.has('Test 1 – [A]');
+      const rect = d.getBoundingClientRect();
+      return { ok, html: h.slice(0, 400), bez: hb.slice(0, 200), uwagi: [...warn], raport: [...fmt],
+        rect: { x: 0, y: 0, width: Math.ceil(rect.width), height: Math.ceil(rect.height) } };
+    })()`);
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-formatowanie.png', (await okno.capturePage(formatowanie.rect)).toPNG());
+    await wc.executeJavaScript("document.getElementById('test-formatowanie').remove()");
+  }
   await wc.executeJavaScript('buildPrint()');
   await pdfDoPliku(wc, wynik);
   // Menu aplikacji: własne (polskie), a nie domyślne Electrona.
@@ -969,8 +1003,9 @@ async function trybTestowy(folder, wynik) {
     && Menu.getApplicationMenu().items[0].submenu.items.some((i) => i.label === 'Sprawdź aktualizacje…');
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
-    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok) && (!podfolder || podfolder.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
+    && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok) && (!podfolder || podfolder.ok)
+    && (!formatowanie || formatowanie.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, formatowanie, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
