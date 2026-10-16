@@ -3,8 +3,9 @@
 // Okno pokazuje generator (generator/karty.html). Pliki projektu podaje lokalny serwer (serwer.js),
 // a biblioteki i czcionki są w aplikacji. Projekt otwiera się przez wskazanie pliku szablonu.
 // Każdy otwarty projekt to obiekt Projekt: własny widok strony (WebContentsView) w oknie, własny serwer
-// na osobnym porcie, zlecenia z pliku, historia i stan edytora (przygotowanie do zakładek, issue #59).
-const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, shell, session, net } = require('electron');
+// na osobnym porcie, zlecenia z pliku, historia i stan edytora. Projekty są zakładkami jednego okna
+// (issue #59, etap 2): pasek zakładek to osobny widok (zakladki.html) nad widokiem aktywnego projektu.
+const { app, BaseWindow, WebContentsView, Menu, dialog, ipcMain, shell, session, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { utworzSerwer } = require('./serwer');
@@ -19,10 +20,16 @@ const ZASOBY = fs.existsSync(path.join(__dirname, 'zasoby', 'karty.html')) ? pat
 const PRZYKLADY = path.join(ZASOBY, 'przyklady');
 const DOKUMENTACJA = 'https://github.com/DarkenPL/KarKa#readme';
 
-let okno = null;             // okno aplikacji; projekty są w nim widokami (WebContentsView)
+let okno = null;             // okno aplikacji (BaseWindow); projekty i pasek zakładek są w nim widokami (WebContentsView)
+let pasek = null;            // widok paska zakładek (zakladki.html); widoczny od 2 zakładek
 let testowy = false;         // tryb testowy (CI) – bez otwierania okien Findera
-const projekty = [];         // otwarte projekty (na razie zawsze jeden; zakładki – #59, etap 2)
+const projekty = [];         // otwarte projekty = zakładki, w kolejności paska (nowe na końcu)
 let aktywny = null;          // projekt widoczny w oknie – na niego działają menu i skróty
+let przywracanie = false;    // trwa przywracanie zakładek po starcie – bez zapisu listy do ustawień
+const LIMIT_ZAKLADEK = 8;    // decyzja właściciela 16.10.2026 (pamięć: ok. 100 MB na zakładkę)
+const PASEK_WYSOKOSC = 34;   // px
+// Zaczepy trybu testowego: pytania, które w teście nie są pokazywane, i odpowiedź na pytanie o limit zakładek.
+const TEST = { pytania: 0, limit: null, odpowiedzLimit: false };
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
 // Pierwszy start po zmianie nazwy (Generator kart → KarKa): ustawienia ze starego folderu danych.
@@ -72,31 +79,51 @@ class Projekt {
     this.serwer = null;
     this.port = 0;
     this.widok = null;
+    this.tytul = '';              // PROJEKT = z szablonu (nazwa zakładki); pusty → nazwa folderu
+    this.uzyty = Date.now();      // ostatnie pokazanie zakładki – do wyboru najdawniej używanej (limit, etap 3)
   }
   get wc() { const w = this.widok && this.widok.webContents; return w && !w.isDestroyed() ? w : null; }
   get nazwa() { return this.folder ? path.basename(this.folder) : ''; }
+  // Nazwa w pasku zakładek i w menu Okno: PROJEKT = z szablonu albo nazwa folderu; przykład z dopiskiem.
+  get nazwaZakladki() {
+    if (!this.szablon) return 'Nowa zakładka';
+    return (this.tytul || this.nazwa) + (jestPrzykladem(this.szablon) ? ' (przykład)' : '');
+  }
   // Historia, zlecenia i zapis do Export/ – tylko w projektach użytkownika (przykłady są tylko do odczytu).
   get zapisywalny() { return !!this.folder && !jestPrzykladem(this.folder); }
+  // PROJEKT = Nazwa gry z pliku szablonu (bez wczytywania strony) – przy otwarciu i po zapisie z edytora.
+  odczytajTytul() {
+    this.tytul = '';
+    if (!this.szablon) return;
+    try {
+      const m = /^[ \t]*PROJEKT[ \t]*=[ \t]*([^;#\r\n]*)/mi.exec(fs.readFileSync(this.szablon, 'utf8'));
+      if (m) this.tytul = m[1].trim().replace(/^"(.*)"$/, '$1').trim();
+    } catch (e) { /* bez tytułu – nazwa folderu */ }
+  }
 
   async uruchom() {
     this.serwer = utworzSerwer({ zasoby: ZASOBY, projekt: () => this.folder });
-    await new Promise((ok) => this.serwer.listen(0, '127.0.0.1', ok));
+    await new Promise((ok, zle) => { this.serwer.once('error', zle); this.serwer.listen(0, '127.0.0.1', ok); });
     this.port = this.serwer.address().port;
     this.widok = new WebContentsView({
-      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
-        backgroundThrottling: false },   // zasłonięte okno: timery (odświeżanie, siatka historii) bez dławienia Chromium
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
+    // Dławienie timerów Chromium (backgroundThrottling) tylko w zakładkach w tle: strona widzi document.hidden i odświeża
+    // pliki co ~9 s zamiast 1,5 s (0.5.2). Aktywna zakładka ma dławienie wyłączone (pokazProjekt) – zasłonięte okno
+    // odświeża jak dotąd. Z wyłączonym dławieniem Chromium zawsze zgłasza stronie „widoczna”, także po odpięciu widoku.
     this.widok.setBackgroundColor('#ece9e4');
     const wc = this.widok.webContents, nasz = `http://127.0.0.1:${this.port}/`;
     wc.on('will-navigate', (e, url) => {
       if (!url.startsWith(nasz)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
     });
     wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    wc.once('did-finish-load', potwierdzStart);            // nowy kod z nakładki uruchomił się poprawnie
     projekty.push(this);
     return this;
   }
 
-  // Zamknięcie projektu: kopia zmienionych plików w historii, serwer i widok.
+  // Zamknięcie projektu – tylko sprzątanie: kopia zmienionych plików w historii, serwer i widok.
+  // Wybór i pokazanie sąsiedniej zakładki robi zamknijZakladke().
   zamknij() {
     const i = projekty.indexOf(this);
     if (i < 0) return;
@@ -105,7 +132,7 @@ class Projekt {
     try { this.serwer.close(); } catch (e) { /* trudno */ }
     try { if (okno && !okno.isDestroyed()) okno.contentView.removeChildView(this.widok); } catch (e) { /* już odpięty */ }
     try { if (this.wc) this.wc.close(); } catch (e) { /* już zamknięty */ }
-    if (aktywny === this) aktywny = projekty[0] || null;
+    if (aktywny === this) aktywny = null;
   }
 }
 // Projekt, z którego przyszło IPC (event.sender) – zamiast globalnego „otwartego projektu”.
@@ -116,11 +143,16 @@ function projektZ(e) {
   return p;
 }
 
-// Widok aktywnego projektu wypełnia okno (pasek zakładek – etap 2).
+// ── Zakładki ────────────────────────────────────────────────────────────────
+// Pasek zakładek (zakladki.html) nad widokiem aktywnego projektu; przy jednej zakładce ma 0 px – aplikacja
+// wygląda jak w 0.5.7. Układ: pasek {0,0,w,34}, widok {0,34,w,h−34}.
+const pasekWidoczny = () => projekty.length > 1;
 function ulozWidok() {
-  if (!okno || !aktywny || !aktywny.widok) return;
+  if (!okno || okno.isDestroyed()) return;
   const [width, height] = okno.getContentSize();
-  aktywny.widok.setBounds({ x: 0, y: 0, width, height });
+  const gora = pasekWidoczny() ? PASEK_WYSOKOSC : 0;
+  if (pasek) pasek.setBounds({ x: 0, y: 0, width, height: gora });
+  if (aktywny && aktywny.widok) aktywny.widok.setBounds({ x: 0, y: gora, width, height: Math.max(0, height - gora) });
 }
 // Tytuł okna, plik w pasku tytułu i kropka niezapisanych zmian – z aktywnego projektu.
 function odswiezOkno() {
@@ -128,22 +160,128 @@ function odswiezOkno() {
   const p = aktywny;
   okno.setDocumentEdited(!!(p && p.zmiany));
   okno.setTitle(p && p.szablon ? `${p.nazwa} – ${path.basename(p.szablon)} – KarKa` : 'KarKa');
-  if (p && p.szablon) okno.setRepresentedFilename(p.szablon);
+  okno.setRepresentedFilename(p && p.szablon ? p.szablon : '');   // ekran startowy – bez ikony poprzedniego pliku
 }
-function pokazProjekt(p) {
-  if (!okno || !p || !p.widok) return;
-  if (aktywny && aktywny !== p && aktywny.widok) okno.contentView.removeChildView(aktywny.widok);
-  aktywny = p;
-  okno.contentView.addChildView(p.widok);
+// Stan paska: lista zakładek (nazwa, ścieżka szablonu w dymku, kropka zmian, trwające zlecenie) i aktywna.
+const stanPaska = () => ({
+  zakladki: projekty.map((p) => ({ nazwa: p.nazwaZakladki, sciezka: p.szablon || '', zmiany: !!p.zmiany, zlecenie: !!p.zlecenieTrwa,
+    pusta: !p.szablon, przyklad: !!p.szablon && jestPrzykladem(p.szablon) })),
+  aktywna: projekty.indexOf(aktywny), limit: projekty.length >= LIMIT_ZAKLADEK,
+});
+function odswiezPasek() {
+  if (!okno || okno.isDestroyed()) return;
   ulozWidok();
-  if (okno.isFocused()) p.wc.focus();
-  odswiezOkno();
-  zbudujMenu();
+  const wc = pasek && pasek.webContents;
+  if (wc && !wc.isDestroyed()) wc.send('zakladki:stan', stanPaska());
 }
+// Przełączenie na zakładkę: odpięcie starego widoku (strona widzi document.hidden → odświeża rzadziej),
+// przypięcie nowego, fokus, tytuł, pasek, menu, zapis listy zakładek.
+function pokazProjekt(p) {
+  if (!okno || okno.isDestroyed() || !p || !p.widok) return;
+  if (aktywny && aktywny !== p && aktywny.widok) {
+    try { aktywny.widok.setVisible(false); okno.contentView.removeChildView(aktywny.widok); } catch (e) { /* już odpięty */ }
+    if (aktywny.wc) aktywny.wc.setBackgroundThrottling(true);    // w tle: document.hidden → rzadsze odświeżanie
+  }
+  aktywny = p;
+  p.uzyty = Date.now();
+  okno.contentView.addChildView(p.widok);
+  p.widok.setVisible(true);
+  if (p.wc) p.wc.setBackgroundThrottling(false);
+  ulozWidok();
+  if (okno.isFocused() && p.wc) p.wc.focus();
+  odswiezOkno();
+  odswiezPasek();
+  zbudujMenu();
+  zapiszZakladki();
+}
+const przesunZakladke = (o) => { const n = projekty.length; if (n > 1) pokazProjekt(projekty[((projekty.indexOf(aktywny) + o) % n + n) % n]); };
+const wybierzZakladke = (i) => { if (projekty[i]) pokazProjekt(projekty[i]); };
+
+// Lista otwartych zakładek w ustawieniach (bez przykładów i pustych), zapisywana przy każdej zmianie –
+// po starcie wracają te same zakładki. Brak klucza w ustawieniach → ostatni projekt (jak do 0.5.7).
+function zapiszZakladki() {
+  if (przywracanie || !okno) return;
+  const lista = projekty.filter((p) => p.szablon && !jestPrzykladem(p.szablon));
+  const u = ustawienia();
+  u.otwarteZakladki = lista.map((p) => p.szablon);
+  u.aktywnaZakladka = Math.max(0, lista.indexOf(aktywny));
+  zapiszUstawienia(u);
+}
+const tenSamFolder = (a, b) => !!a && !!b && path.resolve(a) === path.resolve(b);
+
+// Nowa pusta zakładka (⌘T, +): ekran startowy, z którego wybór projektu wczytuje go w tej zakładce.
+// Przy limicie pyta o zamknięcie najdawniej używanej zakładki; null = nie otwarto.
+async function nowaZakladka() {
+  if (!okno) return null;
+  if (projekty.length >= LIMIT_ZAKLADEK && !(await zwolnijZakladke())) return null;
+  const p = await new Projekt().uruchom();
+  pokazProjekt(p);
+  await otworzSzablon(null, p);
+  return p;
+}
+// Limit zakładek: propozycja zamknięcia najdawniej używanej bez niezapisanych zmian i bez trwającego zlecenia;
+// gdy takiej nie ma – sama odmowa (nic nie znika bez wiedzy użytkownika).
+async function zwolnijZakladke() {
+  const kandydat = projekty.filter((p) => !p.zmiany && !p.zlecenieTrwa).sort((a, b) => a.uzyty - b.uzyty)[0] || null;
+  let zgoda = false;
+  if (testowy) { TEST.limit = { liczba: projekty.length, kandydat: kandydat ? kandydat.nazwaZakladki : null, odmowa: !kandydat }; zgoda = !!kandydat && TEST.odpowiedzLimit; }
+  else if (!kandydat) {
+    await dialog.showMessageBox(okno, { type: 'info', message: `Otwartych jest już ${projekty.length} zakładek.`,
+      detail: 'Każda ma niezapisane zmiany albo trwające zlecenie. Zamknij którąś, żeby otworzyć następną.' });
+  } else {
+    const r = await dialog.showMessageBox(okno, { type: 'question', buttons: ['Zamknij i otwórz nową', 'Anuluj'], defaultId: 0, cancelId: 1,
+      message: `Otwartych jest ${projekty.length} zakładek. Zamknąć „${kandydat.nazwaZakladki}”?`,
+      detail: 'To najdawniej używana zakładka bez niezapisanych zmian. Pozostałe zakładki zostaną.' });
+    zgoda = r.response === 0;
+  }
+  if (!zgoda || !kandydat) return false;
+  return zamknijZakladke(kandydat);
+}
+// Otwarcie szablonu „w zakładce” – jedna zasada dla menu, Findera, przykładów i ekranu startowego:
+// folder już otwarty → przełączenie (inny szablon tego folderu → podmiana w tej zakładce, z pytaniem o edytor);
+// pusta zakładka (nadawca albo aktywna) → wczytanie w niej; inaczej nowa zakładka na końcu paska.
+async function otworzWZakladce(plik, w = null) {
+  const szablon = naSzablon(plik);
+  if (!szablon) return null;
+  const folder = folderProjektu(szablon);
+  let p = projekty.find((x) => tenSamFolder(x.folder, folder));
+  if (p) {
+    pokazProjekt(p);
+    if (p.szablon !== szablon && !(await otworzSzablon(szablon, p))) return null;
+    return p;
+  }
+  p = [w, aktywny].find((x) => x && projekty.includes(x) && !x.szablon) || null;
+  if (p) { pokazProjekt(p); return (await otworzSzablon(szablon, p)) ? p : null; }
+  p = await nowaZakladka();
+  return p && (await otworzSzablon(szablon, p)) ? p : null;
+}
+// Zamknięcie zakładki (⌘W, ×): pytanie o niezapisany edytor (po przełączeniu na nią), sprzątanie,
+// aktywna staje się sąsiednia po prawej (bez niej – po lewej). Ostatnia zakładka → zostaje pusta z ekranem startowym.
+async function zamknijZakladke(p = aktywny) {
+  if (!p || !projekty.includes(p)) return false;
+  if (projekty.length === 1 && !p.szablon) return false;        // jedyna, pusta – nie ma czego zamykać
+  if (!(await czyMoznaPorzucic(p))) return false;
+  const i = projekty.indexOf(p), byla = aktywny === p;
+  const sasiad = projekty[i + 1] || projekty[i - 1] || null;
+  p.zamknij();
+  if (!projekty.length) { const n = await new Projekt().uruchom(); pokazProjekt(n); await otworzSzablon(null, n); }
+  else if (byla) pokazProjekt(sasiad);
+  else { odswiezPasek(); zbudujMenu(); zapiszZakladki(); }
+  return true;
+}
+// Kliknięcia w pasku; po każdym fokus klawiatury wraca do widoku aktywnego projektu (pasek go zabiera).
+const oddajFokus = () => { if (okno && !okno.isDestroyed() && okno.isFocused() && aktywny && aktywny.wc) aktywny.wc.focus(); };
+ipcMain.on('zakladki:wybierz', (e, i) => { wybierzZakladke(Number(i)); oddajFokus(); });
+ipcMain.on('zakladki:zamknij', async (e, i) => { await zamknijZakladke(projekty[Number(i)]); oddajFokus(); });
+ipcMain.on('zakladki:nowa', async () => { await nowaZakladka(); oddajFokus(); });
 
 // Niezapisane zmiany w edytorze: Zapisz / Nie zapisuj / Anuluj. Zwraca true, gdy można iść dalej.
+// Pytanie dotyczy zakładki p – najpierw ją pokazuje, żeby użytkownik widział, o który szablon chodzi.
 async function czyMoznaPorzucic(p) {
-  if (!p || !p.zmiany || testowy || !okno) return true;
+  if (!p || !p.zmiany) return true;
+  TEST.pytania++;
+  if (testowy || !okno) return true;
+  pokazProjekt(p);
   const r = await dialog.showMessageBox(okno, {
     type: 'warning', buttons: ['Zapisz', 'Nie zapisuj', 'Anuluj'], defaultId: 0, cancelId: 2,
     message: `Zapisać zmiany w szablonie „${path.basename(p.szablon || '')}”?`,
@@ -167,35 +305,49 @@ function zapiszSzablonNaDysk(p, tekst) {
   fs.writeFileSync(p.szablon, String(tekst));
 }
 
+// Po nieudanym kroku (np. zapis się nie powiódł) stan „zmiany” wraca ze strony – zamknięcie okna znów zapyta.
+async function przywrocZmiany(p) {
+  if (p && p.wc) p.zmiany = !!(await p.wc.executeJavaScript('!!(window.ED && ED.zmiany)').catch(() => p.zmiany));
+}
+// Wczytanie szablonu (albo ekranu startowego – plik null) w zakładce p. Zwraca false, gdy użytkownik anulował
+// przy pytaniu o niezapisany edytor. Otwieranie z menu i Findera idzie przez otworzWZakladce().
 async function otworzSzablon(plik, p = aktywny) {
-  if (!p || !(await czyMoznaPorzucic(p))) return;
-  historiaZamkniecie(p);
-  p.zmiany = false;
-  p.szablon = naSzablon(plik);
-  p.folder = p.szablon ? folderProjektu(p.szablon) : null;
-  if (p.szablon && !jestPrzykladem(p.szablon)) {
-    const u = ustawienia();
-    u.ostatnie = [p.szablon, ...(u.ostatnie || []).map(naSzablon).filter((x) => x && x !== p.szablon)].slice(0, 10);
-    zapiszUstawienia(u);
-    app.addRecentDocument(p.szablon);
-  }
-  if (p === aktywny) odswiezOkno();
-  if (p.wc) {
-    const rel = p.szablon ? path.relative(p.folder, p.szablon).split(path.sep).join('/') : '';
-    p.wc.loadURL(`http://127.0.0.1:${p.port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
-  }
+  if (!p || !(await czyMoznaPorzucic(p))) return false;
+  try {
+    historiaZamkniecie(p);
+    p.zmiany = false;
+    p.szablon = naSzablon(plik);
+    p.folder = p.szablon ? folderProjektu(p.szablon) : null;
+    p.odczytajTytul();
+    if (p.szablon && !jestPrzykladem(p.szablon) && !przywracanie) {
+      const u = ustawienia();
+      u.ostatnie = [p.szablon, ...(u.ostatnie || []).map(naSzablon).filter((x) => x && x !== p.szablon)].slice(0, 10);
+      zapiszUstawienia(u);
+      app.addRecentDocument(p.szablon);
+    }
+    if (p === aktywny) odswiezOkno();
+    if (p.wc) {
+      const rel = p.szablon ? path.relative(p.folder, p.szablon).split(path.sep).join('/') : '';
+      p.wc.loadURL(`http://127.0.0.1:${p.port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
+    }
+  } catch (e) { await przywrocZmiany(p); throw e; }
+  odswiezPasek();
   zbudujMenu();
+  zapiszZakladki();
+  return true;
 }
 
-async function wybierzSzablon(p = aktywny) {
+// Plik → Otwórz szablon… (⌘O) i przycisk na ekranie startowym: wybrany plik otwiera się w zakładce
+// (pusta zakładka nadawcy – w niej, folder już otwarty – przełączenie, inaczej nowa).
+async function wybierzSzablon(w = aktywny) {
   const r = await dialog.showOpenDialog(okno, {
     title: 'Otwórz szablon kart', buttonLabel: 'Otwórz',
     message: 'Wybierz plik szablonu (.txt) – wskazuje on pliki z kartami i obrazki.',
     properties: ['openFile'],
     filters: [{ name: 'Szablon kart', extensions: ['txt'] }],
-    defaultPath: p && p.szablon && !jestPrzykladem(p.szablon) ? path.dirname(p.szablon) : app.getPath('documents'),
+    defaultPath: w && w.szablon && !jestPrzykladem(w.szablon) ? path.dirname(w.szablon) : app.getPath('documents'),
   });
-  if (!r.canceled && r.filePaths[0]) otworzSzablon(r.filePaths[0], p);
+  if (!r.canceled && r.filePaths[0]) otworzWZakladce(r.filePaths[0], w);
   return !r.canceled;
 }
 
@@ -216,7 +368,9 @@ function utworzProjekt(folder) {
   return path.join(folder, 'Szablony', 'gra.txt');
 }
 
-async function nowyProjekt(p = aktywny) {
+// Nowy projekt otwiera się w zakładce (pusta zakładka nadawcy, inaczej nowa) – folder sprawdzany i tworzony
+// przed jakimkolwiek pytaniem o niezapisany edytor, więc nieudane utworzenie nic nie zmienia w otwartych zakładkach.
+async function nowyProjekt(w = aktywny) {
   const r = await dialog.showSaveDialog(okno, {
     title: 'Nowy projekt', buttonLabel: 'Utwórz', nameFieldLabel: 'Nazwa gry:',
     message: 'Powstanie folder gry z przykładowym szablonem, plikiem kart i ikonami.',
@@ -224,9 +378,10 @@ async function nowyProjekt(p = aktywny) {
     properties: ['createDirectory', 'showOverwriteConfirmation'],
   });
   if (r.canceled || !r.filePath) return false;
-  if (!(await czyMoznaPorzucic(p))) return false;
-  try { otworzSzablon(utworzProjekt(r.filePath), p); return true; }
+  let szablon;
+  try { szablon = utworzProjekt(r.filePath); }
   catch (e) { dialog.showErrorBox('Nie można utworzyć projektu', e.message); return false; }
+  return !!(await otworzWZakladce(szablon, w));
 }
 
 const listaPrzykladow = () => {
@@ -250,19 +405,22 @@ ipcMain.handle('projekt:otworz', (e) => wybierzSzablon(projektZ(e)));
 ipcMain.handle('edytor:zapisz', (e, tekst) => {
   const p = projektZ(e);
   zapiszSzablonNaDysk(p, tekst); p.zmiany = false;
+  p.odczytajTytul();                                        // PROJEKT = mógł się zmienić – nazwa zakładki
   if (p === aktywny) odswiezOkno();
+  odswiezPasek(); zbudujMenu();
   return true;
 });
 ipcMain.handle('edytor:zmiany', (e, czy) => {
   const p = projektZ(e);
   p.zmiany = !!czy;
   if (p === aktywny && okno) okno.setDocumentEdited(p.zmiany);
+  odswiezPasek();
 });
 ipcMain.handle('projekt:nowy', (e) => nowyProjekt(projektZ(e)));
 ipcMain.handle('projekt:przyklady', () => listaPrzykladow());
 ipcMain.handle('projekt:przyklad', (e, nazwa) => {
   const p = projektZ(e), dir = path.join(PRZYKLADY, path.basename(String(nazwa)));
-  if (jestFolderem(dir)) otworzSzablon(dir, p);
+  if (jestFolderem(dir)) otworzWZakladce(dir, p);
 });
 ipcMain.handle('projekt:pokaz', (e) => { const p = projektZ(e); if (p.folder) shell.openPath(p.folder); });
 
@@ -401,6 +559,7 @@ async function wykonajPlikZlecenia(p, polecenie) {
   if (polecenie === 'katalog') wyniki.push(path.join(folder, 'wynik.json'));     // zgodność z v0.4.6–0.4.10
   const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: p.szablon && path.relative(p.folder, p.szablon), wersjaAplikacji: WERSJA };
   let wynik;
+  zlecenieTrwa(p, true);
   try {
     wyniki.forEach((w) => fs.rmSync(w, { force: true }));
     const surowe = czytajZlecenie(tekst);
@@ -411,12 +570,18 @@ async function wykonajPlikZlecenia(p, polecenie) {
     if (wynik.folder) wynik.folder = wzgledna(wynik.folder);
   } catch (e) {
     wynik = { ...naglowek, ok: false, pliki: [], blad: String((e && e.message) || e) };
-  }
+  } finally { zlecenieTrwa(p, false); }
   try {
     fs.rmSync(plik, { force: true });                     // najpierw zlecenie – plik wyniku = koniec pracy
     for (const w of wyniki) fs.writeFileSync(w, JSON.stringify(wynik, null, 1));
   } catch (e) { /* trudno – folder zniknął */ }
   return true;
+}
+// Znak „trwa zlecenie” tylko przy prawdziwym zleceniu (nie przez cały przegląd folderu) – kropka w pasku nie miga.
+function zlecenieTrwa(p, czy) {
+  if (p.zlecenieTrwa === czy) return;
+  p.zlecenieTrwa = czy;
+  odswiezPasek();
 }
 async function sprawdzZlecenia() {
   if (kolejkaZlecen || !okno) return;
@@ -424,11 +589,8 @@ async function sprawdzZlecenia() {
   try {
     for (const p of [...projekty]) {
       if (!p.zapisywalny || !p.wc) continue;
-      p.zlecenieTrwa = true;
-      try {
-        await zlecenieAktualizacji(p);
-        for (const pol of POLECENIA) if (p.zapisywalny && p.wc) await wykonajPlikZlecenia(p, pol);
-      } finally { p.zlecenieTrwa = false; }
+      await zlecenieAktualizacji(p);
+      for (const pol of POLECENIA) if (p.zapisywalny && p.wc) await wykonajPlikZlecenia(p, pol);
     }
   } finally { kolejkaZlecen = false; }
 }
@@ -548,6 +710,7 @@ async function zlecenieAktualizacji(p) {
     electron: process.versions.electron, opcje, ok: false, blad: null };
   if (ostrzezenia.length) wynik.ostrzezenia = ostrzezenia;
   let restart = false;
+  zlecenieTrwa(p, true);
   try {
     if (AKT.trwa) throw new Error('aktualizacja już trwa');
     const info = await sprawdzWydanie();
@@ -562,6 +725,7 @@ async function zlecenieAktualizacji(p) {
         : 'aplikacja podmieni się po zamknięciu';
     }
   } catch (e) { wynik.ok = false; wynik.blad = String((e && e.message) || e); }
+  finally { zlecenieTrwa(p, false); }
   try { fs.rmSync(plik, { force: true }); fs.writeFileSync(wynikPlik, JSON.stringify(wynik, null, 1)); } catch (e) { /* trudno */ }
   if (restart && !testowy) setTimeout(zrestartuj, 500);
 }
@@ -601,19 +765,20 @@ function zbudujMenu() {
     {
       label: 'Plik',
       submenu: [
+        { label: 'Nowa zakładka', accelerator: 'CmdOrCtrl+T', click: () => nowaZakladka() },
         { label: 'Nowy projekt…', accelerator: 'CmdOrCtrl+N', click: () => nowyProjekt() },
         { label: 'Otwórz szablon…', accelerator: 'CmdOrCtrl+O', click: () => wybierzSzablon() },
         {
           label: 'Ostatnie projekty',
           submenu: ost.length
-            ? [...ost.map((s) => ({ label: `${path.basename(folderProjektu(s))} – ${path.basename(s)}`, sublabel: s, click: () => otworzSzablon(s) })),
+            ? [...ost.map((s) => ({ label: `${path.basename(folderProjektu(s))} – ${path.basename(s)}`, sublabel: s, click: () => otworzWZakladce(s) })),
                { type: 'separator' },
                { label: 'Wyczyść listę', click: () => { const u = ustawienia(); u.ostatnie = []; zapiszUstawienia(u); app.clearRecentDocuments(); zbudujMenu(); } }]
             : [{ label: 'Brak', enabled: false }],
         },
         {
           label: 'Przykłady',
-          submenu: przyk.length ? przyk.map((n) => ({ label: n, click: () => otworzSzablon(path.join(PRZYKLADY, n)) })) : [{ label: 'Brak', enabled: false }],
+          submenu: przyk.length ? przyk.map((n) => ({ label: n, click: () => otworzWZakladce(path.join(PRZYKLADY, n)) })) : [{ label: 'Brak', enabled: false }],
         },
         { type: 'separator' },
         { label: 'Pokaż folder projektu w Finderze', enabled: !!p.folder, click: () => aktywny && aktywny.folder && shell.openPath(aktywny.folder) },
@@ -632,7 +797,8 @@ function zbudujMenu() {
           ],
         },
         { type: 'separator' },
-        { role: 'close', label: 'Zamknij okno' },
+        { label: 'Zamknij zakładkę', accelerator: 'CmdOrCtrl+W', click: () => zamknijZakladke() },
+        { role: 'close', label: 'Zamknij okno', accelerator: 'Shift+CmdOrCtrl+W' },
       ],
     },
     { role: 'editMenu', label: 'Edycja' },
@@ -657,36 +823,86 @@ function zbudujMenu() {
         { label: 'Narzędzia deweloperskie', accelerator: 'Alt+CmdOrCtrl+I', click: () => aktywny && aktywny.wc && aktywny.wc.toggleDevTools() },
       ],
     },
-    { role: 'windowMenu', label: 'Okno' },
+    {
+      label: 'Okno',
+      submenu: [
+        { role: 'minimize', label: 'Minimalizuj' },
+        { role: 'zoom', label: 'Dopasuj wielkość' },
+        { type: 'separator' },
+        { label: 'Następna zakładka', accelerator: 'Ctrl+Tab', enabled: projekty.length > 1, click: () => przesunZakladke(1) },
+        { label: 'Poprzednia zakładka', accelerator: 'Ctrl+Shift+Tab', enabled: projekty.length > 1, click: () => przesunZakladke(-1) },
+        { type: 'separator' },
+        // Lista zakładek: ⌘1–⌘9 (⌥⌘1–9 zostaje wolne dla szablonów z #54).
+        ...projekty.map((x, i) => ({ label: x.nazwaZakladki, type: 'radio', checked: x === aktywny,
+          accelerator: i < 9 ? `CmdOrCtrl+${i + 1}` : undefined, click: () => wybierzZakladke(i) })),
+        { type: 'separator' },
+        { role: 'front', label: 'Wszystkie na wierzch' },
+      ],
+    },
     { role: 'help', label: 'Pomoc', submenu: [{ label: 'Dokumentacja', click: () => shell.openExternal(DOKUMENTACJA) }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
 }
 
 // ── Okno ────────────────────────────────────────────────────────────────────
-// Samo okno (ramka, tytuł, kropka zmian). Strona projektu to widok w nim – pokazProjekt().
+// Samo okno (ramka, tytuł, kropka zmian) – BaseWindow, bez własnej strony (BrowserWindow trzymał pusty proces
+// renderera). Widoki w nim: pasek zakładek i strona aktywnego projektu – pokazProjekt().
 function utworzOkno() {
-  okno = new BrowserWindow({
+  okno = new BaseWindow({
     width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'KarKa',
     backgroundColor: '#ece9e4', show: false,
   });
+  pasek = new WebContentsView({
+    webPreferences: { preload: path.join(__dirname, 'preload-zakladki.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  pasek.setBackgroundColor('#d9d4cc');
+  pasek.webContents.loadFile(path.join(__dirname, 'zakladki.html'));
+  pasek.webContents.on('did-finish-load', odswiezPasek);
+  okno.contentView.addChildView(pasek);
   okno.on('resize', ulozWidok);
   okno.on('show', ulozWidok);
   okno.contentView.on('bounds-changed', ulozWidok);         // np. ramka okna dodana po pokazaniu
   okno.on('focus', () => { if (aktywny && aktywny.wc) aktywny.wc.focus(); });
-  okno.on('page-title-updated', (e) => e.preventDefault());      // tytuł okna = nazwa projektu
   okno.on('close', (e) => {                                   // niezapisany szablon przy zamykaniu okna
     if (!niezapisane() || testowy) return;
     e.preventDefault();
     czyMoznaPorzucicWszystkie().then((ok) => { if (ok && okno) okno.close(); });
   });
-  okno.on('closed', () => { okno = null; [...projekty].forEach((p) => p.zamknij()); });
+  okno.on('closed', () => {
+    okno = null;
+    [...projekty].forEach((p) => p.zamknij());
+    try { const w = pasek && pasek.webContents; if (w && !w.isDestroyed()) w.close(); } catch (e) { /* już zamknięty */ }
+    pasek = null;
+  });
 }
 // Okno pokazuje się po wczytaniu strony projektu (jak dawniej „ready-to-show” okna), najpóźniej po 3 s.
 function pokazOknoPoWczytaniu(p) {
   const pokaz = () => { if (okno && !okno.isDestroyed() && !okno.isVisible()) { okno.show(); ulozWidok(); if (p.wc) p.wc.focus(); } };
   p.wc.once('did-finish-load', pokaz);
   setTimeout(pokaz, 3000);
+}
+// Zakładki z poprzedniego razu (ustawienia: otwarteZakladki, aktywnaZakladka) – tylko istniejące szablony,
+// bez przykładów, jeden folder raz, do limitu. Bez klucza w ustawieniach: ostatni projekt (jak do 0.5.7).
+// Zwraca listę przywróconych projektów (może być pusta – wtedy wywołujący otwiera pustą zakładkę).
+async function przywrocZakladki() {
+  const u = ustawienia();
+  let lista = Array.isArray(u.otwarteZakladki) ? u.otwarteZakladki : [ostatnie()[0]];
+  const foldery = new Set();
+  lista = lista.map(naSzablon).filter((s) => {
+    if (!s || jestPrzykladem(s) || foldery.has(path.resolve(folderProjektu(s)))) return false;
+    foldery.add(path.resolve(folderProjektu(s)));
+    return true;
+  }).slice(0, LIMIT_ZAKLADEK);
+  if (!lista.length) return [];
+  const nr = Math.min(Math.max(0, Number(u.aktywnaZakladka) || 0), lista.length - 1);
+  przywracanie = true;
+  const otwarte = [];
+  try {
+    for (const s of lista) { const p = await new Projekt().uruchom(); otwarte.push(p); await otworzSzablon(s, p); }
+    pokazProjekt(otwarte[nr]);
+  } finally { przywracanie = false; }
+  zapiszZakladki();
+  return otwarte;
 }
 
 // Biblioteki i czcionki z CDN podmieniamy na kopie w aplikacji – działa bez internetu.
@@ -724,8 +940,8 @@ function szerokoscJpg(b) {
 }
 // ── Tryb testowy (CI): --test-pdf <szablon.txt|folder|-> <plik.pdf> ──────────
 // Otwiera projekt, czeka na karty, zapisuje PDF i zrzut podglądu, wypisuje stan i kończy.
-async function trybTestowy(folder, wynik) {
-  const P = aktywny, wc = P.wc, szablon = P.szablon, projekt = P.folder;   // jedyny projekt (etap 1 #59)
+async function trybTestowy(folder, wynik, przywrocone = []) {
+  const P = aktywny, wc = P.wc, szablon = P.szablon, projekt = P.folder;   // projekt testowy = aktywna zakładka
   const czekaj = (ms) => new Promise((r) => setTimeout(r, ms));
   let stan = '';
   for (let i = 0; folder !== '-' && i < 120; i++) {
@@ -741,13 +957,135 @@ async function trybTestowy(folder, wynik) {
     return app.exit(0);
   }
   const uwagi = await wc.executeJavaScript("document.getElementById('uwagi').innerText").catch(() => '');
-  // Obiekt Projekt (#59, etap 1): jeden projekt, aktywny, widok w oknie, strona z jego serwera (własny port),
-  // IPC rozpoznaje projekt po nadawcy (projekt:info zwraca folder tego projektu).
+  // Obiekt Projekt (#59, etap 1): projekt testowy aktywny, widok w oknie, strona z jego serwera (własny port),
+  // IPC rozpoznaje projekt po nadawcy (projekt:info zwraca folder tego projektu). Z --test-przywroc: przywrócone
+  // zakładki z ustawień (test-aktualizacje.js) + projekt testowy, pasek widoczny (34 px nad widokiem).
   const info = await wc.executeJavaScript('window.generatorApp.info()').catch((e) => ({ blad: e.message }));
-  const projektyTest = { liczba: projekty.length, aktywny: aktywny === P, port: P.port, portStrony: Number(new URL(wc.getURL()).port),
-    widok: (okno.contentView.children || []).includes(P.widok), rozmiar: JSON.stringify(okno.getContentSize()) === JSON.stringify([P.widok.getBounds().width, P.widok.getBounds().height]), sciezka: info.sciezka === P.folder, szablon: info.szablon === P.szablon };
-  projektyTest.ok = projektyTest.liczba === 1 && projektyTest.aktywny && P.port > 0 && projektyTest.portStrony === P.port
+  const obszar = () => { const [w, h] = okno.getContentSize(), b = P.widok.getBounds(), g = projekty.length > 1 ? PASEK_WYSOKOSC : 0;
+    return b.x === 0 && b.y === g && b.width === w && b.height === h - g && (!pasek || pasek.getBounds().height === g); };
+  const projektyTest = { liczba: projekty.length, przywrocone: przywrocone.map((x) => x.szablon), aktywny: aktywny === P, port: P.port, portStrony: Number(new URL(wc.getURL()).port),
+    widok: (okno.contentView.children || []).includes(P.widok), rozmiar: obszar(), sciezka: info.sciezka === P.folder, szablon: info.szablon === P.szablon };
+  projektyTest.ok = projektyTest.liczba === 1 + przywrocone.length && przywrocone.every((x) => x.wc && x !== P && projekty.includes(x))
+    && projektyTest.aktywny && P.port > 0 && projektyTest.portStrony === P.port
     && projektyTest.widok && projektyTest.rozmiar && projektyTest.sciezka && projektyTest.szablon;
+  // Zakładki (#59, etap 2; --test-edytor albo --test-zakladki, poza przykładami): druga zakładka z kopią przykładu
+  // 01-wyprawa obok projektu testowego (poza przyklady/), zlecenia w nieaktywnej zakładce, kropka zmian, przełączanie,
+  // zamykanie, limit 8, zapis listy zakładek w ustawieniach. Zrzuty: -zakladki.png (pasek), -zakladka2.png (drugi widok).
+  let zakladki = null;
+  if ((process.argv.includes('--test-edytor') || process.argv.includes('--test-zakladki')) && !jestPrzykladem(szablon)) {
+    const z = {};
+    const js = (w, k) => w.wc.executeJavaScript(k);
+    const czekajNaKarty = async (w) => { for (let i = 0; i < 120; i++) { if (/ kart /.test(await js(w, "document.getElementById('status').textContent").catch(() => ''))) return true; await czekaj(500); } return false; };
+    const wChildren = (w) => (okno.contentView.children || []).includes(w.widok);
+    const pasekStan = () => pasek.webContents.executeJavaScript(`[...document.querySelectorAll('.zakladka')].map((e) => ({ nazwa: e.querySelector('.nazwa').textContent, aktywna: e.classList.contains('aktywna'), zmiany: e.classList.contains('zmiany'), zlecenie: e.classList.contains('zlecenie') }))`);
+    const portZamkniety = (port) => new Promise((r) => { const q = require('http').get({ host: '127.0.0.1', port, path: '/.wersja' }, (res) => { res.resume(); r(false); }); q.on('error', () => r(true)); });
+    const kopia = path.join(path.dirname(projekt), path.basename(projekt) + '-zakladka2');
+    fs.rmSync(kopia, { recursive: true, force: true });
+    fs.cpSync(path.join(PRZYKLADY, '01-wyprawa'), kopia, { recursive: true });
+    const przed = projekty.length;
+    // 1. Druga zakładka: nowa aktywna, własny port, stary widok odpięty (strona „ukryta”), IPC do właściwego projektu, pasek.
+    const P2 = await otworzWZakladce(kopia);
+    z.druga = { otwarta: !!P2 && P2 !== P && projekty.length === przed + 1 && projekty[projekty.length - 1] === P2, wczytana: P2 ? await czekajNaKarty(P2) : false,
+      porty: P2 ? [P.port, P2.port] : [], aktywna: aktywny === P2, widok: P2 ? wChildren(P2) && !wChildren(P) : false, rozmiar: P2 ? P2.widok.getBounds().y === PASEK_WYSOKOSC && pasek.getBounds().height === PASEK_WYSOKOSC : false,
+      ukryta: await czekaj(500).then(() => js(P, 'document.hidden')), widoczna: P2 ? await js(P2, '!document.hidden') : false,
+      info: [await js(P, 'generatorApp.info().then((i) => i.sciezka)'), P2 ? await js(P2, 'generatorApp.info().then((i) => i.sciezka)') : null],
+      tytul: okno.getTitle(), nazwa: P2 ? P2.nazwaZakladki : '', pasek: await pasekStan() };
+    z.druga.ok = z.druga.otwarta && z.druga.wczytana && P2.port !== P.port && z.druga.aktywna && z.druga.widok && z.druga.rozmiar && z.druga.ukryta && z.druga.widoczna
+      && z.druga.info[0] === projekt && z.druga.info[1] === kopia && z.druga.tytul.startsWith(P2.nazwa) && P2.tytul === 'Wyprawa' && z.druga.nazwa === 'Wyprawa'
+      && z.druga.pasek.length === 2 && z.druga.pasek[0].nazwa === P.nazwaZakladki && z.druga.pasek[1].nazwa === 'Wyprawa' && !z.druga.pasek[0].aktywna && z.druga.pasek[1].aktywna;
+    await czekaj(300);
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-zakladki.png', (await pasek.webContents.capturePage()).toPNG());
+    if (P2) fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-zakladka2.png', (await P2.wc.capturePage()).toPNG());
+    // 2. Zlecenia: „stan” w obu folderach naraz; obrazki (PNG) i pdf w nieaktywnej zakładce → pliki w jej folderze.
+    const zl = (w) => path.join(w.folder, ...FOLDER_ZLECEN);
+    const czytaj = (w, pol) => { try { return JSON.parse(fs.readFileSync(path.join(zl(w), `wynik-${pol}.json`), 'utf8')); } catch (e) { return null; } };
+    const zlec = (w, pol, tresc = '') => { fs.mkdirSync(zl(w), { recursive: true }); fs.rmSync(path.join(zl(w), `wynik-${pol}.json`), { force: true }); fs.writeFileSync(path.join(zl(w), pol), tresc); };
+    const czekajNa = async (w, pol) => { let r = null; for (let i = 0; i < 240 && !r; i++) { await czekaj(500); r = czytaj(w, pol); } return r; };
+    const kartyNaStronie = (w) => js(w, 'Promise.resolve(stanKart()).then((r) => r.karty)');   // to samo, co liczy zlecenie „stan”
+    if (P2) {
+      zlec(P, 'stan'); zlec(P2, 'stan');
+      const s1 = await czekajNa(P, 'stan'), s2 = await czekajNa(P2, 'stan');
+      const pierwsza = await js(P, "(() => { const k = document.querySelector('#podglad .karta:not(.rewers)'); return { talia: k.dataset.talia, id: k.dataset.id }; })()");
+      const szerMin = Math.floor(await js(P, 'Math.min(...kartyEksportu({}).map((k) => cardMm(k)[0])) / 25.4 * 150 * 0.97'));
+      zlec(P, 'obrazki', `format = png\ndpi = 150\ntalie = ${pierwsza.talia}\nid = ${pierwsza.id}\nrewersy = nie\n`);
+      const obr = await czekajNa(P, 'obrazki');
+      const png = obr && obr.ok && obr.pliki && obr.pliki.length ? path.join(projekt, obr.pliki[0]) : null;
+      const szerPng = png && fs.existsSync(png) ? fs.readFileSync(png).readUInt32BE(16) : 0;
+      (obr && obr.pliki || []).forEach((f) => fs.rmSync(path.join(projekt, f), { force: true }));   // test okien liczy nowe PNG w Export/
+      zlec(P, 'pdf', 'uklad = a4\nplik = Export/zakladka.pdf\n');
+      const pdf = await czekajNa(P, 'pdf');
+      z.zlecenia = { stan: [s1 && { ok: s1.ok, karty: s1.karty, strona: await kartyNaStronie(P) }, s2 && { ok: s2.ok, karty: s2.karty, strona: await kartyNaStronie(P2) }],
+        aktywna: aktywny === P2 && wChildren(P2) && !wChildren(P), obrazki: obr && { ok: obr.ok, pliki: obr.pliki, szer: szerPng, szerMin },
+        pdf: pdf && { ok: pdf.ok, pliki: pdf.pliki, rozmiar: fs.existsSync(path.join(projekt, 'Export', 'zakladka.pdf')) ? fs.statSync(path.join(projekt, 'Export', 'zakladka.pdf')).size : 0 },
+        bezZnaku: !P.zlecenieTrwa && !P2.zlecenieTrwa && (await pasekStan()).every((x) => !x.zlecenie) };
+      z.zlecenia.ok = !!(s1 && s1.ok && s1.karty > 0 && s1.karty === z.zlecenia.stan[0].strona && s2 && s2.ok && s2.karty > 0 && s2.karty === z.zlecenia.stan[1].strona
+        && z.zlecenia.aktywna && obr && obr.ok && obr.pliki.length >= 1 && z.zlecenia.obrazki.szer >= szerMin && pdf && pdf.ok && z.zlecenia.pdf.rozmiar > 1000 && z.zlecenia.bezZnaku);
+      // 3. Kropka zmian: w nieaktywnej zakładce – tylko w pasku, nie w oknie; po przełączeniu – także w oknie.
+      await js(P, 'generatorApp.edytorZmiany(true)'); await czekaj(300);
+      // setDocumentEdited działa tylko na macOS – w kontenerze sprawdzamy stan projektu.
+      const kropkaOkna = () => (process.platform === 'darwin' ? okno.isDocumentEdited() : !!(aktywny && aktywny.zmiany));
+      const kropka = { okno: kropkaOkna(), pasek: (await pasekStan()).map((x) => x.zmiany) };
+      pokazProjekt(P); await czekaj(300);
+      kropka.poPrzelaczeniu = kropkaOkna();
+      await js(P, 'generatorApp.edytorZmiany(false)'); await czekaj(300);
+      kropka.zdjeta = !kropkaOkna() && (await pasekStan()).every((x) => !x.zmiany);
+      z.kropka = { ...kropka, ok: !kropka.okno && kropka.pasek[0] === true && kropka.pasek[1] === false && kropka.poPrzelaczeniu && kropka.zdjeta };
+      // 4. Przełączanie (funkcje ⌃Tab / ⌃⇧Tab / ⌘1–2) i ponowne otwarcie tego samego folderu bez nowej zakładki.
+      przesunZakladke(1); const a1 = aktywny === P2 && wChildren(P2) && okno.getTitle().startsWith(P2.nazwa);
+      przesunZakladke(1); const a2 = aktywny === P && wChildren(P) && !wChildren(P2);
+      wybierzZakladke(1); const a3 = aktywny === P2;
+      przesunZakladke(-1); const a4 = aktywny === P && okno.getTitle().startsWith(P.nazwa);
+      const znow = await otworzWZakladce(kopia);
+      z.przelaczanie = { kolejno: [a1, a2, a3, a4], znow: znow === P2 && projekty.length === przed + 1 && aktywny === P2, menu: (Menu.getApplicationMenu().items.find((i) => i.label === 'Okno') || { submenu: { items: [] } }).submenu.items.filter((i) => i.type === 'radio').map((i) => i.label + (i.checked ? ' ✓' : '')) };
+      z.przelaczanie.ok = a1 && a2 && a3 && a4 && z.przelaczanie.znow && z.przelaczanie.menu.length === przed + 1 && z.przelaczanie.menu.includes('Wyprawa ✓');
+      // 5. Zamknięcie drugiej zakładki (ze „zmianami” – w teście pytanie liczone, nie pokazywane): widok zniszczony,
+      // port zamknięty, aktywna = sąsiednia (po lewej), punkt „zamknięcie projektu” w jej historii (zmieniony szablon).
+      const szablon2 = P2.szablon, port2 = P2.port, wc2 = P2.wc;
+      fs.appendFileSync(szablon2, '\n; zmiana przed zamknięciem zakładki\n'); await czekaj(300);
+      P2.zmiany = true;
+      const pytaniaPrzed = TEST.pytania;
+      const zamknieta = await zamknijZakladke(P2);
+      await czekaj(500);
+      let punkty = [];
+      try { punkty = historia.wczytajIndeks(kopia).punkty.map((x) => x.etykieta); } catch (e) { /* brak historii */ }
+      z.zamykanie = { zamknieta, pytania: TEST.pytania - pytaniaPrzed, zniszczony: wc2.isDestroyed(), port: await portZamkniety(port2), liczba: projekty.length,
+        aktywna: aktywny === P && wChildren(P) && P.widok.getBounds().y === (projekty.length > 1 ? PASEK_WYSOKOSC : 0), punkty, pasek: (await pasekStan()).length };
+      z.zamykanie.ok = zamknieta && z.zamykanie.pytania === 1 && z.zamykanie.zniszczony && z.zamykanie.port && projekty.length === przed && z.zamykanie.aktywna
+        && punkty.includes('zamknięcie projektu') && z.zamykanie.pasek === przed;
+    }
+    // 6. Limit 8: puste zakładki (⌘T) do 8; 9. → odmowa, gdy każda ma zmiany; pytanie z kandydatem (odpowiedź „nie” – nic
+    // się nie zmienia; „tak” – najdawniej używana zamknięta, nowa otwarta). Potem zamknięcie dodatkowych.
+    const puste = [];
+    while (projekty.length < LIMIT_ZAKLADEK) { const n = await nowaZakladka(); if (!n) break; puste.push(n); }
+    const limit = { liczba: projekty.length, pasekPlus: await pasek.webContents.executeJavaScript("document.getElementById('nowa').classList.contains('ukryty')") };
+    projekty.forEach((x) => { x.zmiany = true; }); TEST.limit = null;
+    limit.odmowa = { wynik: await nowaZakladka(), test: TEST.limit, liczba: projekty.length };
+    projekty.forEach((x) => { x.zmiany = false; });
+    pokazProjekt(P);                                        // projekt testowy najświeższy – kandydat = najdawniej używana (bez przywróconych: pierwsza pusta)
+    const kand = projekty.filter((x) => !x.zmiany && !x.zlecenieTrwa).sort((a, b) => a.uzyty - b.uzyty)[0];
+    TEST.limit = null; TEST.odpowiedzLimit = false;
+    limit.nie = { wynik: await nowaZakladka(), test: TEST.limit, liczba: projekty.length, kandydat: kand.nazwaZakladki, pierwszaPusta: kand === puste[0] || przywrocone.length > 0, kandydatZyje: !!kand.wc };
+    TEST.limit = null; TEST.odpowiedzLimit = true;
+    const nowa = await nowaZakladka(); await czekaj(500);
+    limit.tak = { otwarta: !!nowa && projekty.includes(nowa) && aktywny === nowa, test: TEST.limit, liczba: projekty.length, kandydatZamkniety: !kand.wc && !projekty.includes(kand) };
+    TEST.odpowiedzLimit = false;
+    for (const x of [...projekty]) if (x !== P && !x.szablon) await zamknijZakladke(x);
+    limit.poSprzataniu = projekty.length;
+    z.limit = { ...limit, ok: limit.liczba === LIMIT_ZAKLADEK && limit.pasekPlus && limit.odmowa.wynik === null && limit.odmowa.test && limit.odmowa.test.odmowa && limit.odmowa.liczba === LIMIT_ZAKLADEK
+      && limit.nie.wynik === null && limit.nie.test && limit.nie.test.kandydat === limit.nie.kandydat && limit.nie.pierwszaPusta && limit.nie.liczba === LIMIT_ZAKLADEK && limit.nie.kandydatZyje
+      && limit.tak.otwarta && limit.tak.liczba === LIMIT_ZAKLADEK && limit.tak.kandydatZamkniety && limit.poSprzataniu === przed };
+    // 7. Ustawienia: lista otwartych zakładek (bez przykładów i pustych) i aktywna – po ponownym otwarciu kopii 2 zakładki,
+    // aktywna = projekt testowy (test-aktualizacje.js sprawdza ich przywrócenie przy następnym starcie).
+    const P2b = await otworzWZakladce(kopia);
+    if (P2b) await czekajNaKarty(P2b);
+    pokazProjekt(P);
+    const u = ustawienia();
+    z.ustawienia = { otwarteZakladki: u.otwarteZakladki, aktywnaZakladka: u.aktywnaZakladka, liczba: projekty.length };
+    z.ustawienia.ok = !!P2b && Array.isArray(u.otwarteZakladki) && u.otwarteZakladki.length === przed + 1 && u.otwarteZakladki.includes(szablon) && u.otwarteZakladki.includes(P2b.szablon)
+      && u.aktywnaZakladka === u.otwarteZakladki.indexOf(szablon) && aktywny === P && wChildren(P);
+    z.ok = !!(z.druga.ok && z.zlecenia && z.zlecenia.ok && z.kropka && z.kropka.ok && z.przelaczanie && z.przelaczanie.ok && z.zamykanie && z.zamykanie.ok && z.limit.ok && z.ustawienia.ok);
+    zakladki = z;
+  }
   // Eksport JPG z biblioteką wbudowaną w aplikację (sprawdza podmianę CDN → zasoby).
   const jpg = await wc.executeJavaScript(`(async () => {
     await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
@@ -1154,8 +1492,8 @@ async function trybTestowy(folder, wynik) {
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
     && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok) && (!podfolder || podfolder.ok)
-    && (!formatowanie || formatowanie.ok) && projektyTest.ok;
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, formatowanie, projekty: projektyTest, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
+    && (!formatowanie || formatowanie.ok) && projektyTest.ok && (!zakladki || zakladki.ok);
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, formatowanie, projekty: projektyTest, zakladki, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
@@ -1166,17 +1504,23 @@ app.on('second-instance', () => { if (okno) { if (okno.isMinimized()) okno.resto
 let doOtwarcia = null;                                   // szablon otwarty z Findera przed startem aplikacji
 app.on('open-file', (e, plik) => {
   e.preventDefault();
-  if (app.isReady() && okno && aktywny) otworzSzablon(plik); else doOtwarcia = plik;
+  if (app.isReady() && okno) otworzWZakladce(plik); else doOtwarcia = plik;
 });
 
-// Okno z jednym projektem (na razie zawsze jednym – zakładki w etapie 2 issue #59).
-async function oknoZProjektem() {
+// Okno z zakładkami: przywrócone z ustawień (nie w trybie testowym – chyba że --test-przywroc), plik z Findera
+// jako kolejna zakładka, a gdy nic nie ma – jedna pusta zakładka z ekranem startowym.
+async function oknoZZakladkami(plik, przywroc) {
   utworzOkno();
-  const p = await new Projekt().uruchom();
-  pokazProjekt(p);
-  pokazOknoPoWczytaniu(p);
-  return p;
+  const przywrocone = przywroc ? await przywrocZakladki() : [];
+  if (plik) await otworzWZakladce(plik);
+  if (!projekty.length) await nowaZakladka();
+  pokazOknoPoWczytaniu(aktywny);
+  return przywrocone;
 }
+const bladTestu = (e) => {                                 // błąd testu = wynik z opisem zamiast zawieszenia
+  process.stdout.write(JSON.stringify({ ok: false, blad: (e && e.stack) || JSON.stringify(e) || String(e) }) + '\n');
+  app.exit(1);
+};
 
 app.whenReady().then(async () => {
   przekierujCdn();
@@ -1184,31 +1528,30 @@ app.whenReady().then(async () => {
   try { nazwaWydania = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).nazwaWydania || ''; } catch (e) { /* bez nazwy */ }
   app.setAboutPanelOptions({ applicationName: 'KarKa', credits: 'Kawia Karciana – generator kart do gier (dawniej Generator kart)', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
     version: `${KOD.zrodlo === 'nakładka' ? 'kod z aktualizacji, ' : ''}Electron ${process.versions.electron}` });
-  const p = await oknoZProjektem();
-  p.wc.once('did-finish-load', potwierdzStart);
 
   const argi = process.argv;
   const t = argi.indexOf('--test-pdf');
   const tn = argi.indexOf('--test-nowy');                 // --test-nowy <nowy folder gry> --test-pdf - <wynik.pdf>
   if (t >= 0) {
     testowy = true;
-    if (tn >= 0) otworzSzablon(utworzProjekt(path.resolve(argi[tn + 1])), p);
-    else otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]), p);
-    p.wc.once('did-finish-load', () => trybTestowy(tn >= 0 ? argi[tn + 1] : argi[t + 1], path.resolve(argi[t + 2]))
-      .catch((e) => {                                    // błąd testu = wynik z opisem zamiast zawieszenia
-        process.stdout.write(JSON.stringify({ ok: false, blad: (e && e.stack) || JSON.stringify(e) || String(e) }) + '\n');
-        app.exit(1);
-      }));
+    try {
+      // --test-przywroc: zakładki z ustawień też w teście (test-aktualizacje.js sprawdza przywrócenie po restarcie);
+      // projekt testowy otwiera się jako kolejna zakładka, a sprawdzane liczby uwzględniają przywrócone.
+      const przywrocone = await oknoZZakladkami(null, argi.includes('--test-przywroc'));
+      const plik = tn >= 0 ? utworzProjekt(path.resolve(argi[tn + 1])) : argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]);
+      const p = plik ? await otworzWZakladce(plik) : aktywny;
+      if (!p) throw new Error('nie udało się otworzyć projektu testowego');
+      p.wc.once('did-finish-load', () => trybTestowy(tn >= 0 ? argi[tn + 1] : argi[t + 1], path.resolve(argi[t + 2]), przywrocone).catch(bladTestu));
+    } catch (e) { bladTestu(e); }
     return;
   }
-  otworzSzablon(doOtwarcia || ostatnie()[0] || null, p);
+  await oknoZZakladkami(doOtwarcia, true);
   setTimeout(() => sprawdzAktualizacje({ cicho: true }), 4000);
 });
 
 app.on('activate', async () => {
   if (okno || !app.isReady()) return;
-  const p = await oknoZProjektem();
-  otworzSzablon(ostatnie()[0] || null, p);
+  await oknoZZakladkami(null, true);
 });
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => projekty.forEach((p) => historiaZamkniecie(p)));

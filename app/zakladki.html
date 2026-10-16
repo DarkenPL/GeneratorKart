@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Zakładki</title>
+<!-- Pasek zakładek KarKi (issue #59, etap 2): osobny widok nad widokiem projektu. Stan (lista zakładek,
+     aktywna, kropka zmian, trwające zlecenie) przysyła main; pasek tylko zgłasza kliknięcia. -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #d9d4cc; user-select: none; -webkit-user-select: none;
+    font: 12.5px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; color: #3d3a36; cursor: default; }
+  #pasek { display: flex; align-items: stretch; height: 100%; padding: 4px 6px 0; gap: 2px; box-sizing: border-box; }
+  .zakladka { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px; flex: 1 1 120px; padding: 0 8px 0 10px;
+    border-radius: 6px 6px 0 0; background: #e3dfd8; border: 1px solid #c9c3b9; border-bottom: none; position: relative; }
+  .zakladka:hover { background: #e9e5df; }
+  .zakladka.aktywna { background: #ece9e4; border-color: #bdb6ab; }
+  .zakladka.aktywna::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: #ece9e4; }
+  .nazwa { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zakladka.pusta .nazwa, .zakladka.przyklad .nazwa { color: #6f6a63; }
+  .znak { width: 10px; height: 10px; flex: none; display: none; }
+  .zakladka.zmiany .znak.kropka { display: block; border-radius: 50%; background: #3d3a36; width: 7px; height: 7px; margin: 0 1.5px; }
+  .zakladka.zlecenie .znak.kropka { display: none; }
+  .zakladka.zlecenie .znak.kolko { display: block; border-radius: 50%; border: 2px solid #b5aea3; border-top-color: #3d3a36; box-sizing: border-box; animation: obrot 0.9s linear infinite; }
+  @keyframes obrot { to { transform: rotate(360deg); } }
+  .zamknij { flex: none; width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 4px; font-size: 14px; color: #6f6a63; visibility: hidden; }
+  .zakladka:hover .zamknij, .zakladka.aktywna .zamknij { visibility: visible; }
+  .zamknij:hover { background: #c9c3b9; color: #1e1c1a; }
+  #nowa { flex: none; width: 26px; margin: 2px 0 4px 4px; border-radius: 6px; font-size: 17px; line-height: 24px; text-align: center; color: #6f6a63; }
+  #nowa:hover { background: #c9c3b9; color: #1e1c1a; }
+  #nowa.ukryty { display: none; }
+</style>
+</head>
+<body>
+<div id="pasek"></div>
+<script>
+  'use strict';
+  const APP = window.pasekZakladek;
+  const pasek = document.getElementById('pasek');
+  let stan = { zakladki: [], aktywna: -1, limit: false };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function rysuj() {
+    pasek.innerHTML = stan.zakladki.map((z, i) => {
+      const klasy = ['zakladka', i === stan.aktywna && 'aktywna', z.zmiany && 'zmiany', z.zlecenie && 'zlecenie', z.pusta && 'pusta', z.przyklad && 'przyklad'].filter(Boolean).join(' ');
+      const dymek = z.sciezka ? esc(z.sciezka) : 'Nowa zakładka – wybierz projekt';
+      return `<div class="${klasy}" data-i="${i}" title="${dymek}"><span class="znak kolko"></span><span class="znak kropka"></span>`
+        + `<span class="nazwa">${esc(z.nazwa)}</span><span class="zamknij" title="Zamknij zakładkę (⌘W)">×</span></div>`;
+    }).join('') + `<div id="nowa" class="${stan.limit ? 'ukryty' : ''}" title="Nowa zakładka (⌘T)">+</div>`;
+  }
+  pasek.addEventListener('click', (e) => {
+    if (e.target.id === 'nowa') return APP.nowa();
+    const z = e.target.closest('.zakladka');
+    if (!z) return;
+    const i = Number(z.dataset.i);
+    if (e.target.classList.contains('zamknij')) APP.zamknij(i); else APP.wybierz(i);
+  });
+  pasek.addEventListener('auxclick', (e) => {               // środkowy przycisk = zamknij, jak w przeglądarkach
+    const z = e.target.closest('.zakladka');
+    if (z && e.button === 1) APP.zamknij(Number(z.dataset.i));
+  });
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  if (APP) APP.naStan((s) => { stan = s; rysuj(); });
+  rysuj();
+</script>
+</body>
+</html>

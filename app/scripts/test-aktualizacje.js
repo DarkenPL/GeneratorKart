@@ -126,8 +126,9 @@ const serwer = http.createServer((req, res) => {
   if (!process.exitCode) fs.rmSync(T, { recursive: true, force: true }); else console.log('pliki testu:', T);
 })().catch((e) => { console.error(e); process.exit(1); });
 
-// Aplikacja: (1) bez nakładki – kod z paczki; zlecenie „aktualizacja” (instaluj = tak) instaluje nakładkę;
-// (2) następny start – kod z nakładki 9.9.9, pełny test przykładu przechodzi.
+// Aplikacja: (1) bez nakładki – kod z paczki; zlecenie „aktualizacja” (instaluj = tak) instaluje nakładkę; test zakładek
+// (--test-zakladki) zostawia 2 zakładki w ustawieniach; (2) następny start – kod z nakładki 9.9.9, pełny test przykładu
+// przechodzi, a --test-przywroc sprawdza, że 2 zakładki z poprzedniego startu wróciły (issue #59, etap 2).
 async function testElectron(ADRES) {
   const bin = path.join(APP, 'node_modules', '.bin', 'electron');
   const ud = path.join(T, 'ud');
@@ -139,12 +140,17 @@ async function testElectron(ADRES) {
     });
   });
   const kopia = (n) => { const d = path.join(T, n); fs.cpSync(path.join(APP, '..', 'przyklady', '01-wyprawa'), d, { recursive: true }); return d; };
-  const r1 = await uruchom(kopia('p1'), ['--test-aktualizacja']);
+  const r1 = await uruchom(kopia('p1'), ['--test-aktualizacja', '--test-zakladki']);
   ok('aplikacja: kod z paczki', r1.ok && r1.kod && r1.kod.zrodlo === 'paczka', JSON.stringify(r1.kod || r1.blad));
   ok('aplikacja: zlecenie aktualizacja', !!r1.aktualizacja && r1.aktualizacja.ok, JSON.stringify(r1.aktualizacja));
   ok('nakładka po zleceniu', fs.existsSync(path.join(ud, 'kod', 'main.js')));
-  const r2 = await uruchom(kopia('p2'));
+  ok('aplikacja: zakładki', !!r1.zakladki && r1.zakladki.ok, JSON.stringify(r1.zakladki && Object.fromEntries(Object.entries(r1.zakladki).map(([k, v]) => [k, v && v.ok]))));
+  const ust = JSON.parse(fs.readFileSync(path.join(ud, 'ustawienia.json'), 'utf8'));
+  ok('ustawienia: 2 zakładki', Array.isArray(ust.otwarteZakladki) && ust.otwarteZakladki.length === 2 && ust.aktywnaZakladka === 0, JSON.stringify(ust.otwarteZakladki));
+  const r2 = await uruchom(kopia('p2'), ['--test-przywroc']);
   ok('aplikacja: kod z nakładki', r2.ok && r2.kod && r2.kod.zrodlo === 'nakładka' && r2.kod.wersja === NOWA, JSON.stringify(r2.kod || r2.blad));
+  ok('zakładki przywrócone po restarcie', !!r2.projekty && r2.projekty.liczba === 3 && r2.projekty.przywrocone.length === 2
+    && r2.projekty.przywrocone.every((s) => ust.otwarteZakladki.includes(s)), JSON.stringify(r2.projekty));
   const pozostale = fs.readdirSync(path.join(ud, 'kod')).filter((n) => n.startsWith('start-') || n === 'zepsuta');
   ok('znacznik startu usunięty', !pozostale.length, pozostale.join(', '));
 }
