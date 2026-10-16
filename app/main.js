@@ -872,9 +872,30 @@ async function trybTestowy(folder, wynik) {
     // Obrazki: jedna karta (wszystkie kopie) PNG bez rewersu.
     const obr = await zlec('obrazki', `format = png\ndpi = 150\ntalie = ${pierwsza.talia}\nid = ${pierwsza.id}, nie-ma-takiej\nrewersy = nie\n`);
     z.obrazki = obr && { ok: obr.ok, pliki: obr.pliki, sa: (obr.pliki || []).every((p) => fs.existsSync(path.join(projekt, p))), ostrzezenia: obr.ostrzezenia };
-    // playingcards.io jednej talii.
-    const pcio = await zlec('pcio', `talie = ${pierwsza.talia}\n`);
-    z.pcio = pcio && { ok: pcio.ok, pliki: pcio.pliki, sa: (pcio.pliki || []).every((p) => fs.existsSync(path.join(projekt, p))), karty: pcio.karty };
+    // playingcards.io (issue #32): jedna talia → jeden holder i tylko jej karty (+ nieznana talia = ostrzeżenie);
+    // id → tylko karty o tym ID. Zawartość sprawdzana w widgets.json z ZIP-a (STORE, bez kompresji).
+    const widgetsPcio = (p) => {
+      try {
+        const b = fs.readFileSync(path.join(projekt, p));
+        for (let i = 0; i + 30 <= b.length && b.readUInt32LE(i) === 0x04034b50;) {
+          const rozm = b.readUInt32LE(i + 18), dl = b.readUInt16LE(i + 26), ex = b.readUInt16LE(i + 28);
+          const nazwa = b.slice(i + 30, i + 30 + dl).toString(), start = i + 30 + dl + ex;
+          if (nazwa === 'widgets.json') return JSON.parse(b.slice(start, start + rozm).toString('utf8'));
+          i = start + rozm;
+        }
+      } catch (e) {}
+      return null;
+    };
+    const opisPcio = (w) => w && { holdery: w.filter((x) => x.type === 'holder').map((x) => x.label), karty: w.filter((x) => x.type === 'card').length };
+    const oczek = await js(`(() => { const k = [...document.querySelectorAll('#podglad .karta:not(.rewers)')];
+      return { talie: document.querySelectorAll('#podglad .talia').length, wTalii: k.filter((x) => x.dataset.talia === ${JSON.stringify(pierwsza.talia)}).length,
+        zId: k.filter((x) => x.dataset.id === ${JSON.stringify(pierwsza.id)}).length,
+        taliiZId: new Set(k.filter((x) => x.dataset.id === ${JSON.stringify(pierwsza.id)}).map((x) => x.dataset.talia)).size }; })()`);
+    const pcio = await zlec('pcio', `talie = ${pierwsza.talia}, Nie ma takiej\n`);
+    z.pcio = pcio && { ok: pcio.ok, pliki: pcio.pliki, sa: (pcio.pliki || []).every((p) => fs.existsSync(path.join(projekt, p))), karty: pcio.karty,
+      holdery: pcio.holdery, ostrzezenia: pcio.ostrzezenia, zip: opisPcio(pcio.pliki && widgetsPcio(pcio.pliki[0])), oczek };
+    const pcioId = await zlec('pcio', `id = ${pierwsza.id}\n`);
+    z.pcioId = pcioId && { ok: pcioId.ok, karty: pcioId.karty, ostrzezenia: pcioId.ostrzezenia, zip: opisPcio(pcioId.pliki && widgetsPcio(pcioId.pliki[0])) };
     // Niezapisany edytor: zmiana tytułu kart w edytorze; zlecenie widzi wersję z dysku, edytor zostaje bez zmian.
     const nazwaKarty = await js("document.querySelector('#podglad .karta:not(.rewers)').title");
     await js("(() => { const p = document.getElementById('edPole'); p.value = p.value.replace(/^PROJEKT(\\s*)=(\\s*)/m, 'PROJEKT$1=$2ZMIANA ') + '\\n; zmiana z testu\\n'; p.dispatchEvent(new Event('input')); })()");
@@ -908,7 +929,10 @@ async function trybTestowy(folder, wynik) {
       && z.stanPoPdf && z.stanPoPdf.ostatniPdf && Array.isArray(z.stanPoPdf.zmienione)
       && z.obrazki && z.obrazki.ok && z.obrazki.pliki.length >= 1 && z.obrazki.sa && z.obrazki.pliki.every((p) => /\.png$/.test(p))
       && (z.obrazki.ostrzezenia || []).some((x) => x.includes('nie-ma-takiej'))
-      && z.pcio && z.pcio.ok && z.pcio.sa && z.pcio.karty > 0
+      && z.pcio && z.pcio.ok && z.pcio.sa && z.pcio.karty > 0 && z.pcio.holdery === 1
+      && z.pcio.zip && z.pcio.zip.holdery.length === 1 && z.pcio.zip.holdery[0] === z.talia && z.pcio.zip.karty === z.pcio.oczek.wTalii
+      && (z.pcio.ostrzezenia || []).some((x) => x.includes('Nie ma takiej'))
+      && z.pcioId && z.pcioId.ok && !(z.pcioId.ostrzezenia || []).length && z.pcioId.zip && z.pcioId.zip.karty === z.pcio.oczek.zId && z.pcioId.zip.holdery.length === z.pcio.oczek.taliiZId
       && z.edytor && z.edytor.niezapisane && !/ZMIANA/.test(z.edytor.projekt) && /ZMIANA/.test(z.edytor.projektEd) && /ZMIANA/.test(z.edytor.poZleceniu.projekt) && z.edytor.poZleceniu.zmiany && z.edytor.poZleceniu.tekst
       && z.ustawieniaBezZmian && !z.pozostale.length
       && !/ZDYSKU/.test(z.zDysku.przedZleceniem) && /ZDYSKU/.test(z.zDysku.wZleceniu) && !/ZDYSKU/.test(z.zDysku.poPrzywroceniu));
