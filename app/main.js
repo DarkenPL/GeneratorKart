@@ -2,7 +2,9 @@
 // KarKa (Kawia Karciana, dawniej Generator kart) – aplikacja na macOS (Electron).
 // Okno pokazuje generator (generator/karty.html). Pliki projektu podaje lokalny serwer (serwer.js),
 // a biblioteki i czcionki są w aplikacji. Projekt otwiera się przez wskazanie pliku szablonu.
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session, net } = require('electron');
+// Każdy otwarty projekt to obiekt Projekt: własny widok strony (WebContentsView) w oknie, własny serwer
+// na osobnym porcie, zlecenia z pliku, historia i stan edytora (przygotowanie do zakładek, issue #59).
+const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, shell, session, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { utworzSerwer } = require('./serwer');
@@ -17,12 +19,10 @@ const ZASOBY = fs.existsSync(path.join(__dirname, 'zasoby', 'karty.html')) ? pat
 const PRZYKLADY = path.join(ZASOBY, 'przyklady');
 const DOKUMENTACJA = 'https://github.com/DarkenPL/KarKa#readme';
 
-let okno = null;
-let szablon = null;          // otwarty plik szablonu (.txt)
-let projekt = null;          // folder projektu: folder szablonu, a gdy szablon leży w „Szablony” – folder nad nim
-let port = 0;
+let okno = null;             // okno aplikacji; projekty są w nim widokami (WebContentsView)
 let testowy = false;         // tryb testowy (CI) – bez otwierania okien Findera
-let zmiany = false;          // niezapisane zmiany w edytorze szablonu
+const projekty = [];         // otwarte projekty (na razie zawsze jeden; zakładki – #59, etap 2)
+let aktywny = null;          // projekt widoczny w oknie – na niego działają menu i skróty
 
 // ── Ustawienia: ostatnie projekty ──────────────────────────────────────────
 // Pierwszy start po zmianie nazwy (Generator kart → KarKa): ustawienia ze starego folderu danych.
@@ -58,61 +58,144 @@ const folderProjektu = (plik) => {
   const dir = path.dirname(plik);
   return path.basename(dir).toLowerCase() === 'szablony' ? path.dirname(dir) : dir;
 };
-const nazwaProjektu = () => (projekt ? path.basename(projekt) : '');
 
 // ── Projekt ─────────────────────────────────────────────────────────────────
+// Otwarty projekt: widok strony, serwer plików na własnym porcie, szablon, stan edytora, zlecenia, eksport.
+// Serwer i widok zostają przy zmianie szablonu (Plik → Otwórz szablon… w tym samym projekcie).
+class Projekt {
+  constructor() {
+    this.szablon = null;          // otwarty plik szablonu (.txt)
+    this.folder = null;           // folder projektu: folder szablonu, a gdy szablon leży w „Szablony” – folder nad nim
+    this.zmiany = false;          // niezapisane zmiany w edytorze szablonu
+    this.zlecenieTrwa = false;    // trwa zlecenie z pliku w tym projekcie (PDF bez okna dozwolony tylko wtedy)
+    this.folderEksportu = null;   // folder trwającego eksportu obrazków
+    this.serwer = null;
+    this.port = 0;
+    this.widok = null;
+  }
+  get wc() { const w = this.widok && this.widok.webContents; return w && !w.isDestroyed() ? w : null; }
+  get nazwa() { return this.folder ? path.basename(this.folder) : ''; }
+  // Historia, zlecenia i zapis do Export/ – tylko w projektach użytkownika (przykłady są tylko do odczytu).
+  get zapisywalny() { return !!this.folder && !jestPrzykladem(this.folder); }
+
+  async uruchom() {
+    this.serwer = utworzSerwer({ zasoby: ZASOBY, projekt: () => this.folder });
+    await new Promise((ok) => this.serwer.listen(0, '127.0.0.1', ok));
+    this.port = this.serwer.address().port;
+    this.widok = new WebContentsView({
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
+        backgroundThrottling: false },   // zasłonięte okno: timery (odświeżanie, siatka historii) bez dławienia Chromium
+    });
+    this.widok.setBackgroundColor('#ece9e4');
+    const wc = this.widok.webContents, nasz = `http://127.0.0.1:${this.port}/`;
+    wc.on('will-navigate', (e, url) => {
+      if (!url.startsWith(nasz)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
+    });
+    wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    projekty.push(this);
+    return this;
+  }
+
+  // Zamknięcie projektu: kopia zmienionych plików w historii, serwer i widok.
+  zamknij() {
+    const i = projekty.indexOf(this);
+    if (i < 0) return;
+    projekty.splice(i, 1);
+    historiaZamkniecie(this);
+    try { this.serwer.close(); } catch (e) { /* trudno */ }
+    try { if (okno && !okno.isDestroyed()) okno.contentView.removeChildView(this.widok); } catch (e) { /* już odpięty */ }
+    try { if (this.wc) this.wc.close(); } catch (e) { /* już zamknięty */ }
+    if (aktywny === this) aktywny = projekty[0] || null;
+  }
+}
+// Projekt, z którego przyszło IPC (event.sender) – zamiast globalnego „otwartego projektu”.
+const projektWc = (wc) => (wc && projekty.find((p) => p.wc && p.wc.id === wc.id)) || null;
+function projektZ(e) {
+  const p = projektWc(e.sender);
+  if (!p) throw new Error('Nieznany projekt – strona spoza aplikacji.');
+  return p;
+}
+
+// Widok aktywnego projektu wypełnia okno (pasek zakładek – etap 2).
+function ulozWidok() {
+  if (!okno || !aktywny || !aktywny.widok) return;
+  const [width, height] = okno.getContentSize();
+  aktywny.widok.setBounds({ x: 0, y: 0, width, height });
+}
+// Tytuł okna, plik w pasku tytułu i kropka niezapisanych zmian – z aktywnego projektu.
+function odswiezOkno() {
+  if (!okno) return;
+  const p = aktywny;
+  okno.setDocumentEdited(!!(p && p.zmiany));
+  okno.setTitle(p && p.szablon ? `${p.nazwa} – ${path.basename(p.szablon)} – KarKa` : 'KarKa');
+  if (p && p.szablon) okno.setRepresentedFilename(p.szablon);
+}
+function pokazProjekt(p) {
+  if (!okno || !p || !p.widok) return;
+  if (aktywny && aktywny !== p && aktywny.widok) okno.contentView.removeChildView(aktywny.widok);
+  aktywny = p;
+  okno.contentView.addChildView(p.widok);
+  ulozWidok();
+  if (okno.isFocused()) p.wc.focus();
+  odswiezOkno();
+  zbudujMenu();
+}
+
 // Niezapisane zmiany w edytorze: Zapisz / Nie zapisuj / Anuluj. Zwraca true, gdy można iść dalej.
-async function czyMoznaPorzucic() {
-  if (!zmiany || testowy || !okno) return true;
+async function czyMoznaPorzucic(p) {
+  if (!p || !p.zmiany || testowy || !okno) return true;
   const r = await dialog.showMessageBox(okno, {
     type: 'warning', buttons: ['Zapisz', 'Nie zapisuj', 'Anuluj'], defaultId: 0, cancelId: 2,
-    message: `Zapisać zmiany w szablonie „${path.basename(szablon || '')}”?`,
+    message: `Zapisać zmiany w szablonie „${path.basename(p.szablon || '')}”?`,
     detail: 'Jeśli nie zapiszesz, zmiany przepadną.',
   });
   if (r.response === 2) return false;
   if (r.response === 0) {
-    try { zapiszSzablonNaDysk(await okno.webContents.executeJavaScript('window.edytorTekst()')); }
+    try { zapiszSzablonNaDysk(p, await p.wc.executeJavaScript('window.edytorTekst()')); }
     catch (e) { dialog.showErrorBox('Nie można zapisać szablonu', e.message); return false; }
   }
-  zmiany = false;
+  p.zmiany = false;
   return true;
 }
-function zapiszSzablonNaDysk(tekst) {
-  if (!szablon || jestPrzykladem(szablon)) throw new Error('Ten szablon jest tylko do odczytu.');
-  fs.writeFileSync(szablon, String(tekst));
+// Zamknięcie okna, ⌘Q, restart po aktualizacji: pytanie o każdy projekt z niezapisanym edytorem.
+async function czyMoznaPorzucicWszystkie() {
+  for (const p of [...projekty]) if (!(await czyMoznaPorzucic(p))) return false;
+  return true;
+}
+function zapiszSzablonNaDysk(p, tekst) {
+  if (!p.szablon || jestPrzykladem(p.szablon)) throw new Error('Ten szablon jest tylko do odczytu.');
+  fs.writeFileSync(p.szablon, String(tekst));
 }
 
-async function otworzSzablon(plik) {
-  if (!(await czyMoznaPorzucic())) return;
-  historiaZamkniecie();
-  zmiany = false;
-  if (okno) okno.setDocumentEdited(false);
-  szablon = naSzablon(plik);
-  projekt = szablon ? folderProjektu(szablon) : null;
-  if (szablon && !jestPrzykladem(szablon)) {
+async function otworzSzablon(plik, p = aktywny) {
+  if (!p || !(await czyMoznaPorzucic(p))) return;
+  historiaZamkniecie(p);
+  p.zmiany = false;
+  p.szablon = naSzablon(plik);
+  p.folder = p.szablon ? folderProjektu(p.szablon) : null;
+  if (p.szablon && !jestPrzykladem(p.szablon)) {
     const u = ustawienia();
-    u.ostatnie = [szablon, ...(u.ostatnie || []).map(naSzablon).filter((x) => x && x !== szablon)].slice(0, 10);
+    u.ostatnie = [p.szablon, ...(u.ostatnie || []).map(naSzablon).filter((x) => x && x !== p.szablon)].slice(0, 10);
     zapiszUstawienia(u);
-    app.addRecentDocument(szablon);
+    app.addRecentDocument(p.szablon);
   }
-  if (okno) {
-    okno.setTitle(szablon ? `${nazwaProjektu()} – ${path.basename(szablon)} – KarKa` : 'KarKa');
-    if (szablon) okno.setRepresentedFilename(szablon);
-    const rel = szablon ? path.relative(projekt, szablon).split(path.sep).join('/') : '';
-    okno.loadURL(`http://127.0.0.1:${port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
+  if (p === aktywny) odswiezOkno();
+  if (p.wc) {
+    const rel = p.szablon ? path.relative(p.folder, p.szablon).split(path.sep).join('/') : '';
+    p.wc.loadURL(`http://127.0.0.1:${p.port}/karty.html` + (rel ? '?szablon=' + encodeURIComponent(rel) : ''));
   }
   zbudujMenu();
 }
 
-async function wybierzSzablon() {
+async function wybierzSzablon(p = aktywny) {
   const r = await dialog.showOpenDialog(okno, {
     title: 'Otwórz szablon kart', buttonLabel: 'Otwórz',
     message: 'Wybierz plik szablonu (.txt) – wskazuje on pliki z kartami i obrazki.',
     properties: ['openFile'],
     filters: [{ name: 'Szablon kart', extensions: ['txt'] }],
-    defaultPath: szablon && !jestPrzykladem(szablon) ? path.dirname(szablon) : app.getPath('documents'),
+    defaultPath: p && p.szablon && !jestPrzykladem(p.szablon) ? path.dirname(p.szablon) : app.getPath('documents'),
   });
-  if (!r.canceled && r.filePaths[0]) otworzSzablon(r.filePaths[0]);
+  if (!r.canceled && r.filePaths[0]) otworzSzablon(r.filePaths[0], p);
   return !r.canceled;
 }
 
@@ -133,7 +216,7 @@ function utworzProjekt(folder) {
   return path.join(folder, 'Szablony', 'gra.txt');
 }
 
-async function nowyProjekt() {
+async function nowyProjekt(p = aktywny) {
   const r = await dialog.showSaveDialog(okno, {
     title: 'Nowy projekt', buttonLabel: 'Utwórz', nameFieldLabel: 'Nazwa gry:',
     message: 'Powstanie folder gry z przykładowym szablonem, plikiem kart i ikonami.',
@@ -141,8 +224,8 @@ async function nowyProjekt() {
     properties: ['createDirectory', 'showOverwriteConfirmation'],
   });
   if (r.canceled || !r.filePath) return false;
-  if (!(await czyMoznaPorzucic())) return false;
-  try { otworzSzablon(utworzProjekt(r.filePath)); return true; }
+  if (!(await czyMoznaPorzucic(p))) return false;
+  try { otworzSzablon(utworzProjekt(r.filePath), p); return true; }
   catch (e) { dialog.showErrorBox('Nie można utworzyć projektu', e.message); return false; }
 }
 
@@ -159,53 +242,64 @@ async function pdfDoPliku(webContents, plik) {
   return plik;
 }
 
-ipcMain.handle('projekt:info', () => ({
-  auto: ustawienia().auto !== false,
-  szablon, sciezka: projekt, nazwa: nazwaProjektu(), przyklad: jestPrzykladem(szablon),
-}));
-ipcMain.handle('projekt:otworz', () => wybierzSzablon());
-ipcMain.handle('edytor:zapisz', (e, tekst) => { zapiszSzablonNaDysk(tekst); zmiany = false; if (okno) okno.setDocumentEdited(false); return true; });
-ipcMain.handle('edytor:zmiany', (e, czy) => { zmiany = !!czy; if (okno) okno.setDocumentEdited(zmiany); });
-ipcMain.handle('projekt:nowy', () => nowyProjekt());
+ipcMain.handle('projekt:info', (e) => {
+  const p = projektZ(e);
+  return { auto: ustawienia().auto !== false, szablon: p.szablon, sciezka: p.folder, nazwa: p.nazwa, przyklad: jestPrzykladem(p.szablon) };
+});
+ipcMain.handle('projekt:otworz', (e) => wybierzSzablon(projektZ(e)));
+ipcMain.handle('edytor:zapisz', (e, tekst) => {
+  const p = projektZ(e);
+  zapiszSzablonNaDysk(p, tekst); p.zmiany = false;
+  if (p === aktywny) odswiezOkno();
+  return true;
+});
+ipcMain.handle('edytor:zmiany', (e, czy) => {
+  const p = projektZ(e);
+  p.zmiany = !!czy;
+  if (p === aktywny && okno) okno.setDocumentEdited(p.zmiany);
+});
+ipcMain.handle('projekt:nowy', (e) => nowyProjekt(projektZ(e)));
 ipcMain.handle('projekt:przyklady', () => listaPrzykladow());
 ipcMain.handle('projekt:przyklad', (e, nazwa) => {
-  const p = path.join(PRZYKLADY, path.basename(String(nazwa)));
-  if (jestFolderem(p)) otworzSzablon(p);
+  const p = projektZ(e), dir = path.join(PRZYKLADY, path.basename(String(nazwa)));
+  if (jestFolderem(dir)) otworzSzablon(dir, p);
 });
-ipcMain.handle('projekt:pokaz', () => { if (projekt) shell.openPath(projekt); });
+ipcMain.handle('projekt:pokaz', (e) => { const p = projektZ(e); if (p.folder) shell.openPath(p.folder); });
 
 // ── Eksport JPG do folderu Export ───────────────────────────────────────────
 // Przykłady są tylko do odczytu – wtedy pytamy, gdzie zapisać.
-let folderEksportu = null;
 // cel: undefined = Export, 'katalog' = Export/katalog, 'zlecenie' = .generator/katalog (czyszczony).
 ipcMain.handle('eksport:start', async (e, cel) => {
+  const p = projektZ(e);
   const pod = cel === 'katalog' ? ['katalog'] : [];
   if (cel === 'zlecenie') {
-    if (!projekt || jestPrzykladem(projekt)) return null;
-    folderEksportu = path.join(projekt, '.generator', 'katalog');   // nie w zlecenia/ – tam plik zlecenia „katalog”
-    fs.rmSync(folderEksportu, { recursive: true, force: true });
-  } else if (projekt && !jestPrzykladem(projekt)) folderEksportu = path.join(projekt, 'Export', ...pod);
+    if (!p.zapisywalny) return null;
+    p.folderEksportu = path.join(p.folder, '.generator', 'katalog');   // nie w zlecenia/ – tam plik zlecenia „katalog”
+    fs.rmSync(p.folderEksportu, { recursive: true, force: true });
+  } else if (p.zapisywalny) p.folderEksportu = path.join(p.folder, 'Export', ...pod);
   else {
     const r = await dialog.showOpenDialog(okno, {
       title: 'Gdzie zapisać obrazki?', buttonLabel: 'Wybierz', properties: ['openDirectory', 'createDirectory'],
       defaultPath: app.getPath('documents'),
     });
     if (r.canceled || !r.filePaths[0]) return null;
-    folderEksportu = path.join(r.filePaths[0], 'Export', ...pod);
+    p.folderEksportu = path.join(r.filePaths[0], 'Export', ...pod);
   }
-  fs.mkdirSync(folderEksportu, { recursive: true });
-  return folderEksportu;
+  fs.mkdirSync(p.folderEksportu, { recursive: true });
+  return p.folderEksportu;
 });
 ipcMain.handle('eksport:plik', (e, nazwa, dane) => {
-  if (!folderEksportu) throw new Error('Eksport nie został rozpoczęty');
-  fs.writeFileSync(path.join(folderEksportu, path.basename(String(nazwa))), Buffer.from(dane));
+  const p = projektZ(e);
+  if (!p.folderEksportu) throw new Error('Eksport nie został rozpoczęty');
+  fs.writeFileSync(path.join(p.folderEksportu, path.basename(String(nazwa))), Buffer.from(dane));
 });
-ipcMain.handle('eksport:koniec', () => { if (folderEksportu && !testowy) shell.openPath(folderEksportu); });
+ipcMain.handle('eksport:koniec', (e) => { const p = projektZ(e); if (p.folderEksportu && !testowy) shell.openPath(p.folderEksportu); });
 // Eksport playingcards.io: plik .pcio w folderze projektu (przykłady – okno zapisu).
 ipcMain.handle('pcio:zapisz', async (e, nazwa, dane) => {
+  const p = projektZ(e);
   let plik;
   const czysta = path.basename(String(nazwa || 'karty.pcio')).replace(/[\\/:*?"<>|]+/g, '_');
-  if (projekt && !jestPrzykladem(projekt)) plik = path.join(projekt, czysta);
+  if (p.zapisywalny) plik = path.join(p.folder, czysta);
   else {
     const r = await dialog.showSaveDialog(okno, { title: 'Zapisz pokój playingcards.io',
       defaultPath: path.join(app.getPath('documents'), czysta), filters: [{ name: 'playingcards.io', extensions: ['pcio'] }] });
@@ -216,7 +310,8 @@ ipcMain.handle('pcio:zapisz', async (e, nazwa, dane) => {
   return plik;
 });
 ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
-  const katalog = projekt && !jestPrzykladem(projekt) ? projekt : app.getPath('documents');
+  const p = projektZ(e);
+  const katalog = p.zapisywalny ? p.folder : app.getPath('documents');
   const r = await dialog.showSaveDialog(okno, {
     title: 'Zapisz PDF', defaultPath: path.join(katalog, `${nazwa || 'karty'}.pdf`),
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -228,84 +323,90 @@ ipcMain.handle('pdf:zapisz', async (e, nazwa) => {
 
 // ── Odciski kart z ostatniego PDF (druk tylko zmienionych, porównanie) ──────
 // Jeden plik JSON na szablon w danych aplikacji – folder projektu zostaje czysty, działa też dla przykładów.
-const plikOdciskow = () => szablon && path.join(app.getPath('userData'), 'odciski',
-  require('crypto').createHash('sha1').update(szablon).digest('hex').slice(0, 16) + '.json');
+const plikWDanych = (folder, p) => p.szablon && path.join(app.getPath('userData'), folder,
+  require('crypto').createHash('sha1').update(p.szablon).digest('hex').slice(0, 16) + '.json');
+const plikOdciskow = (p) => plikWDanych('odciski', p);
 // Ostatnie ustawienia okien druku i eksportu – osobno dla każdego szablonu.
-const plikUstawienEksportu = () => szablon && path.join(app.getPath('userData'), 'eksport',
-  require('crypto').createHash('sha1').update(szablon).digest('hex').slice(0, 16) + '.json');
-ipcMain.handle('eksport:ustawienia', () => {
-  try { return JSON.parse(fs.readFileSync(plikUstawienEksportu(), 'utf8')); } catch (e) { return {}; }
+const plikUstawienEksportu = (p) => plikWDanych('eksport', p);
+ipcMain.handle('eksport:ustawienia', (e) => {
+  try { return JSON.parse(fs.readFileSync(plikUstawienEksportu(projektZ(e)), 'utf8')); } catch (er) { return {}; }
 });
 ipcMain.handle('eksport:zapiszUstawienia', (e, dane) => {
-  const p = plikUstawienEksportu(); if (!p) return false;
+  const p = plikUstawienEksportu(projektZ(e)); if (!p) return false;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(dane || {}, null, 1));
   return true;
 });
-ipcMain.handle('druk:odciski', () => {
-  try { return JSON.parse(fs.readFileSync(plikOdciskow(), 'utf8')); } catch (e) { return null; }
+ipcMain.handle('druk:odciski', (e) => {
+  try { return JSON.parse(fs.readFileSync(plikOdciskow(projektZ(e)), 'utf8')); } catch (er) { return null; }
 });
 ipcMain.handle('druk:zapiszOdciski', (e, dane) => {
-  const p = plikOdciskow(); if (!p) return false;
+  const p = plikOdciskow(projektZ(e)); if (!p) return false;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(dane));
   return true;
 });
 
 // ── Historia wersji (folder .historia w projekcie; przykłady – bez historii) ─
-const historiaDostepna = () => projekt && !jestPrzykladem(projekt);
-ipcMain.handle('historia:zapisz', (e, pliki, punkt) =>
-  historiaDostepna() ? historia.zapisz(projekt, (pliki || []).map(String), punkt || null) : 0);
-ipcMain.handle('historia:lista', () => historiaDostepna() ? historia.wczytajIndeks(projekt) : null);
-ipcMain.handle('historia:stan', (e, czas) => historiaDostepna()
-  ? historia.stan(projekt, Number(czas)).map((s) => ({ plik: s.plik, dane: new Uint8Array(s.dane) })) : []);
+ipcMain.handle('historia:zapisz', (e, pliki, punkt) => {
+  const p = projektZ(e);
+  return p.zapisywalny ? historia.zapisz(p.folder, (pliki || []).map(String), punkt || null) : 0;
+});
+ipcMain.handle('historia:lista', (e) => { const p = projektZ(e); return p.zapisywalny ? historia.wczytajIndeks(p.folder) : null; });
+ipcMain.handle('historia:stan', (e, czas) => {
+  const p = projektZ(e);
+  return p.zapisywalny ? historia.stan(p.folder, Number(czas)).map((s) => ({ plik: s.plik, dane: new Uint8Array(s.dane) })) : [];
+});
 // Zamknięcie projektu (inny szablon, koniec aplikacji): kopia plików, które zmieniły się od ostatniej kopii.
 // Pliki = te, które historia już śledzi (przy otwarciu projektu kopiowane są wszystkie).
-function historiaZamkniecie() {
-  if (!historiaDostepna()) return;
+function historiaZamkniecie(p) {
+  if (!p || !p.zapisywalny) return;
   try {
-    const pliki = [...new Set(historia.wczytajIndeks(projekt).wersje.map((v) => v.plik))];
-    if (pliki.length) historia.zapisz(projekt, pliki, { powod: 'zamknięcie', etykieta: 'zamknięcie projektu', jesliZmiany: true });
+    const pliki = [...new Set(historia.wczytajIndeks(p.folder).wersje.map((v) => v.plik))];
+    if (pliki.length) historia.zapisz(p.folder, pliki, { powod: 'zamknięcie', etykieta: 'zamknięcie projektu', jesliZmiany: true });
   } catch (e) { /* bez kopii – nie blokujemy zamykania */ }
 }
-// Skrzynka (.historia/przychodzace) – punkty od innych narzędzi, np. Claude; sprawdzana co 3 s.
+// Skrzynka (.historia/przychodzace) – punkty od innych narzędzi, np. Claude; sprawdzana co 3 s w każdym projekcie.
 setInterval(() => {
-  if (!historiaDostepna() || !okno) return;
-  try { if (historia.sprawdzSkrzynke(projekt)) okno.webContents.send('historia:zmiana'); } catch (e) { /* spróbujemy za chwilę */ }
+  for (const p of projekty) {
+    if (!p.zapisywalny || !p.wc) continue;
+    try { if (historia.sprawdzSkrzynke(p.folder)) p.wc.send('historia:zmiana'); } catch (e) { /* spróbujemy za chwilę */ }
+  }
 }, 3000);
 // Zlecenia z pliku (np. od Claude): .generator/zlecenia/<polecenie> w folderze otwartego projektu.
 // Polecenia: katalog, stan, raport, pdf, obrazki, pcio. Treść (opcjonalnie): wiersze „klucz = wartość”
-// (puste wiersze i komentarze # / ; pomijane). Otwarta aplikacja wykonuje zlecenia po kolei (jedno naraz),
-// usuwa plik zlecenia i zapisuje wynik-<polecenie>.json (katalog także dawny wynik.json).
+// (puste wiersze i komentarze # / ; pomijane). Otwarta aplikacja wykonuje zlecenia po kolei (jedno naraz,
+// wspólna kolejka dla wszystkich projektów), usuwa plik zlecenia i zapisuje wynik-<polecenie>.json
+// (katalog także dawny wynik.json).
 const FOLDER_ZLECEN = ['.generator', 'zlecenia'];
 const POLECENIA = ['katalog', 'stan', 'raport', 'pdf', 'obrazki', 'pcio'];
-let zlecenieTrwa = false;
+let kolejkaZlecen = false;           // trwa przegląd zleceń (wszystkie projekty po kolei)
 function czytajZlecenie(tekst) {
   const o = {};
-  for (const w of String(tekst).replace(/^\uFEFF/, '').split(/\r?\n/)) {
+  for (const w of String(tekst).replace(/^﻿/, '').split(/\r?\n/)) {
     if (/^\s*([#;]|$)/.test(w)) continue;
     const m = /^\s*([^=:]+?)\s*[=:]\s*(.*?)\s*$/.exec(w);
     if (m) o[m[1]] = m[2];
   }
   return o;
 }
-async function wykonajPlikZlecenia(polecenie) {
-  const folder = path.join(projekt, ...FOLDER_ZLECEN), plik = path.join(folder, polecenie);
+async function wykonajPlikZlecenia(p, polecenie) {
+  const folder = path.join(p.folder, ...FOLDER_ZLECEN), plik = path.join(folder, polecenie);
   let tekst;
   try { if (!fs.statSync(plik).isFile()) return false; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return false; }
   // Strona jeszcze się wczytuje – spróbujemy przy następnym sprawdzeniu.
-  const gotowa = await okno.webContents.executeJavaScript('!!(window.wykonajZlecenie && window.zbudowano)').catch(() => false);
+  const gotowa = await p.wc.executeJavaScript('!!(window.wykonajZlecenie && window.zbudowano)').catch(() => false);
   if (!gotowa) return false;
   const wyniki = [path.join(folder, `wynik-${polecenie}.json`)];
   if (polecenie === 'katalog') wyniki.push(path.join(folder, 'wynik.json'));     // zgodność z v0.4.6–0.4.10
-  const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: szablon && path.relative(projekt, szablon), wersjaAplikacji: WERSJA };
+  const naglowek = { zlecenie: polecenie, czas: new Date().toISOString(), szablon: p.szablon && path.relative(p.folder, p.szablon), wersjaAplikacji: WERSJA };
   let wynik;
   try {
     wyniki.forEach((w) => fs.rmSync(w, { force: true }));
     const surowe = czytajZlecenie(tekst);
-    const w = await okno.webContents.executeJavaScript(`wykonajZlecenie(${JSON.stringify(polecenie)}, ${JSON.stringify(surowe)})`);
+    const w = await p.wc.executeJavaScript(`wykonajZlecenie(${JSON.stringify(polecenie)}, ${JSON.stringify(surowe)})`);
     wynik = { ...naglowek, ok: false, pliki: [], blad: null, ...w };
-    const wzgledna = (p) => (typeof p === 'string' && path.isAbsolute(p) ? path.relative(projekt, p) : p);
+    const wzgledna = (x) => (typeof x === 'string' && path.isAbsolute(x) ? path.relative(p.folder, x) : x);
     wynik.pliki = (wynik.pliki || []).map(wzgledna);
     if (wynik.folder) wynik.folder = wzgledna(wynik.folder);
   } catch (e) {
@@ -318,29 +419,36 @@ async function wykonajPlikZlecenia(polecenie) {
   return true;
 }
 async function sprawdzZlecenia() {
-  if (zlecenieTrwa || !historiaDostepna() || !okno) return;
-  zlecenieTrwa = true;
+  if (kolejkaZlecen || !okno) return;
+  kolejkaZlecen = true;
   try {
-    await zlecenieAktualizacji();
-    for (const p of POLECENIA) if (projekt) await wykonajPlikZlecenia(p);
-  }
-  finally { zlecenieTrwa = false; }
+    for (const p of [...projekty]) {
+      if (!p.zapisywalny || !p.wc) continue;
+      p.zlecenieTrwa = true;
+      try {
+        await zlecenieAktualizacji(p);
+        for (const pol of POLECENIA) if (p.zapisywalny && p.wc) await wykonajPlikZlecenia(p, pol);
+      } finally { p.zlecenieTrwa = false; }
+    }
+  } finally { kolejkaZlecen = false; }
 }
 setInterval(sprawdzZlecenia, 3000);
 // PDF ze zlecenia: zapis bez okna, tylko w folderze projektu (domyślna nazwa jak przy ręcznym zapisie).
 ipcMain.handle('zlecenie:pdf', async (e, nazwa) => {
-  if (!zlecenieTrwa || !historiaDostepna()) throw new Error('zapis PDF bez okna działa tylko w zleceniu z pliku');
-  let cel = path.resolve(projekt, String(nazwa || 'karty.pdf'));
+  const p = projektZ(e);
+  if (!p.zlecenieTrwa || !p.zapisywalny) throw new Error('zapis PDF bez okna działa tylko w zleceniu z pliku');
+  let cel = path.resolve(p.folder, String(nazwa || 'karty.pdf'));
   if (!/\.pdf$/i.test(cel)) cel += '.pdf';
-  const rel = path.relative(projekt, cel);
+  const rel = path.relative(p.folder, cel);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('plik PDF musi być w folderze projektu');
   fs.mkdirSync(path.dirname(cel), { recursive: true });
   return pdfDoPliku(e.sender, cel);
 });
 ipcMain.handle('historia:przywroc', (e, czas) => {
-  if (!historiaDostepna()) return { blad: 'Przykłady nie mają historii.' };
-  if (zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
-  return { zmienione: historia.przywroc(projekt, Number(czas)) };
+  const p = projektZ(e);
+  if (!p.zapisywalny) return { blad: 'Przykłady nie mają historii.' };
+  if (p.zmiany) return { blad: 'Najpierw zapisz albo cofnij zmiany w edytorze szablonu.' };
+  return { zmienione: historia.przywroc(p.folder, Number(czas)) };
 });
 
 // ── Aktualizacje ─────────────────────────────────────────────────────────────
@@ -352,6 +460,7 @@ const MB = (b) => (b / 1048576).toLocaleString('pl-PL', { maximumFractionDigits:
 const pobieraj = (u, o) => net.fetch(u, o);
 const okienko = (o) => (okno ? dialog.showMessageBox(okno, o) : dialog.showMessageBox(o));
 const postepAktualizacji = (f) => { if (okno) okno.setProgressBar(f == null ? -1 : f); };
+const niezapisane = () => projekty.some((p) => p.zmiany);
 
 function sprawdzWydanie() {
   return aktualizacje.sprawdz({ wersja: WERSJA, electron: process.versions.electron, fetch: pobieraj });
@@ -376,7 +485,7 @@ function uruchomPodmiane(uruchom) {
 }
 // Zamknięcie i start nowej wersji (bez pytania – niezapisany szablon sprawdza wcześniej wywołujący).
 function zrestartuj() {
-  zmiany = false;
+  projekty.forEach((p) => { p.zmiany = false; });
   if (AKT.podmiana) uruchomPodmiane(true); else app.relaunch();
   app.quit();
 }
@@ -397,7 +506,7 @@ async function sprawdzAktualizacje({ cicho }) {
   if (AKT.podmiana && AKT.podmiana.wersja === info.najnowsza) {
     const r = await okienko({ type: 'info', buttons: ['Uruchom ponownie', 'Później'], defaultId: 0, cancelId: 1,
       message: `Wersja ${info.najnowsza} jest pobrana.`, detail: 'Aplikacja podmieni się po zamknięciu.' });
-    if (r.response === 0 && await czyMoznaPorzucic()) zrestartuj();
+    if (r.response === 0 && await czyMoznaPorzucicWszystkie()) zrestartuj();
     return;
   }
   const opis = info.opis.replace(/\r/g, '').split('\n').map((l) => l.replace(/\s*by @\S+ in https?:\S+/, '').trim())
@@ -416,16 +525,16 @@ async function sprawdzAktualizacje({ cicho }) {
     if (r2.response === 0 && info.strona) shell.openExternal(info.strona);
     return;
   }
-  if (await czyMoznaPorzucic()) return zrestartuj();
+  if (await czyMoznaPorzucicWszystkie()) return zrestartuj();
   okienko({ type: 'info', message: `Wersja ${info.najnowsza} uruchomi się przy następnym starcie aplikacji.` });
 }
 
-// Zlecenie z pliku .generator/zlecenia/aktualizacja: „instaluj = tak” (domyślnie tylko sprawdza),
-// „restart = nie” (domyślnie po instalacji restart – chyba że edytor ma niezapisane zmiany).
-// Wynik: wynik-aktualizacja.json; plik wyniku powstaje przed restartem.
+// Zlecenie z pliku .generator/zlecenia/aktualizacja (w folderze dowolnego otwartego projektu):
+// „instaluj = tak” (domyślnie tylko sprawdza), „restart = nie” (domyślnie po instalacji restart – chyba że
+// edytor któregoś projektu ma niezapisane zmiany). Wynik: wynik-aktualizacja.json; powstaje przed restartem.
 const TAK = (v) => /^(tak|t|true|1|yes)$/i.test(String(v).trim());
-async function zlecenieAktualizacji() {
-  const folder = path.join(projekt, ...FOLDER_ZLECEN), plik = path.join(folder, 'aktualizacja');
+async function zlecenieAktualizacji(p) {
+  const folder = path.join(p.folder, ...FOLDER_ZLECEN), plik = path.join(folder, 'aktualizacja');
   let tekst;
   try { if (!fs.statSync(plik).isFile()) return; tekst = fs.readFileSync(plik, 'utf8'); } catch (e) { return; }
   const wynikPlik = path.join(folder, 'wynik-aktualizacja.json');
@@ -447,8 +556,8 @@ async function zlecenieAktualizacji() {
     if (opcje.instaluj && info.dostepna) {
       await zainstalujAktualizacje(info);
       wynik.zainstalowano = true;
-      wynik.niezapisaneZmiany = zmiany;
-      restart = wynik.restart = opcje.restart && !zmiany;
+      wynik.niezapisaneZmiany = niezapisane();
+      restart = wynik.restart = opcje.restart && !wynik.niezapisaneZmiany;
       if (!restart) wynik.uwaga = info.rodzaj === 'kod' ? 'nowa wersja uruchomi się przy następnym starcie aplikacji'
         : 'aplikacja podmieni się po zamknięciu';
     }
@@ -462,12 +571,17 @@ function potwierdzStart() {
 }
 
 // ── Menu ────────────────────────────────────────────────────────────────────
-const wStronie = (kod) => () => okno && okno.webContents.executeJavaScript(kod).catch(() => {});
+// Menu działa na aktywny projekt (widok w oknie), a nie na samo okno.
+const wStronie = (kod) => () => aktywny && aktywny.wc && aktywny.wc.executeJavaScript(kod).catch(() => {});
+const powieksz = (krok) => () => {                         // jak role zoomIn/zoomOut/resetZoom (krok 0,5), ale na widoku projektu
+  const w = aktywny && aktywny.wc;
+  if (w) w.setZoomLevel(krok ? w.getZoomLevel() + krok : 0);
+};
 
 function zbudujMenu() {
   const ost = ostatnie();
   const przyk = listaPrzykladow();
-  // Uwaga: nie „szablon” – ta nazwa to otwarty plik szablonu (zmienna globalna).
+  const p = aktywny || {};
   const menu = [
     {
       label: 'KarKa',
@@ -492,7 +606,7 @@ function zbudujMenu() {
         {
           label: 'Ostatnie projekty',
           submenu: ost.length
-            ? [...ost.map((p) => ({ label: `${path.basename(folderProjektu(p))} – ${path.basename(p)}`, sublabel: p, click: () => otworzSzablon(p) })),
+            ? [...ost.map((s) => ({ label: `${path.basename(folderProjektu(s))} – ${path.basename(s)}`, sublabel: s, click: () => otworzSzablon(s) })),
                { type: 'separator' },
                { label: 'Wyczyść listę', click: () => { const u = ustawienia(); u.ostatnie = []; zapiszUstawienia(u); app.clearRecentDocuments(); zbudujMenu(); } }]
             : [{ label: 'Brak', enabled: false }],
@@ -502,19 +616,19 @@ function zbudujMenu() {
           submenu: przyk.length ? przyk.map((n) => ({ label: n, click: () => otworzSzablon(path.join(PRZYKLADY, n)) })) : [{ label: 'Brak', enabled: false }],
         },
         { type: 'separator' },
-        { label: 'Pokaż folder projektu w Finderze', enabled: !!projekt, click: () => shell.openPath(projekt) },
+        { label: 'Pokaż folder projektu w Finderze', enabled: !!p.folder, click: () => aktywny && aktywny.folder && shell.openPath(aktywny.folder) },
         { type: 'separator' },
-        { label: 'Zapisz szablon', accelerator: 'CmdOrCtrl+S', enabled: !!szablon && !jestPrzykladem(szablon), click: wStronie('window.zapiszSzablon && zapiszSzablon()') },
-        { label: 'Historia wersji…', enabled: !!projekt, click: wStronie('window.pokazHistorie && pokazHistorie(true)') },
+        { label: 'Zapisz szablon', accelerator: 'CmdOrCtrl+S', enabled: !!p.szablon && !jestPrzykladem(p.szablon), click: wStronie('window.zapiszSzablon && zapiszSzablon()') },
+        { label: 'Historia wersji…', enabled: !!p.folder, click: wStronie('window.pokazHistorie && pokazHistorie(true)') },
         { type: 'separator' },
-        { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!projekt, click: wStronie("window.oknoDruku && oknoDruku('drukuj')") },
-        { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!projekt, click: wStronie("window.oknoDruku && oknoDruku('pdf')") },
+        { label: 'Drukuj…', accelerator: 'CmdOrCtrl+P', enabled: !!p.folder, click: wStronie("window.oknoDruku && oknoDruku('drukuj')") },
+        { label: 'Zapisz PDF…', accelerator: 'Shift+CmdOrCtrl+S', enabled: !!p.folder, click: wStronie("window.oknoDruku && oknoDruku('pdf')") },
         {
           label: 'Eksport',
           submenu: [
-            { label: 'Obrazki kart (JPG / PNG)…', accelerator: 'CmdOrCtrl+E', enabled: !!projekt, click: wStronie('window.oknoObrazkow && oknoObrazkow()') },
-            { label: 'Pokój playingcards.io…', enabled: !!projekt, click: wStronie('window.oknoPcio && oknoPcio()') },
-            { label: 'Katalog talii (JPG)…', enabled: !!projekt, click: wStronie('window.oknoKatalogu && oknoKatalogu()') },
+            { label: 'Obrazki kart (JPG / PNG)…', accelerator: 'CmdOrCtrl+E', enabled: !!p.folder, click: wStronie('window.oknoObrazkow && oknoObrazkow()') },
+            { label: 'Pokój playingcards.io…', enabled: !!p.folder, click: wStronie('window.oknoPcio && oknoPcio()') },
+            { label: 'Katalog talii (JPG)…', enabled: !!p.folder, click: wStronie('window.oknoKatalogu && oknoKatalogu()') },
           ],
         },
         { type: 'separator' },
@@ -525,21 +639,22 @@ function zbudujMenu() {
     {
       label: 'Widok',
       submenu: [
-        { label: 'Edytor szablonu', accelerator: 'Alt+CmdOrCtrl+E', enabled: !!szablon, click: wStronie('window.przelaczEdytor && przelaczEdytor()') },
-        { label: 'Raport projektu', enabled: !!projekt, click: wStronie('window.pokazRaport && pokazRaport(true)') },
+        { label: 'Edytor szablonu', accelerator: 'Alt+CmdOrCtrl+E', enabled: !!p.szablon, click: wStronie('window.przelaczEdytor && przelaczEdytor()') },
+        { label: 'Raport projektu', enabled: !!p.folder, click: wStronie('window.pokazRaport && pokazRaport(true)') },
         { type: 'separator' },
         { label: 'Odśwież karty', accelerator: 'CmdOrCtrl+R', click: wStronie('window.odswiezKarty && odswiezKarty()') },
         { label: 'Odświeżaj automatycznie', type: 'checkbox', checked: ustawienia().auto !== false, click: (mi) => {
           const u = ustawienia(); u.auto = mi.checked; zapiszUstawienia(u);
-          wStronie(`window.ustawAuto && ustawAuto(${mi.checked})`)();
+          for (const x of projekty) if (x.wc) x.wc.executeJavaScript(`window.ustawAuto && ustawAuto(${mi.checked})`).catch(() => {});
         } },
         { type: 'separator' },
-        { role: 'resetZoom', label: 'Rzeczywisty rozmiar' },
-        { role: 'zoomIn', label: 'Powiększ' },
-        { role: 'zoomOut', label: 'Pomniejsz' },
+        { label: 'Rzeczywisty rozmiar', accelerator: 'CmdOrCtrl+0', click: powieksz(0) },
+        { label: 'Powiększ', accelerator: 'CmdOrCtrl+Plus', click: powieksz(0.5) },
+        { label: 'Powiększ', accelerator: 'CmdOrCtrl+=', visible: false, acceleratorWorksWhenHidden: true, click: powieksz(0.5) },
+        { label: 'Pomniejsz', accelerator: 'CmdOrCtrl+-', click: powieksz(-0.5) },
         { type: 'separator' },
         { role: 'togglefullscreen', label: 'Pełny ekran' },
-        { role: 'toggleDevTools', label: 'Narzędzia deweloperskie', accelerator: 'Alt+CmdOrCtrl+I' },
+        { label: 'Narzędzia deweloperskie', accelerator: 'Alt+CmdOrCtrl+I', click: () => aktywny && aktywny.wc && aktywny.wc.toggleDevTools() },
       ],
     },
     { role: 'windowMenu', label: 'Okno' },
@@ -549,46 +664,50 @@ function zbudujMenu() {
 }
 
 // ── Okno ────────────────────────────────────────────────────────────────────
+// Samo okno (ramka, tytuł, kropka zmian). Strona projektu to widok w nim – pokazProjekt().
 function utworzOkno() {
   okno = new BrowserWindow({
     width: 1400, height: 900, minWidth: 800, minHeight: 500, title: 'KarKa',
     backgroundColor: '#ece9e4', show: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
-      backgroundThrottling: false },   // zasłonięte okno: timery (odświeżanie, siatka historii) bez dławienia Chromium
   });
-  okno.once('ready-to-show', () => okno.show());
-  okno.webContents.once('did-finish-load', potwierdzStart);
+  okno.on('resize', ulozWidok);
+  okno.on('show', ulozWidok);
+  okno.contentView.on('bounds-changed', ulozWidok);         // np. ramka okna dodana po pokazaniu
+  okno.on('focus', () => { if (aktywny && aktywny.wc) aktywny.wc.focus(); });
   okno.on('page-title-updated', (e) => e.preventDefault());      // tytuł okna = nazwa projektu
-  okno.on('closed', () => { okno = null; });
   okno.on('close', (e) => {                                   // niezapisany szablon przy zamykaniu okna
-    if (!zmiany || testowy) return;
+    if (!niezapisane() || testowy) return;
     e.preventDefault();
-    czyMoznaPorzucic().then((ok) => { if (ok && okno) okno.close(); });
+    czyMoznaPorzucicWszystkie().then((ok) => { if (ok && okno) okno.close(); });
   });
-
-  const nasz = `http://127.0.0.1:${port}/`;
-  okno.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(nasz)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
-  });
-  okno.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  okno.on('closed', () => { okno = null; [...projekty].forEach((p) => p.zamknij()); });
+}
+// Okno pokazuje się po wczytaniu strony projektu (jak dawniej „ready-to-show” okna), najpóźniej po 3 s.
+function pokazOknoPoWczytaniu(p) {
+  const pokaz = () => { if (okno && !okno.isDestroyed() && !okno.isVisible()) { okno.show(); ulozWidok(); if (p.wc) p.wc.focus(); } };
+  p.wc.once('did-finish-load', pokaz);
+  setTimeout(pokaz, 3000);
 }
 
 // Biblioteki i czcionki z CDN podmieniamy na kopie w aplikacji – działa bez internetu.
+// Adres zastępczy prowadzi do serwera projektu, z którego przyszło żądanie (każdy serwer podaje /.app/).
 function przekierujCdn() {
-  const lokalnie = (p) => ({ redirectURL: `http://127.0.0.1:${port}/.app/${p}` });
+  const portDla = (id) => { const p = projekty.find((x) => x.wc && x.wc.id === id) || aktywny || projekty[0]; return p ? p.port : 0; };
+  const lokalnie = (d, p) => ({ redirectURL: `http://127.0.0.1:${portDla(d.webContentsId)}/.app/${p}` });
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ['https://cdn.jsdelivr.net/*', 'https://fonts.googleapis.com/*'] },
     (d, cb) => {
       const u = d.url;
-      if (/\/html-to-image(@[^/]*)?\/dist\/html-to-image\.js/.test(u)) return cb(lokalnie('vendor/html-to-image.js'));
-      if (/\/jszip(@[^/]*)?\/dist\/jszip\.min\.js/.test(u)) return cb(lokalnie('vendor/jszip.min.js'));
-      if (/\/xlsx(@[^/]*)?\/dist\/xlsx\.full\.min\.js/.test(u)) return cb(lokalnie('vendor/xlsx.full.min.js'));
-      if (u.startsWith('https://fonts.googleapis.com/css2') && u.includes('EB+Garamond') && u.includes('Patrick+Hand')) return cb(lokalnie('fonts/fonts.css'));
+      if (/\/html-to-image(@[^/]*)?\/dist\/html-to-image\.js/.test(u)) return cb(lokalnie(d, 'vendor/html-to-image.js'));
+      if (/\/jszip(@[^/]*)?\/dist\/jszip\.min\.js/.test(u)) return cb(lokalnie(d, 'vendor/jszip.min.js'));
+      if (/\/xlsx(@[^/]*)?\/dist\/xlsx\.full\.min\.js/.test(u)) return cb(lokalnie(d, 'vendor/xlsx.full.min.js'));
+      if (u.startsWith('https://fonts.googleapis.com/css2') && u.includes('EB+Garamond') && u.includes('Patrick+Hand')) return cb(lokalnie(d, 'fonts/fonts.css'));
       cb({});                                               // inne czcionki Google (CZCIONKA_GOOGLE) – z internetu
     });
-  // Pobrane pliki (JPG, .pcio) domyślnie do folderu projektu.
-  session.defaultSession.on('will-download', (e, item) => {
-    const katalog = projekt && !jestPrzykladem(projekt) ? projekt : app.getPath('downloads');
+  // Pobrane pliki (JPG, .pcio) domyślnie do folderu projektu, z którego przyszło pobieranie.
+  session.defaultSession.on('will-download', (e, item, wc) => {
+    const p = projektWc(wc) || aktywny;
+    const katalog = p && p.zapisywalny ? p.folder : app.getPath('downloads');
     item.setSaveDialogOptions({ defaultPath: path.join(katalog, item.getFilename()) });
   });
 }
@@ -606,7 +725,7 @@ function szerokoscJpg(b) {
 // ── Tryb testowy (CI): --test-pdf <szablon.txt|folder|-> <plik.pdf> ──────────
 // Otwiera projekt, czeka na karty, zapisuje PDF i zrzut podglądu, wypisuje stan i kończy.
 async function trybTestowy(folder, wynik) {
-  const wc = okno.webContents;
+  const P = aktywny, wc = P.wc, szablon = P.szablon, projekt = P.folder;   // jedyny projekt (etap 1 #59)
   const czekaj = (ms) => new Promise((r) => setTimeout(r, ms));
   let stan = '';
   for (let i = 0; folder !== '-' && i < 120; i++) {
@@ -615,13 +734,20 @@ async function trybTestowy(folder, wynik) {
     if (/ kart /.test(stan)) break;
   }
   await czekaj(1000);
-  const zrzut = await okno.capturePage();
+  const zrzut = await wc.capturePage();
   fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '.png', zrzut.toPNG());
   if (folder === '-') {                                   // sam ekran powitalny
     process.stdout.write(JSON.stringify({ start: await wc.executeJavaScript("document.getElementById('start').innerText") }) + '\n');
     return app.exit(0);
   }
   const uwagi = await wc.executeJavaScript("document.getElementById('uwagi').innerText").catch(() => '');
+  // Obiekt Projekt (#59, etap 1): jeden projekt, aktywny, widok w oknie, strona z jego serwera (własny port),
+  // IPC rozpoznaje projekt po nadawcy (projekt:info zwraca folder tego projektu).
+  const info = await wc.executeJavaScript('window.generatorApp.info()').catch((e) => ({ blad: e.message }));
+  const projektyTest = { liczba: projekty.length, aktywny: aktywny === P, port: P.port, portStrony: Number(new URL(wc.getURL()).port),
+    widok: (okno.contentView.children || []).includes(P.widok), rozmiar: JSON.stringify(okno.getContentSize()) === JSON.stringify([P.widok.getBounds().width, P.widok.getBounds().height]), sciezka: info.sciezka === P.folder, szablon: info.szablon === P.szablon };
+  projektyTest.ok = projektyTest.liczba === 1 && projektyTest.aktywny && P.port > 0 && projektyTest.portStrony === P.port
+    && projektyTest.widok && projektyTest.rozmiar && projektyTest.sciezka && projektyTest.szablon;
   // Eksport JPG z biblioteką wbudowaną w aplikację (sprawdza podmianę CDN → zasoby).
   const jpg = await wc.executeJavaScript(`(async () => {
     await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
@@ -651,12 +777,12 @@ async function trybTestowy(folder, wynik) {
     await wpisz(oryginal + '\nBŁĘDNA = 1\n'); await czekaj(2000);
     const bladLinia = oryginal.split('\n').length + 1;
     const blad = await js(`document.querySelector('#edNumery div:nth-child(${bladLinia})').className + ' | ' + document.getElementById('edBledy').innerText`);
-    const zmianyPrzed = zmiany;
+    const zmianyPrzed = P.zmiany;
     const zmieniony = oryginal.replace(/^KARTA\s*=\s*63\s*,\s*88/m, 'KARTA = 70, 100');
     await wpisz(zmieniony); await czekaj(2000);
     const szer = await js("Math.round(document.querySelector('#podglad .karta:not(.rewers)').getBoundingClientRect().width * 25.4 / 96)");
     await js('zapiszSzablon()'); await czekaj(500);
-    const zapisany = fs.readFileSync(szablon, 'utf8') === zmieniony && !zmiany;
+    const zapisany = fs.readFileSync(szablon, 'utf8') === zmieniony && !P.zmiany;
     await wpisz(oryginal); await js('zapiszSzablon()'); await czekaj(1500);
     const przywrocony = fs.readFileSync(szablon, 'utf8') === oryginal;
     // Bez pętli odświeżania: odcisk plików nie zależy od kolejności wczytania, a po edycji napis „odświeżono” stoi.
@@ -667,7 +793,7 @@ async function trybTestowy(folder, wynik) {
     edytor = { kolory, blad, zmianyPrzed, szer, zapisany, przywrocony, spokoj,
       ok: spokoj && kolory > 0 && /blad/.test(blad) && /nieznana komenda/.test(blad) && zmianyPrzed && (oryginal === zmieniony || szer === 70) && zapisany && przywrocony };
     await js('przelaczEdytor(true)');
-    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-edytor.png', (await okno.capturePage()).toPNG());
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-edytor.png', (await wc.capturePage()).toPNG());
   }
   // Druk wybranych kart i tryb szkicu (--test-edytor): 2 zaznaczone karty → 2 karty w wydruku, białe tło.
   let wybor = null;
@@ -735,7 +861,7 @@ async function trybTestowy(folder, wynik) {
     await js('pokazHistorie(true)');
     const wiersze = await js("document.querySelectorAll('#historia .wiersz').length");
     const diff = await js(`(async () => { const b = document.querySelector('#historia .wiersz:last-child [data-akcja="zmiany"]'); const sz = b.closest('.wiersz').querySelector('.szczegoly'); await akcjaHistorii(b, +b.closest('.wiersz').dataset.czas); return sz.innerText; })()`);
-    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-historia.png', (await okno.capturePage()).toPNG());
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-historia.png', (await wc.capturePage()).toPNG());
     await js(`podgladWersji(${otwarcie ? otwarcie.czas : 0})`);
     const baner = await js("!document.getElementById('wersjaBaner').hidden && / kart /.test(document.getElementById('status').textContent)");
     await js(`przywrocWersje(${otwarcie ? otwarcie.czas : 0})`); await czekaj(3500);
@@ -783,7 +909,7 @@ async function trybTestowy(folder, wynik) {
     const druk = await js(`(() => { window.__okno = otworzOkno('druk', 'drukuj'); const f = document.getElementById('oknoForm');
       return { pola: ['uklad', 'rewersy', 'szkic', 'ktore'].filter((n) => f.querySelector('[name=' + n + ']')).length, domyslny: document.querySelector('#oknoPrzyciski .domyslny').textContent }; })()`);
     await czekaj(300);
-    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-okno.png', (await okno.capturePage()).toPNG());
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-okno.png', (await wc.capturePage()).toPNG());
     await js("document.getElementById('okno').dispatchEvent(new Event('cancel')); window.__okno");
     const kartyWidok = await js("document.querySelectorAll('#podglad .karta:not(.rewers)').length");
     okna = { png: png.length, kartyWidok, szer, zapamietane, plik: plik && plik.obrazki, druk };
@@ -1015,7 +1141,7 @@ async function trybTestowy(folder, wynik) {
       return { ok, html: h.slice(0, 400), bez: hb.slice(0, 200), uwagi: [...warn], raport: [...fmt],
         rect: { x: 0, y: 0, width: Math.ceil(rect.width), height: Math.ceil(rect.height) } };
     })()`);
-    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-formatowanie.png', (await okno.capturePage(formatowanie.rect)).toPNG());
+    fs.writeFileSync(wynik.replace(/\.pdf$/i, '') + '-formatowanie.png', (await wc.capturePage(formatowanie.rect)).toPNG());
     await wc.executeJavaScript("document.getElementById('test-formatowanie').remove()");
   }
   await wc.executeJavaScript('buildPrint()');
@@ -1028,8 +1154,8 @@ async function trybTestowy(folder, wynik) {
   const ok = menuOk && czcionki.ok && / kart /.test(stan) && !uwagi.trim() && /^image\/jpeg [1-9]/.test(jpg) && (!eksport || eksport.startsWith('Zapisano'))
     && (!edytor || edytor.ok) && (!wybor || wybor.ok) && (!zmienione || zmienione.ok) && (!hist || hist.ok) && (!pcio || pcio.ok) && (!okna || okna.ok)
     && (!drukarnia || drukarnia.ok) && (!katalog || katalog.ok) && (!zlecenia || zlecenia.ok) && (!aktualizacja || aktualizacja.ok) && (!podfolder || podfolder.ok)
-    && (!formatowanie || formatowanie.ok);
-  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, formatowanie, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
+    && (!formatowanie || formatowanie.ok) && projektyTest.ok;
+  process.stdout.write(JSON.stringify({ szablon, stan, uwagi, czcionki, jpg, eksport, edytor, wybor, zmienione, hist, pcio, okna, drukarnia, katalog, zlecenia, aktualizacja, podfolder, formatowanie, projekty: projektyTest, menu, kod: { zrodlo: KOD.zrodlo, wersja: WERSJA, powod: KOD.powod || null }, pdf: wynik, ok }) + '\n');
   app.exit(ok ? 0 : 1);
 }
 
@@ -1038,41 +1164,56 @@ if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (okno) { if (okno.isMinimized()) okno.restore(); okno.focus(); } });
 
 let doOtwarcia = null;                                   // szablon otwarty z Findera przed startem aplikacji
-app.on('open-file', (e, p) => {
+app.on('open-file', (e, plik) => {
   e.preventDefault();
-  if (app.isReady() && okno) otworzSzablon(p); else doOtwarcia = p;
+  if (app.isReady() && okno && aktywny) otworzSzablon(plik); else doOtwarcia = plik;
 });
 
+// Okno z jednym projektem (na razie zawsze jednym – zakładki w etapie 2 issue #59).
+async function oknoZProjektem() {
+  utworzOkno();
+  const p = await new Projekt().uruchom();
+  pokazProjekt(p);
+  pokazOknoPoWczytaniu(p);
+  return p;
+}
+
 app.whenReady().then(async () => {
-  const serwer = utworzSerwer({ zasoby: ZASOBY, projekt: () => projekt });
-  await new Promise((ok) => serwer.listen(0, '127.0.0.1', ok));
-  port = serwer.address().port;
   przekierujCdn();
   let nazwaWydania = '';
   try { nazwaWydania = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).nazwaWydania || ''; } catch (e) { /* bez nazwy */ }
   app.setAboutPanelOptions({ applicationName: 'KarKa', credits: 'Kawia Karciana – generator kart do gier (dawniej Generator kart)', applicationVersion: WERSJA + (nazwaWydania ? ` „${nazwaWydania}”` : ''),
     version: `${KOD.zrodlo === 'nakładka' ? 'kod z aktualizacji, ' : ''}Electron ${process.versions.electron}` });
-  utworzOkno();
+  const p = await oknoZProjektem();
+  p.wc.once('did-finish-load', potwierdzStart);
 
   const argi = process.argv;
   const t = argi.indexOf('--test-pdf');
   const tn = argi.indexOf('--test-nowy');                 // --test-nowy <nowy folder gry> --test-pdf - <wynik.pdf>
   if (t >= 0) {
     testowy = true;
-    if (tn >= 0) otworzSzablon(utworzProjekt(path.resolve(argi[tn + 1])));
-    else otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]));
-    okno.webContents.once('did-finish-load', () => trybTestowy(tn >= 0 ? argi[tn + 1] : argi[t + 1], path.resolve(argi[t + 2])));
+    if (tn >= 0) otworzSzablon(utworzProjekt(path.resolve(argi[tn + 1])), p);
+    else otworzSzablon(argi[t + 1] === '-' ? null : path.resolve(argi[t + 1]), p);
+    p.wc.once('did-finish-load', () => trybTestowy(tn >= 0 ? argi[tn + 1] : argi[t + 1], path.resolve(argi[t + 2]))
+      .catch((e) => {                                    // błąd testu = wynik z opisem zamiast zawieszenia
+        process.stdout.write(JSON.stringify({ ok: false, blad: (e && e.stack) || JSON.stringify(e) || String(e) }) + '\n');
+        app.exit(1);
+      }));
     return;
   }
-  otworzSzablon(doOtwarcia || ostatnie()[0] || null);
+  otworzSzablon(doOtwarcia || ostatnie()[0] || null, p);
   setTimeout(() => sprawdzAktualizacje({ cicho: true }), 4000);
 });
 
-app.on('activate', () => { if (!okno && port) { utworzOkno(); otworzSzablon(szablon); } });
+app.on('activate', async () => {
+  if (okno || !app.isReady()) return;
+  const p = await oknoZProjektem();
+  otworzSzablon(ostatnie()[0] || null, p);
+});
 app.on('window-all-closed', () => app.quit());
-app.on('will-quit', () => historiaZamkniecie());
+app.on('will-quit', () => projekty.forEach((p) => historiaZamkniecie(p)));
 app.on('before-quit', (e) => {                               // ⌘Q z niezapisanym szablonem
-  if (!zmiany || testowy) return;
+  if (!niezapisane() || testowy) return;
   e.preventDefault();
-  czyMoznaPorzucic().then((ok) => { if (ok) app.quit(); });
+  czyMoznaPorzucicWszystkie().then((ok) => { if (ok) app.quit(); });
 });
