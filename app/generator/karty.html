@@ -1907,7 +1907,7 @@ const KLUCZE_ZLECEN = {
   raport: [],
   pdf: ['uklad', 'ciecie', 'rewersy', 'szkic', 'spad', 'przesunieciex', 'przesunieciey', 'talie', 'id', 'tylkozmienione', 'plik'],
   obrazki: ['dpi', 'format', 'talie', 'id', 'rewersy'],
-  pcio: ['dpi', 'talie'],
+  pcio: ['dpi', 'talie', 'id'],
 };
 const ALIASY_ZLECEN = { talia: 'talie', rewers: 'rewersy', zmienione: 'tylkozmienione', rozdzielczosc: 'dpi' };
 const OKNO_ZLECENIA = { pdf: 'druk', obrazki: 'obrazki', pcio: 'pcio' };
@@ -1944,7 +1944,9 @@ function opcjeZlecenia(polecenie, surowe = {}) {
   if (v.talie !== undefined) {
     o.talie = lista(v.talie); o.pominTalie = [];
     const sa = nazwyTalii(), jest = new Set(sa.map(plain));
-    for (const t of o.talie) if (!jest.has(plain(t))) bledy.push(`nie ma talii „${t}” (są: ${sa.join(', ')})`);
+    // pcio: nieznana talia = ostrzeżenie (jak nieznane ID), eksport pozostałych; inne zlecenia – błąd.
+    const zgloszenia = polecenie === 'pcio' ? ostrzezenia : bledy;
+    for (const t of o.talie) if (!jest.has(plain(t))) zgloszenia.push(`nie ma talii „${t}” (są: ${sa.join(', ')})`);
   }
   if (v.id !== undefined) o.id = lista(v.id);
   if (v.uklad !== undefined) o.uklad = wybor('uklad', ['a4', 'pojedyncze', 'drukarnia'], { osobne: 'pojedyncze' });
@@ -2029,8 +2031,8 @@ const ZADANIA_ZLECEN = {
   },
   async pcio(o) {
     const r = await exportPcio({ ...o, zlecenie: true });
-    if (!r) throw new Error('brak kart do pokoju playingcards.io');
-    return { ok: true, pliki: [r.plik], talie: r.talie, karty: r.karty };
+    if (!r) throw new Error('brak kart do pokoju playingcards.io – sprawdź talie i id');
+    return { ok: true, pliki: [r.plik], talie: r.talie, holdery: r.holdery, karty: r.karty };
   },
 };
 
@@ -2082,13 +2084,13 @@ const cardToJpeg = (el, dpi) => obrazKarty(el, { dpi, format: 'jpg' });
 
 const PCIO = { dluzszyBok: 160, odstep: 40, margines: 40, szerokoscStolu: 1500, ramka: 4 };
 
-// o: { dpi, pominTalie } – z okna „Pokój playingcards.io”.
+// o: { dpi, pominTalie } – z okna „Pokój playingcards.io”; zlecenie z pliku: także talie, id (jak kartyEksportu).
 async function exportPcio(o = {}) {
   if (EKSPORT_TRWA) return;
   return naWylacznosc(() => eksportujPcio(o));
 }
 async function eksportujPcio(o = {}) {
-  const pomin = new Set(o.pominTalie || []), dpi = +o.dpi || CONFIG.jpgDpi;
+  const dpi = +o.dpi || CONFIG.jpgDpi;
   if (!window.htmlToImage) await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
   if (!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
   const widgets = [], assets = new Map(), report = [];
@@ -2097,10 +2099,11 @@ async function eksportujPcio(o = {}) {
   // Wszystkie talie, także odfiltrowane w podglądzie.
   const filtr = $('filtr').value; $('filtr').value = ''; applyFilter();
   try {
+    // Karty jak w innych eksportach (pominTalie z okna, talie i id ze zlecenia – issue #32), stos na talię.
+    const wybrane = new Set(kartyEksportu({ pominTalie: o.pominTalie, talie: o.talie, id: o.id }));
     for (const section of $('podglad').querySelectorAll('.talia')) {
       const nazwa = section.dataset.talia;
-      if (pomin.has(nazwa)) continue;
-      const karty = [...section.querySelectorAll('.karta:not(.rewers)')];
+      const karty = [...section.querySelectorAll('.karta:not(.rewers)')].filter((k) => wybrane.has(k));
       if (!karty.length) continue;
       // Rozmiar karty w jednostkach stołu: dłuższy bok = 160, proporcje jak KARTA.
       const [wmm, hmm] = cardMm(karty[0]);

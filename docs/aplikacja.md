@@ -121,11 +121,13 @@ Otwarta aplikacja wykonuje polecenia zapisane w plikach – bez klikania. Służ
 | `raport` | Raport projektu (powtórzone ID, puste pola, nieużywane kolumny, obrazki poniżej 300 dpi, nieużywane ikony i obrazki) – bez plików | – |
 | `pdf` | jak **Plik → Zapisz PDF**; zapamiętuje wydruk (potem „tylko zmienione” i Porównaj) | `uklad` (a4 / pojedyncze / drukarnia), `ciecie` (znaczniki / nozyczki / oba), `rewersy`, `szkic`, `spad`, `przesuniecieX`, `przesuniecieY`, `talie`, `id`, `tylkoZmienione`, `plik` |
 | `obrazki` | eksport JPG/PNG do `Export/` | `dpi` (150 / 300), `format` (jpg / png), `talie`, `id`, `rewersy` |
-| `pcio` | pokój playingcards.io w folderze projektu | `dpi`, `talie` |
+| `pcio` | pokój playingcards.io w folderze projektu (`Projekt – playingcards.pcio`) – stos na każdą talię z wybranymi kartami | `dpi` (150 / 300), `talie`, `id` |
 | `katalog` | katalog talii (JPG) do `.generator/katalog/` | `talie`, `id` |
 | `aktualizacja` | sprawdza, czy jest nowa wersja aplikacji; z `instaluj = tak` instaluje ją i uruchamia aplikację ponownie | `instaluj` (domyślnie `nie`), `restart` (domyślnie `tak`) |
 
 - `talie` i `id` to listy po przecinku (`talie = Rośliny, Pogoda`, `id = 1, 7`); wielkość liter i polskie znaki nie mają znaczenia. `rewersy`, `szkic`, `tylkoZmienione`: `tak` / `nie`. `spad` w mm (0–10); `przesuniecieX`/`przesuniecieY` – przesunięcie rewersów w mm (−10…10, plus = w prawo / w dół).
+- Nieznane ID to ostrzeżenie w wyniku (`ostrzezenia`), reszta kart się eksportuje. Nieznana talia: w `pcio` – ostrzeżenie (eksportują się pozostałe talie), w `pdf`, `obrazki` i `katalog` – błąd (`ok: false`).
+- `pcio`: `talie` – tylko te talie (stos na talię), `id` – tylko karty o tych ID (każda w stosie swojej talii, ze wszystkimi kopiami); oba klucze razem – karty o tych ID z tych talii. Bez `talie` – talie zaznaczone ostatnio w oknie playingcards.io (domyślnie wszystkie). W wyniku: `talie` (np. `Rośliny: 12 kart`), `holdery` (liczba stosów), `karty` (liczba kart z kopiami).
 - Brak klucza = ostatnie ustawienie z okna (Druk i PDF, Eksport obrazków, playingcards.io) albo domyślne. Zlecenie tych ustawień nie zmienia. Wyjątek: zlecenie zawsze bierze wszystkie karty (nie „zaznaczone”), chyba że `tylkoZmienione = tak`.
 - `plik` (PDF): ścieżka w folderze projektu, np. `plik = Druk/playtest 3.pdf`. Bez niej nazwa jak przy ręcznym zapisie (`Projekt – karty A4.pdf`, `Projekt – drukarnia.pdf`…) w folderze projektu.
 - Gdy w edytorze szablonu są niezapisane zmiany, zlecenie używa szablonu z dysku, a potem wraca podgląd z edytora (w wyniku `niezapisaneZmiany: true`).
